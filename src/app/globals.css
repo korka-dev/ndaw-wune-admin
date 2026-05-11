@@ -1,0 +1,113 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Variables palette maquette ── */
+:root {
+  --bg:           #FAF7F1;
+  --surface:      #FFFFFF;
+  --surface-alt:  #F6F1E5;
+  --bd:           #E5DCC8;
+  --bd-soft:      #EFE7D2;
+  --tx:           #1F1A10;
+  --tx-muted:     #6E624A;
+  --tx-dim:       #9C8E73;
+  --brand:        #8B6F1F;
+  --brand-dark:   #6E561A;
+  --brand-soft:   #F0E6CA;
+  --primary:      #4A90C2;
+  --primary-dark: #326E9C;
+  --primary-soft: #DCEAF5;
+  --success:      #2F7D4A;
+  --success-soft: #DDEBE0;
+  --danger:       #B23A3A;
+  --danger-soft:  #F4DEDE;
+  --warn:         #C68B1A;
+  --warn-soft:    #FBEFD0;
+  --purple:       #7B4F9E;
+  --purple-soft:  #EDE5F5;
+}
+
+/* ── Base ── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-font-smoothing: antialiased; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--tx);
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+input, button, select, textarea { font-family: inherit; }
+
+/* ── Backgrounds ── */
+.bg-bg          { background-color: var(--bg)          !important; }
+.bg-surface     { background-color: var(--surface)     !important; }
+.bg-surface-alt { background-color: var(--surface-alt) !important; }
+.bg-brand       { background-color: var(--brand)       !important; }
+.bg-brand-dark  { background-color: var(--brand-dark)  !important; }
+.bg-brand-soft  { background-color: var(--brand-soft)  !important; }
+.bg-primary     { background-color: var(--primary)     !important; }
+.bg-primary-dark{ background-color: var(--primary-dark)!important; }
+.bg-primary-soft{ background-color: var(--primary-soft)!important; }
+.bg-success     { background-color: var(--success)     !important; }
+.bg-success-soft{ background-color: var(--success-soft)!important; }
+.bg-danger      { background-color: var(--danger)      !important; }
+.bg-danger-soft { background-color: var(--danger-soft) !important; }
+.bg-warn        { background-color: var(--warn)        !important; }
+.bg-warn-soft   { background-color: var(--warn-soft)   !important; }
+.bg-purple      { background-color: var(--purple)      !important; }
+.bg-purple-soft { background-color: var(--purple-soft) !important; }
+
+/* ── Text colors ── */
+.text-tx        { color: var(--tx)        !important; }
+.text-tx-muted  { color: var(--tx-muted)  !important; }
+.text-tx-dim    { color: var(--tx-dim)    !important; }
+.text-brand     { color: var(--brand)     !important; }
+.text-primary   { color: var(--primary)   !important; }
+.text-success   { color: var(--success)   !important; }
+.text-danger    { color: var(--danger)    !important; }
+.text-warn      { color: var(--warn)      !important; }
+.text-purple    { color: var(--purple)    !important; }
+
+/* ── Borders ── */
+.border-border      { border-color: var(--bd)      !important; }
+.border-border-soft { border-color: var(--bd-soft) !important; }
+.border-brand       { border-color: var(--brand)   !important; }
+.border-primary     { border-color: var(--primary) !important; }
+.border-danger      { border-color: var(--danger)  !important; }
+
+/* ── Hover states ── */
+.hover\:bg-surface-alt:hover { background-color: var(--surface-alt) !important; }
+.hover\:bg-brand-soft:hover  { background-color: var(--brand-soft)  !important; }
+.hover\:bg-brand:hover       { background-color: var(--brand)       !important; }
+.hover\:bg-brand-dark:hover  { background-color: var(--brand-dark)  !important; }
+.hover\:bg-primary:hover     { background-color: var(--primary)     !important; }
+.hover\:bg-success:hover     { background-color: var(--success)     !important; }
+.hover\:bg-danger:hover      { background-color: var(--danger)      !important; }
+.hover\:bg-warn:hover        { background-color: var(--warn)        !important; }
+.hover\:text-tx:hover        { color: var(--tx)       !important; }
+.hover\:text-brand:hover     { color: var(--brand)    !important; }
+.hover\:text-danger:hover    { color: var(--danger)   !important; }
+.hover\:text-white:hover     { color: #fff            !important; }
+.hover\:border-danger:hover  { border-color: var(--danger) !important; }
+.hover\:underline:hover      { text-decoration: underline  !important; }
+
+/* ── Focus rings ── */
+.focus\:ring-brand\/40:focus  { --tw-ring-color: rgba(139,111,31,0.4) !important; }
+.focus\:ring-primary\/40:focus{ --tw-ring-color: rgba(74,144,194,0.4) !important; }
+.focus\:border-brand\/30:focus{ border-color: rgba(139,111,31,0.3) !important; }
+
+/* ── Placeholder ── */
+.placeholder\:text-tx-dim::placeholder { color: var(--tx-dim) !important; }
+
+/* ── Sidebar link active ── */
+.nav-active {
+  background-color: var(--brand-soft);
+  color: var(--brand);
+  font-weight: 600;
+}

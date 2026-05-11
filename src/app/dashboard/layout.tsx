@@ -1,0 +1,159 @@
+"use client";
+import { useEffect, useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
+import { useAuth } from "@/lib/auth";
+
+const NAV = [
+  { href: "/dashboard",          label: "Tableau de bord",      icon: "home",     exact: true },
+  { href: "/dashboard/sessions", label: "Gestion Sessions",     icon: "calendar" },
+  { href: "/dashboard/ecoles",   label: "Gestion Écoles",       icon: "school",   adminOnly: true },
+  { href: "/dashboard/teachers", label: "Gestion Enseignants",  icon: "users"    },
+  { href: "/dashboard/planning", label: "Gestion Planning",     icon: "clock"    },
+  { href: "/dashboard/comptes",  label: "Comptes utilisateurs", icon: "lock",    adminOnly: true },
+];
+
+type IconName = "calendar"|"home"|"school"|"users"|"activity"|"clock"|"book"|"check"|"shield"|"doc"|"lock";
+
+function NavIcon({ name }: { name: IconName }) {
+  const p = { width:17, height:17, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:2, strokeLinecap:"round" as const, strokeLinejoin:"round" as const };
+  switch (name) {
+    case "calendar": return <svg {...p}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>;
+    case "home":     return <svg {...p}><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>;
+    case "school":   return <svg {...p}><path d="M3 9l9-5 9 5-9 5-9-5z"/><path d="M5 10v6c0 2 3 4 7 4s7-2 7-4v-6"/></svg>;
+    case "users":    return <svg {...p}><circle cx="9" cy="8" r="3.5"/><path d="M2 21c0-4 3.5-6 7-6s7 2 7 6"/><circle cx="17" cy="9" r="2.5"/><path d="M22 19c0-2.8-2-4.5-5-4.5"/></svg>;
+    case "activity": return <svg {...p}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>;
+    case "clock":    return <svg {...p}><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>;
+    case "book":     return <svg {...p}><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>;
+    case "check":    return <svg {...p}><path d="M5 12l5 5 9-11"/></svg>;
+    case "shield":   return <svg {...p}><path d="M12 2l8 4v6c0 5.25-3.5 9.5-8 11-4.5-1.5-8-5.75-8-11V6l8-4z"/></svg>;
+    case "doc":      return <svg {...p}><path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9l-6-6z"/><path d="M14 3v6h6M8 13h8M8 17h6"/></svg>;
+    case "lock":     return <svg {...p}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>;
+  }
+}
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const { user, fetchMe, logout } = useAuth();
+  const router   = useRouter();
+  const pathname = usePathname();
+  const [showLogout, setShowLogout] = useState(false);
+
+  useEffect(() => {
+    fetchMe().then(() => {
+      const state = useAuth.getState();
+      if (!state.user) { router.replace("/login"); return; }
+      if (state.mustChangePassword || state.user.must_change_password) {
+        router.replace("/change-password");
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!user) return (
+    <div className="min-h-screen bg-bg flex items-center justify-center">
+      <div className="text-tx-muted text-sm">Chargement…</div>
+    </div>
+  );
+
+  const isAdmin  = user.role === "admin";
+  const initials = user.name.split(" ").map((p: string) => p[0]).join("").slice(0, 2).toUpperCase();
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-bg">
+      {/* ── Sidebar ── */}
+      <aside className="w-[232px] h-full bg-surface border-r border-border flex flex-col flex-shrink-0">
+
+        {/* Logo */}
+        <div className="px-5 py-5 border-b border-border flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-white border border-border flex items-center justify-center flex-shrink-0 overflow-hidden">
+            <img src="/logo-full.png" alt="ARED" className="w-8 h-8 object-contain" />
+          </div>
+          <div>
+            <div className="text-sm font-bold text-tx">Ndaw Wune</div>
+            <div className="text-[11px] text-tx-muted mt-0.5">Administration</div>
+          </div>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+          {NAV.filter(n => !n.adminOnly || isAdmin).map(n => {
+            const active = n.exact ? pathname === n.href : pathname.startsWith(n.href) && n.href !== "/dashboard";
+            const isExactHome = n.href === "/dashboard" && pathname === "/dashboard";
+            const isActive = active || isExactHome;
+            return (
+              <Link
+                key={n.href}
+                href={n.href}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-[9px] text-sm font-medium transition-colors
+                  ${isActive ? "bg-brand-soft text-brand" : "text-tx hover:bg-surface-alt"}`}
+              >
+                <span className={isActive ? "text-brand" : "text-tx-muted"}>
+                  <NavIcon name={n.icon as IconName} />
+                </span>
+                {n.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* User panel — clic ouvre le modal de déconnexion */}
+        <button
+          onClick={() => setShowLogout(true)}
+          className="m-3 p-3 bg-surface-alt rounded-xl flex items-center gap-2.5 w-[calc(100%-1.5rem)] hover:bg-brand-soft transition-colors group text-left"
+        >
+          <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${isAdmin ? "bg-brand" : "bg-primary"}`}>
+            {initials}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-tx truncate group-hover:text-brand transition-colors">{user.name}</div>
+            <div className="text-[11px] text-tx-muted truncate">
+              {user.title ?? (isAdmin ? "Administrateur" : user.role)}
+            </div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-tx-muted group-hover:text-brand transition-colors flex-shrink-0">
+            <circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/>
+          </svg>
+        </button>
+      </aside>
+
+      {/* ── Main ── */}
+      <main className="flex-1 h-full overflow-y-auto flex flex-col">
+        {children}
+      </main>
+
+      {/* ── Modal déconnexion ── */}
+      {showLogout && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0 ${isAdmin ? "bg-brand" : "bg-primary"}`}>
+                {initials}
+              </div>
+              <div>
+                <div className="text-sm font-semibold text-tx">{user.name}</div>
+                <div className="text-xs text-tx-muted">{user.title ?? (isAdmin ? "Administrateur" : user.role)}</div>
+              </div>
+            </div>
+            <p className="text-sm text-tx-muted mb-6">
+              Voulez-vous vous déconnecter de la plateforme ?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowLogout(false)}
+                className="flex-1 py-2.5 rounded-xl border border-border text-sm text-tx-muted font-medium hover:bg-surface-alt transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => { logout(); router.push("/login"); }}
+                className="flex-1 py-2.5 rounded-xl bg-danger text-white text-sm font-semibold hover:opacity-90 transition-opacity"
+              >
+                Se déconnecter
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
