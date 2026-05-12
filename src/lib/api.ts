@@ -81,6 +81,13 @@ export const planningApi = {
   create: (d: unknown)    => api.post("/admin/planning", d),
   update: (id: string, d: unknown) => api.patch(`/admin/planning/${id}`, d),
   delete: (id: string)    => api.delete(`/admin/planning/${id}`),
+  import: (session_id: string, file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post(`/admin/planning/import?session_id=${session_id}`, fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
 };
 
 export const rapportsApi = {

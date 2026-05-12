@@ -1,9 +1,48 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { planningApi, sessionsApi } from "@/lib/api";
 
 const JOURS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
 const DAYS_PER_PAGE = 3;
+
+/* ── Template CSV téléchargeable ── */
+const CSV_TEMPLATE =
+  "jour,heure_debut,heure_fin,matiere\n" +
+  "Lundi,08:00,10:00,Mathématiques\n" +
+  "Lundi,10:00,12:00,Français\n" +
+  "Mardi,08:00,10:00,Sciences\n" +
+  "Mardi,10:00,12:00,Histoire-Géo\n";
+
+/* ── Parse CSV côté client pour prévisualisation ── */
+const JOURS_MAP: Record<string, number> = {
+  lundi:0, mardi:1, mercredi:2, jeudi:3, vendredi:4, samedi:5, dimanche:6,
+};
+function parseJour(raw: string): number {
+  const n = parseInt(raw);
+  if (!isNaN(n)) return n;
+  return JOURS_MAP[raw.toLowerCase().trim()] ?? -1;
+}
+function parseCSVPreview(text: string): { rows: any[]; errors: string[] } {
+  const lines = text.replace(/\r/g, "").trim().split("\n");
+  if (lines.length < 2) return { rows: [], errors: ["Fichier vide ou sans données."] };
+  // Supprimer BOM éventuel
+  const header = lines[0].replace(/^﻿/, "").split(",").map(h => h.trim().toLowerCase());
+  const required = ["jour", "heure_debut", "heure_fin"];
+  const missing  = required.filter(r => !header.includes(r));
+  if (missing.length) return { rows: [], errors: [`Colonnes manquantes : ${missing.join(", ")}`] };
+
+  const rows: any[] = [];
+  const errors: string[] = [];
+  lines.slice(1).forEach((line, i) => {
+    if (!line.trim()) return;
+    const vals   = line.split(",").map(v => v.trim());
+    const obj    = Object.fromEntries(header.map((h, j) => [h, vals[j] ?? ""]));
+    const jour   = parseJour(obj.jour ?? "");
+    if (jour < 0 || jour > 6) { errors.push(`Ligne ${i + 2} : jour invalide « ${obj.jour} »`); return; }
+    rows.push({ jour, heure_debut: obj.heure_debut, heure_fin: obj.heure_fin, matiere: obj.matiere || "—" });
+  });
+  return { rows, errors };
+}
 
 interface Seg {
   id: string;
@@ -25,6 +64,59 @@ export default function PlanningPage() {
   const [loading,   setLoading]   = useState(false);
   const [delTarget, setDelTarget] = useState<Seg | null>(null);
   const [page,      setPage]      = useState(0);
+
+  /* ── Import CSV ── */
+  const fileInputRef                          = useRef<HTMLInputElement>(null);
+  const [showImport,    setShowImport]        = useState(false);
+  const [importFile,    setImportFile]        = useState<File | null>(null);
+  const [importPreview, setImportPreview]     = useState<any[]>([]);
+  const [importErrors,  setImportErrors]      = useState<string[]>([]);
+  const [importResult,  setImportResult]      = useState<{ imported: number; errors: any[] } | null>(null);
+  const [importing,     setImporting]         = useState(false);
+
+  const resetImport = () => {
+    setImportFile(null); setImportPreview([]); setImportErrors([]);
+    setImportResult(null); setImporting(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setImportFile(f); setImportResult(null); setImportPreview([]); setImportErrors([]);
+
+    const isPdf = f.name.toLowerCase().endsWith(".pdf") || f.type === "application/pdf";
+    if (isPdf) return; // PDF → preview impossible côté client, le serveur s'en charge
+
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const { rows, errors } = parseCSVPreview(ev.target?.result as string);
+      setImportPreview(rows); setImportErrors(errors);
+    };
+    reader.readAsText(f, "utf-8");
+  };
+
+  const handleImport = async () => {
+    if (!importFile || !sessId) return;
+    setImporting(true);
+    try {
+      const res = await planningApi.import(sessId, importFile);
+      setImportResult(res.data);
+      if (res.data.imported > 0) loadSegs();
+    } catch (e: any) {
+      setImportErrors([e?.response?.data?.detail ?? "Erreur lors de l'import."]);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const downloadTemplate = () => {
+    const blob = new Blob([CSV_TEMPLATE], { type: "text/csv;charset=utf-8;" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = "planning_modele.csv"; a.click();
+    URL.revokeObjectURL(url);
+  };
 
   // ── Chargement session active ───────────────────────────────────────────────
   useEffect(() => {
@@ -82,14 +174,27 @@ export default function PlanningPage() {
             {sessName && <span className="ml-2 text-brand font-medium">· {sessName}</span>}
           </p>
         </div>
-        <button
-          onClick={() => { setForm({ ...EMPTY, session_id: sessId }); setModal("create"); }}
-          className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M12 5v14M5 12h14"/>
-          </svg>
-          Ajouter créneau
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { resetImport(); setShowImport(true); }}
+            disabled={!sessId}
+            className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            Importer
+          </button>
+          <button
+            onClick={() => { setForm({ ...EMPTY, session_id: sessId }); setModal("create"); }}
+            className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+            Ajouter créneau
+          </button>
+        </div>
       </div>
 
       {/* ── Alerte session inactive ─────────────────────────────────────────── */}
@@ -313,6 +418,145 @@ export default function PlanningPage() {
                 className="px-4 py-2 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold disabled:opacity-60 transition-colors">
                 {loading ? "Enregistrement…" : "Enregistrer"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Import CSV ────────────────────────────────────────────────── */}
+      {showImport && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] flex flex-col">
+
+            {/* Titre */}
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h2 className="text-base font-bold text-tx">Importer un planning</h2>
+                <p className="text-xs text-tx-muted mt-0.5">Emploi du temps PDF Ndaw Wune · ou fichier CSV</p>
+              </div>
+              <button onClick={() => { setShowImport(false); resetImport(); }}
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-alt text-tx-muted transition-colors">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <path d="M18 6 6 18M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+
+            {/* Zone upload + modèle */}
+            {!importResult && (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  {/* Bouton sélectionner fichier */}
+                  <label className="flex-1 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-border rounded-xl py-6 cursor-pointer hover:border-brand hover:bg-brand/5 transition-colors">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-tx-muted">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="17 8 12 3 7 8"/>
+                      <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    <span className="text-sm text-tx-muted text-center px-2">
+                      {importFile
+                        ? <span className="text-brand font-semibold">{importFile.name}</span>
+                        : <><span className="font-medium text-tx">Cliquez pour choisir un fichier</span><br/><span className="text-xs">PDF emploi du temps · ou fichier CSV<br/>Le PDF sera lu automatiquement</span></>
+                      }
+                    </span>
+                    <input ref={fileInputRef} type="file" accept=".pdf,.csv,text/csv,text/plain,application/pdf"
+                      className="hidden" onChange={handleFileChange} />
+                  </label>
+
+                  {/* Télécharger le modèle */}
+                  <button onClick={downloadTemplate}
+                    className="flex flex-col items-center gap-1.5 px-4 py-3 border border-border rounded-xl hover:bg-surface-alt text-xs text-tx-muted font-medium transition-colors whitespace-nowrap">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="7 10 12 15 17 10"/>
+                      <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    Modèle CSV
+                  </button>
+                </div>
+
+                {/* Erreurs de parsing */}
+                {importErrors.length > 0 && (
+                  <div className="mb-4 px-4 py-3 rounded-xl bg-danger-soft border border-danger/20 text-danger text-xs space-y-0.5">
+                    {importErrors.map((e, i) => <p key={i}>⚠ {e}</p>)}
+                  </div>
+                )}
+
+                {/* Prévisualisation */}
+                {importPreview.length > 0 && importErrors.length === 0 && (
+                  <div className="flex-1 overflow-auto rounded-xl border border-border mb-4">
+                    <table className="w-full text-sm">
+                      <thead className="bg-surface-alt border-b border-border">
+                        <tr>
+                          {["Jour", "Début", "Fin", "Activité"].map(h => (
+                            <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importPreview.map((r, i) => (
+                          <tr key={i} className="border-t border-border hover:bg-surface-alt/50">
+                            <td className="px-4 py-2 font-medium text-tx">{JOURS[r.jour] ?? r.jour}</td>
+                            <td className="px-4 py-2 font-mono text-xs text-tx-muted">{r.heure_debut}</td>
+                            <td className="px-4 py-2 font-mono text-xs text-tx-muted">{r.heure_fin}</td>
+                            <td className="px-4 py-2 text-tx">{r.matiere}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <p className="px-4 py-2 text-xs text-tx-muted border-t border-border">
+                      {importPreview.length} créneau{importPreview.length !== 1 ? "x" : ""} détecté{importPreview.length !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Résultat après import */}
+            {importResult && (
+              <div className="flex-1 flex flex-col items-center justify-center gap-4 py-6">
+                <div className={`w-14 h-14 rounded-full flex items-center justify-center ${importResult.imported > 0 ? "bg-success-soft" : "bg-warn-soft"}`}>
+                  {importResult.imported > 0
+                    ? <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-success"><path d="M20 6 9 17l-5-5"/></svg>
+                    : <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-warn"><path d="M12 9v4"/><circle cx="12" cy="17" r=".5"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+                  }
+                </div>
+                <div className="text-center">
+                  <p className="text-base font-bold text-tx">
+                    {importResult.imported} créneau{importResult.imported !== 1 ? "x" : ""} importé{importResult.imported !== 1 ? "s" : ""}
+                  </p>
+                  {importResult.errors.length > 0 && (
+                    <p className="text-sm text-warn mt-1">{importResult.errors.length} ligne{importResult.errors.length !== 1 ? "s" : ""} ignorée{importResult.errors.length !== 1 ? "s" : ""}</p>
+                  )}
+                </div>
+                {importResult.errors.length > 0 && (
+                  <div className="w-full px-4 py-3 rounded-xl bg-warn-soft text-warn text-xs space-y-0.5">
+                    {importResult.errors.map((e: any, i: number) => (
+                      <p key={i}>Ligne {e.row} : {e.error}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex gap-3 justify-end pt-2 border-t border-border mt-2">
+              <button
+                onClick={() => { setShowImport(false); resetImport(); }}
+                className="px-4 py-2 rounded-xl border border-border text-sm text-tx-muted hover:bg-surface-alt transition-colors">
+                {importResult ? "Fermer" : "Annuler"}
+              </button>
+              {!importResult && (
+                <button
+                  onClick={handleImport}
+                  disabled={!importFile || importErrors.length > 0 || importing}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                  {importing
+                    ? <><svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Importation…</>
+                    : <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Importer {importPreview.length > 0 ? `(${importPreview.length} créneaux)` : importFile?.name.endsWith(".pdf") ? "le PDF" : ""}</>
+                  }
+                </button>
+              )}
             </div>
           </div>
         </div>
