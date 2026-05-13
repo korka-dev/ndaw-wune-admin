@@ -5,12 +5,13 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 
 const NAV = [
-  { href: "/dashboard",          label: "Tableau de bord",      icon: "home",     exact: true },
-  { href: "/dashboard/sessions", label: "Gestion Sessions",     icon: "calendar" },
-  { href: "/dashboard/ecoles",   label: "Gestion Écoles",       icon: "school",   adminOnly: true },
-  { href: "/dashboard/teachers", label: "Gestion Enseignants",  icon: "users"    },
-  { href: "/dashboard/planning", label: "Gestion Planning",     icon: "clock"    },
-  { href: "/dashboard/comptes",  label: "Comptes utilisateurs", icon: "lock",    adminOnly: true },
+  { href: "/dashboard",               label: "Tableau de bord",      icon: "home",     exact: true },
+  { href: "/dashboard/sessions",      label: "Gestion Sessions",     icon: "calendar" },
+  { href: "/dashboard/ecoles",        label: "Gestion Écoles",       icon: "school",   adminOnly: true },
+  { href: "/dashboard/teachers",      label: "Gestion Enseignants",  icon: "users"    },
+  { href: "/dashboard/planning",      label: "Gestion Planning",     icon: "clock"    },
+  { href: "/dashboard/suivi-seances", label: "Suivi des séances",    icon: "activity" },
+  { href: "/dashboard/comptes",       label: "Comptes utilisateurs", icon: "lock",    adminOnly: true },
 ];
 
 type IconName = "calendar"|"home"|"school"|"users"|"activity"|"clock"|"book"|"check"|"shield"|"doc"|"lock";

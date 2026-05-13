@@ -96,6 +96,13 @@ export const rapportsApi = {
   get:  (id: string) => api.get(`/admin/rapports/${id}`),
 };
 
+export const suiviApi = {
+  list:   (params?: { session_id?: string; search?: string }) =>
+    api.get("/admin/suivi-seances", { params }),
+  detail: (teacher_id: string, params?: { session_id?: string }) =>
+    api.get(`/admin/suivi-seances/${teacher_id}`, { params }),
+};
+
 export const usersApi = {
   list:   ()              => api.get("/admin/users"),
   create: (d: unknown)    => api.post("/admin/users", d),
