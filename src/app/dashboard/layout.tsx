@@ -4,17 +4,52 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 
-const NAV = [
-  { href: "/dashboard",               label: "Tableau de bord",      icon: "home",     exact: true },
-  { href: "/dashboard/sessions",      label: "Gestion Sessions",     icon: "calendar" },
-  { href: "/dashboard/ecoles",        label: "Gestion Écoles",       icon: "school",   adminOnly: true },
-  { href: "/dashboard/teachers",      label: "Gestion Enseignants",  icon: "users"    },
-  { href: "/dashboard/planning",      label: "Gestion Planning",     icon: "clock"    },
-  { href: "/dashboard/suivi-seances", label: "Suivi des séances",    icon: "activity" },
-  { href: "/dashboard/comptes",       label: "Comptes utilisateurs", icon: "lock",    adminOnly: true },
+type NavItem = {
+  href: string;
+  label: string;
+  icon: string;
+  exact?: boolean;
+  adminOnly?: boolean;
+};
+
+type NavSection = {
+  label: string | null;
+  items: NavItem[];
+};
+
+const NAV_SECTIONS: NavSection[] = [
+  {
+    label: null,
+    items: [
+      { href: "/dashboard", label: "Tableau de bord", icon: "home", exact: true },
+    ],
+  },
+  {
+    label: "Gestion",
+    items: [
+      { href: "/dashboard/sessions",     label: "Gestion Sessions",     icon: "calendar"   },
+      { href: "/dashboard/ecoles",       label: "Gestion Écoles",       icon: "school",    adminOnly: true },
+      { href: "/dashboard/teachers",     label: "Gestion Enseignants",  icon: "users"      },
+      { href: "/dashboard/superviseurs", label: "Gestion Superviseurs", icon: "supervisor", adminOnly: true },
+    ],
+  },
+  {
+    label: "Pédagogie",
+    items: [
+      { href: "/dashboard/planning",           label: "Gestion Planning",      icon: "clock"      },
+      { href: "/dashboard/suivi-seances",      label: "Suivi des séances",     icon: "activity"   },
+      { href: "/dashboard/suivi-superviseurs", label: "Suivi superviseurs",     icon: "eye"        },
+    ],
+  },
+  {
+    label: "Administration",
+    items: [
+      { href: "/dashboard/comptes", label: "Comptes utilisateurs", icon: "lock", adminOnly: true },
+    ],
+  },
 ];
 
-type IconName = "calendar"|"home"|"school"|"users"|"activity"|"clock"|"book"|"check"|"shield"|"doc"|"lock";
+type IconName = "calendar"|"home"|"school"|"users"|"activity"|"clock"|"book"|"check"|"shield"|"doc"|"lock"|"supervisor"|"eye";
 
 function NavIcon({ name }: { name: IconName }) {
   const p = { width:17, height:17, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:2, strokeLinecap:"round" as const, strokeLinejoin:"round" as const };
@@ -29,7 +64,9 @@ function NavIcon({ name }: { name: IconName }) {
     case "check":    return <svg {...p}><path d="M5 12l5 5 9-11"/></svg>;
     case "shield":   return <svg {...p}><path d="M12 2l8 4v6c0 5.25-3.5 9.5-8 11-4.5-1.5-8-5.75-8-11V6l8-4z"/></svg>;
     case "doc":      return <svg {...p}><path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9l-6-6z"/><path d="M14 3v6h6M8 13h8M8 17h6"/></svg>;
-    case "lock":     return <svg {...p}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>;
+    case "lock":       return <svg {...p}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>;
+    case "supervisor": return <svg {...p}><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/><circle cx="20" cy="8" r="1" fill="currentColor"/><path d="M18 6l4 4-4 4"/></svg>;
+    case "eye":        return <svg {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>;
   }
 }
 
@@ -76,23 +113,39 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-          {NAV.filter(n => !n.adminOnly || isAdmin).map(n => {
-            const active = n.exact ? pathname === n.href : pathname.startsWith(n.href) && n.href !== "/dashboard";
-            const isExactHome = n.href === "/dashboard" && pathname === "/dashboard";
-            const isActive = active || isExactHome;
+        <nav className="flex-1 p-3 overflow-y-auto space-y-4">
+          {NAV_SECTIONS.map((section, si) => {
+            const visible = section.items.filter(n => !n.adminOnly || isAdmin);
+            if (visible.length === 0) return null;
             return (
-              <Link
-                key={n.href}
-                href={n.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-[9px] text-sm font-medium transition-colors
-                  ${isActive ? "bg-brand-soft text-brand" : "text-tx hover:bg-surface-alt"}`}
-              >
-                <span className={isActive ? "text-brand" : "text-tx-muted"}>
-                  <NavIcon name={n.icon as IconName} />
-                </span>
-                {n.label}
-              </Link>
+              <div key={si}>
+                {section.label && (
+                  <div className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-tx-muted/60 select-none">
+                    {section.label}
+                  </div>
+                )}
+                <div className="space-y-0.5">
+                  {visible.map(n => {
+                    const active = n.exact
+                      ? pathname === n.href
+                      : pathname.startsWith(n.href) && n.href !== "/dashboard";
+                    const isActive = n.href === "/dashboard" ? pathname === "/dashboard" : active;
+                    return (
+                      <Link
+                        key={n.href}
+                        href={n.href}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-[9px] text-sm font-medium transition-colors
+                          ${isActive ? "bg-brand-soft text-brand" : "text-tx hover:bg-surface-alt"}`}
+                      >
+                        <span className={isActive ? "text-brand" : "text-tx-muted"}>
+                          <NavIcon name={n.icon as IconName} />
+                        </span>
+                        {n.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
             );
           })}
         </nav>

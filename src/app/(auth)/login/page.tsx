@@ -11,10 +11,18 @@ export default function LoginPage() {
   const [password,   setPassword]   = useState("");
   const [showPwd,    setShowPwd]    = useState(false);
   const [error,      setError]      = useState("");
+  const [success,    setSuccess]    = useState("");
   const [visible,    setVisible]    = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 60);
+    // Succès après réinitialisation de mot de passe (paramètre URL ?reset=ok)
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("reset") === "ok") {
+        setSuccess("Mot de passe réinitialisé avec succès. Vous pouvez vous connecter.");
+      }
+    }
     return () => clearTimeout(t);
   }, []);
 
@@ -64,6 +72,13 @@ export default function LoginPage() {
           className="px-8 py-7 transition-all duration-700 delay-[400ms]"
           style={{ opacity: visible ? 1 : 0, transform: visible ? "translateY(0)" : "translateY(16px)" }}
         >
+          {success && (
+            <div className="bg-success-soft text-success rounded-xl px-4 py-3 text-sm mb-5 flex gap-2 items-start">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 flex-shrink-0"><path d="M5 12l5 5 9-11"/></svg>
+              <span>{success}</span>
+            </div>
+          )}
+
           {error && (
             <div className="bg-danger-soft text-danger rounded-xl px-4 py-3 text-sm mb-5 flex gap-2 items-start">
               <span className="mt-0.5">⚠</span><span>{error}</span>
@@ -85,7 +100,15 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-tx mb-1.5">Mot de passe</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm font-medium text-tx">Mot de passe</label>
+                <Link
+                  href="/forgot-password"
+                  className="text-xs text-brand font-medium hover:underline"
+                >
+                  Mot de passe oublié ?
+                </Link>
+              </div>
               <div className="relative">
                 <input
                   type={showPwd ? "text" : "password"}

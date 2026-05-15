@@ -45,6 +45,8 @@ export const authApi = {
   me:      () => api.get("/auth/me"),
   refresh: (refresh_token: string) =>
     api.post("/auth/refresh", { refresh_token }),
+  resetPassword: (identifier: string, new_password: string, confirm_password: string) =>
+    api.post("/auth/reset-password", { identifier, new_password, confirm_password }),
 };
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
@@ -103,9 +105,36 @@ export const suiviApi = {
     api.get(`/admin/suivi-seances/${teacher_id}`, { params }),
 };
 
+export const suiviSuperviseurApi = {
+  list:   (params?: { session_id?: string; search?: string }) =>
+    api.get("/admin/suivi-superviseurs", { params }),
+  detail: (superviseur_id: string, params?: { session_id?: string }) =>
+    api.get(`/admin/suivi-superviseurs/${superviseur_id}`, { params }),
+};
+
 export const usersApi = {
   list:   ()              => api.get("/admin/users"),
   create: (d: unknown)    => api.post("/admin/users", d),
   update: (id: string, d: unknown) => api.patch(`/admin/users/${id}`, d),
   delete: (id: string)    => api.delete(`/admin/users/${id}`),
+};
+
+export const superviseursApi = {
+  list:           ()                              => api.get("/admin/superviseurs"),
+  create:         (d: unknown)                    => api.post("/admin/superviseurs", d),
+  get:            (id: string)                    => api.get(`/admin/superviseurs/${id}`),
+  update:         (id: string, d: unknown)        => api.patch(`/admin/superviseurs/${id}`, d),
+  delete:         (id: string)                    => api.delete(`/admin/superviseurs/${id}`),
+  toggleStatus:   (id: string)                    => api.post(`/admin/superviseurs/${id}/toggle-status`),
+  assignTeachers: (id: string, ids: string[])     => api.post(`/admin/superviseurs/${id}/assign-teachers`, { assigned_teacher_ids: ids }),
+};
+
+export const evaluateursApi = {
+  list:           ()                              => api.get("/admin/evaluateurs"),
+  create:         (d: unknown)                    => api.post("/admin/evaluateurs", d),
+  get:            (id: string)                    => api.get(`/admin/evaluateurs/${id}`),
+  update:         (id: string, d: unknown)        => api.patch(`/admin/evaluateurs/${id}`, d),
+  delete:         (id: string)                    => api.delete(`/admin/evaluateurs/${id}`),
+  toggleStatus:   (id: string)                    => api.post(`/admin/evaluateurs/${id}/toggle-status`),
+  assignTeachers: (id: string, ids: string[])     => api.post(`/admin/evaluateurs/${id}/assign-teachers`, { assigned_teacher_ids: ids }),
 };

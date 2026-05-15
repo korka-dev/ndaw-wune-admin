@@ -28,8 +28,9 @@ export default function EcolesPage() {
   const [loading,    setLoading]    = useState(false);
   const [error,      setError]      = useState("");
   const [phoneError, setPhoneError] = useState("");
-  const [search,     setSearch]     = useState("");
-  const [page,       setPage]       = useState(1);
+  const [search,       setSearch]       = useState("");
+  const [filterRegion, setFilterRegion] = useState("");
+  const [page,         setPage]         = useState(1);
 
   const load = () =>
     schoolsApi.list()
@@ -37,13 +38,19 @@ export default function EcolesPage() {
       .catch(() => {});
 
   useEffect(() => { load(); }, []);
-  useEffect(() => { setPage(1); }, [search]);
+  useEffect(() => { setPage(1); }, [search, filterRegion]);
 
-  const filtered = schools.filter(s =>
-    [s.name, s.region, s.city, s.director].some(v =>
+  const regions = Array.from(
+    new Set(schools.map(s => s.region).filter(Boolean))
+  ) as string[];
+
+  const filtered = schools.filter(s => {
+    const matchSearch = [s.name, s.region, s.city, s.director].some(v =>
       v?.toLowerCase().includes(search.toLowerCase())
-    )
-  );
+    );
+    const matchRegion = !filterRegion || s.region === filterRegion;
+    return matchSearch && matchRegion;
+  });
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -114,21 +121,57 @@ export default function EcolesPage() {
         </button>
       </div>
 
-      {/* Barre de recherche */}
-      <div className="relative mb-5">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-tx-muted">
-          <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/>
-        </svg>
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Rechercher par nom, région, ville, directeur…"
-          className="w-full bg-surface border border-border rounded-xl pl-10 pr-4 py-2.5 text-sm text-tx placeholder:text-tx-muted focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition"
-        />
-        {search && (
-          <button onClick={() => setSearch("")} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-tx-muted hover:text-tx">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      {/* Barre de recherche + filtres */}
+      <div className="flex gap-3 mb-5">
+        {/* Recherche */}
+        <div className="relative flex-1">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-tx-muted">
+            <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/>
+          </svg>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Rechercher par nom, région, ville, directeur…"
+            className="w-full bg-surface border border-border rounded-xl pl-10 pr-4 py-2.5 text-sm text-tx placeholder:text-tx-muted focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition"
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-tx-muted hover:text-tx">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          )}
+        </div>
+
+        {/* Filtre Région */}
+        <div className="relative">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
+            <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/>
+          </svg>
+          <select
+            value={filterRegion}
+            onChange={e => setFilterRegion(e.target.value)}
+            className={`pl-8 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[160px] ${
+              filterRegion ? "border-brand text-brand font-medium" : "border-border text-tx"
+            }`}
+          >
+            <option value="">Toutes les régions</option>
+            {regions.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </div>
+
+        {/* Reset filtres actifs */}
+        {(filterRegion) && (
+          <button
+            onClick={() => setFilterRegion("")}
+            className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-brand/30 bg-brand-soft text-brand text-sm font-medium hover:bg-brand hover:text-white transition-colors"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            Réinitialiser
           </button>
         )}
       </div>

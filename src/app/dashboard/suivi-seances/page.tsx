@@ -659,7 +659,7 @@ export default function SuiviSeancesPage() {
           <button
             key={stat.label}
             onClick={() => { setFilters(f => ({ ...f, status: stat.fStatus })); resetPage(); }}
-            className={`bg-surface border rounded-2xl px-4 py-5 flex flex-col items-center justify-center text-center gap-2 min-h-[116px] transition-all hover:shadow-sm ${
+            className={`bg-surface border rounded-2xl px-5 py-4 flex items-center gap-4 text-left transition-all hover:shadow-sm ${
               filters.status === stat.fStatus ? "border-brand ring-2 ring-brand/20" : "border-border"
             }`}
           >
@@ -668,8 +668,10 @@ export default function SuiviSeancesPage() {
                 <path d={stat.icon}/>
               </svg>
             </div>
-            <p className="text-2xl font-bold text-tx leading-none">{stat.value}</p>
-            <p className="text-xs font-medium text-tx-muted">{stat.label}</p>
+            <div className="flex-1 flex flex-col items-center text-center">
+              <p className="text-2xl font-bold text-tx leading-none">{stat.value}</p>
+              <p className="text-xs font-medium text-tx-muted mt-1">{stat.label}</p>
+            </div>
           </button>
         ))}
       </div>
