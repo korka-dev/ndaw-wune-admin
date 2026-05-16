@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { planningApi, sessionsApi } from "@/lib/api";
+import { planningApi, sessionsApi, exportApi } from "@/lib/api";
+import { downloadBlob } from "@/lib/csv";
+import Pagination from "@/components/Pagination";
 
 const JOURS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
 const DAYS_PER_PAGE = 3;
@@ -56,14 +58,27 @@ interface Seg {
 const EMPTY = { session_id: "", jour: 0, heure_debut: "08:00", heure_fin: "10:00", matiere: "" };
 
 export default function PlanningPage() {
-  const [segs,      setSegs]      = useState<Seg[]>([]);
-  const [sessId,    setSessId]    = useState("");
-  const [sessName,  setSessName]  = useState("");
-  const [modal,     setModal]     = useState<null | "create" | Seg>(null);
-  const [form,      setForm]      = useState<typeof EMPTY>(EMPTY);
-  const [loading,   setLoading]   = useState(false);
-  const [delTarget, setDelTarget] = useState<Seg | null>(null);
-  const [page,      setPage]      = useState(0);
+  const [segs,          setSegs]          = useState<Seg[]>([]);
+  const [sessId,        setSessId]        = useState("");
+  const [sessName,      setSessName]      = useState("");
+  const [modal,         setModal]         = useState<null | "create" | Seg>(null);
+  const [form,          setForm]          = useState<typeof EMPTY>(EMPTY);
+  const [loading,       setLoading]       = useState(false);
+  const [delTarget,     setDelTarget]     = useState<Seg | null>(null);
+  const [page,          setPage]          = useState(1);
+  const [filterJour,    setFilterJour]    = useState<string>("");
+  const [filterMatiere, setFilterMatiere] = useState<string>("");
+
+  /* ── Export CSV ── */
+  const [exporting, setExporting] = useState(false);
+  const handleExportCsv = async () => {
+    setExporting(true);
+    try {
+      const res = await exportApi.planning();
+      downloadBlob(res.data, "planning.csv");
+    } catch { /* silencieux */ }
+    finally { setExporting(false); }
+  };
 
   /* ── Import CSV ── */
   const fileInputRef                          = useRef<HTMLInputElement>(null);
@@ -128,7 +143,7 @@ export default function PlanningPage() {
 
   const loadSegs = () =>
     planningApi.list(sessId || undefined)
-      .then(r => { setSegs(r.data.items ?? []); setPage(0); })
+      .then(r => { setSegs(r.data.items ?? []); setPage(1); })
       .catch(() => {});
 
   useEffect(() => { if (sessId) loadSegs(); }, [sessId]);
@@ -152,15 +167,26 @@ export default function PlanningPage() {
   };
 
   // ── Données groupées & paginées ─────────────────────────────────────────────
-  const segsByDay = segs.reduce<Record<number, Seg[]>>((acc, s) => {
+  const matieres = Array.from(
+    new Set(segs.map(s => s.matiere).filter((m): m is string => !!m))
+  ).sort();
+
+  const hasFilters = !!(filterJour || filterMatiere);
+
+  const filteredSegs = segs.filter(s => {
+    const matchJour    = !filterJour    || s.jour === Number(filterJour);
+    const matchMatiere = !filterMatiere || (s.matiere ?? "") === filterMatiere;
+    return matchJour && matchMatiere;
+  });
+
+  const segsByDay = filteredSegs.reduce<Record<number, Seg[]>>((acc, s) => {
     (acc[s.jour] ??= []).push(s);
     return acc;
   }, {});
 
   const activeDays  = Object.keys(segsByDay).map(Number).sort((a, b) => a - b);
-  const totalPages  = Math.max(1, Math.ceil(activeDays.length / DAYS_PER_PAGE));
-  const currentPage = Math.min(page, totalPages - 1);
-  const visibleDays = activeDays.slice(currentPage * DAYS_PER_PAGE, (currentPage + 1) * DAYS_PER_PAGE);
+  const currentPage = Math.min(Math.max(1, page), Math.max(1, Math.ceil(activeDays.length / DAYS_PER_PAGE)));
+  const visibleDays = activeDays.slice((currentPage - 1) * DAYS_PER_PAGE, currentPage * DAYS_PER_PAGE);
 
   return (
     <div className="flex flex-col min-h-full px-7 pb-7">
@@ -170,11 +196,25 @@ export default function PlanningPage() {
         <div>
           <h1 className="text-xl font-bold text-tx">Gestion Planning</h1>
           <p className="text-tx-muted text-sm mt-0.5">
-            {segs.length} créneau{segs.length !== 1 ? "x" : ""} · {activeDays.length} jour{activeDays.length !== 1 ? "s" : ""}
+            {hasFilters
+              ? `${filteredSegs.length} créneau${filteredSegs.length !== 1 ? "x" : ""} sur ${segs.length} · ${activeDays.length} jour${activeDays.length !== 1 ? "s" : ""}`
+              : `${segs.length} créneau${segs.length !== 1 ? "x" : ""} · ${activeDays.length} jour${activeDays.length !== 1 ? "s" : ""}`}
             {sessName && <span className="ml-2 text-brand font-medium">· {sessName}</span>}
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Exporter CSV */}
+          <button
+            onClick={handleExportCsv}
+            disabled={exporting || !sessId}
+            className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            {exporting ? "Export…" : "Exporter CSV"}
+          </button>
           <button
             onClick={() => { resetImport(); setShowImport(true); }}
             disabled={!sessId}
@@ -204,6 +244,60 @@ export default function PlanningPage() {
         </div>
       )}
 
+      {/* ── Barre de filtres ──────────────────────────────────────────────── */}
+      {segs.length > 0 && (
+        <div className="flex gap-3 mb-5">
+          {/* Filtre Jour */}
+          <div className="relative">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
+              <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            <select value={filterJour} onChange={e => { setFilterJour(e.target.value); setPage(1); }}
+              className={`pl-8 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[140px] ${
+                filterJour ? "border-brand text-brand font-medium" : "border-border text-tx"
+              }`}>
+              <option value="">Tous les jours</option>
+              {JOURS.map((j, i) => <option key={i} value={i}>{j}</option>)}
+            </select>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </div>
+
+          {/* Filtre Matière */}
+          {matieres.length > 0 && (
+            <div className="relative">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+              </svg>
+              <select value={filterMatiere} onChange={e => { setFilterMatiere(e.target.value); setPage(1); }}
+                className={`pl-8 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[160px] ${
+                  filterMatiere ? "border-brand text-brand font-medium" : "border-border text-tx"
+                }`}>
+                <option value="">Toutes les matières</option>
+                {matieres.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </div>
+          )}
+
+          {/* Reset */}
+          {hasFilters && (
+            <button onClick={() => { setFilterJour(""); setFilterMatiere(""); setPage(1); }}
+              className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-brand/30 bg-brand-soft text-brand text-sm font-medium hover:bg-brand hover:text-white transition-colors">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              Réinitialiser
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ── Emploi du temps groupé par jour ────────────────────────────────── */}
       {segs.length === 0 ? (
         <div className="bg-surface rounded-2xl border border-border flex-1 flex flex-col items-center justify-center gap-3 py-20">
@@ -218,6 +312,17 @@ export default function PlanningPage() {
               + Ajouter le premier créneau
             </button>
           )}
+        </div>
+      ) : activeDays.length === 0 ? (
+        <div className="bg-surface rounded-2xl border border-border flex-1 flex flex-col items-center justify-center gap-3 py-20">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-tx-muted/40">
+            <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+          <p className="text-tx-muted text-sm">Aucun créneau ne correspond aux filtres.</p>
+          <button onClick={() => { setFilterJour(""); setFilterMatiere(""); setPage(1); }}
+            className="mt-1 text-xs text-brand hover:underline font-medium">
+            Effacer les filtres
+          </button>
         </div>
       ) : (
         <>
@@ -318,56 +423,9 @@ export default function PlanningPage() {
           </div>
 
           {/* ── Pagination ────────────────────────────────────────────────────── */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-6 px-1">
-              {/* Info */}
-              <p className="text-xs text-tx-muted">
-                Jours{" "}
-                <span className="font-semibold text-tx">
-                  {currentPage * DAYS_PER_PAGE + 1}–{Math.min((currentPage + 1) * DAYS_PER_PAGE, activeDays.length)}
-                </span>
-                {" "}sur{" "}
-                <span className="font-semibold text-tx">{activeDays.length}</span>
-              </p>
-
-              {/* Contrôles */}
-              <div className="flex items-center gap-1">
-                {/* Précédent */}
-                <button
-                  onClick={() => setPage(p => Math.max(0, p - 1))}
-                  disabled={currentPage === 0}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg border border-border text-tx-muted hover:bg-surface-alt hover:text-tx disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M15 18l-6-6 6-6"/>
-                  </svg>
-                </button>
-
-                {/* Numéros de page */}
-                {Array.from({ length: totalPages }, (_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setPage(i)}
-                    className={`w-8 h-8 flex items-center justify-center rounded-lg text-sm font-medium transition-colors ${
-                      i === currentPage
-                        ? "bg-brand text-white"
-                        : "border border-border text-tx-muted hover:bg-surface-alt hover:text-tx"
-                    }`}>
-                    {i + 1}
-                  </button>
-                ))}
-
-                {/* Suivant */}
-                <button
-                  onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-                  disabled={currentPage === totalPages - 1}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg border border-border text-tx-muted hover:bg-surface-alt hover:text-tx disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M9 18l6-6-6-6"/>
-                  </svg>
-                </button>
-              </div>
-            </div>
-          )}
+          <div className="mt-4">
+            <Pagination page={currentPage} total={activeDays.length} pageSize={DAYS_PER_PAGE} onChange={setPage} />
+          </div>
         </>
       )}
 

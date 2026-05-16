@@ -1,6 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
-import { schoolsApi } from "@/lib/api";
+import { useEffect, useRef, useState } from "react";
+import { schoolsApi, exportApi } from "@/lib/api";
+import { downloadBlob } from "@/lib/csv";
+import Pagination from "@/components/Pagination";
 
 interface School {
   id:             string;
@@ -30,7 +32,11 @@ export default function EcolesPage() {
   const [phoneError, setPhoneError] = useState("");
   const [search,       setSearch]       = useState("");
   const [filterRegion, setFilterRegion] = useState("");
+  const [filterCity,   setFilterCity]   = useState("");
   const [page,         setPage]         = useState(1);
+  const [exporting,    setExporting]    = useState(false);
+  const [importMsg,    setImportMsg]    = useState<{ ok: boolean; text: string } | null>(null);
+  const importRef = useRef<HTMLInputElement>(null);
 
   const load = () =>
     schoolsApi.list()
@@ -38,10 +44,14 @@ export default function EcolesPage() {
       .catch(() => {});
 
   useEffect(() => { load(); }, []);
-  useEffect(() => { setPage(1); }, [search, filterRegion]);
+  useEffect(() => { setPage(1); }, [search, filterRegion, filterCity]);
 
   const regions = Array.from(
     new Set(schools.map(s => s.region).filter(Boolean))
+  ) as string[];
+
+  const cities = Array.from(
+    new Set(schools.map(s => s.city).filter(Boolean))
   ) as string[];
 
   const filtered = schools.filter(s => {
@@ -49,9 +59,9 @@ export default function EcolesPage() {
       v?.toLowerCase().includes(search.toLowerCase())
     );
     const matchRegion = !filterRegion || s.region === filterRegion;
-    return matchSearch && matchRegion;
+    const matchCity   = !filterCity   || s.city   === filterCity;
+    return matchSearch && matchRegion && matchCity;
   });
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const checkPhone = (phone: string, excludeId?: string) => {
@@ -65,6 +75,30 @@ export default function EcolesPage() {
         ? `Ce numéro est déjà utilisé par l'école « ${duplicate.name} ».`
         : ""
     );
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const res = await exportApi.schools();
+      downloadBlob(res.data, "ecoles.csv");
+    } catch { /* silencieux */ }
+    finally { setExporting(false); }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const res = await schoolsApi.importCsv(file);
+      const count = res.data?.imported ?? res.data?.count ?? "?";
+      setImportMsg({ ok: true, text: `${count} école${count !== 1 ? "s" : ""} importée${count !== 1 ? "s" : ""} avec succès.` });
+      load();
+    } catch (err: any) {
+      setImportMsg({ ok: false, text: err?.response?.data?.detail ?? "Erreur lors de l'import." });
+    } finally {
+      if (importRef.current) importRef.current.value = "";
+    }
   };
 
   const openCreate = () => { setForm(EMPTY); setError(""); setPhoneError(""); setModal("create"); };
@@ -110,15 +144,55 @@ export default function EcolesPage() {
         <div>
           <h1 className="text-xl font-bold text-tx">Gestion Écoles</h1>
           <p className="text-tx-muted text-sm mt-0.5">
-            {filtered.length} école{filtered.length > 1 ? "s" : ""}
-            {search && ` trouvée${filtered.length > 1 ? "s" : ""} sur ${schools.length}`}
+            {(search || filterRegion || filterCity)
+              ? `${filtered.length} résultat${filtered.length > 1 ? "s" : ""} sur ${schools.length} école${schools.length > 1 ? "s" : ""}`
+              : `${schools.length} école${schools.length > 1 ? "s" : ""} au total`}
           </p>
         </div>
-        <button onClick={openCreate}
-          className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-          Nouvelle école
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Message import */}
+          {importMsg && (
+            <span className={`text-xs font-medium px-3 py-1.5 rounded-xl ${importMsg.ok ? "bg-success-soft text-success" : "bg-danger-soft text-danger"}`}>
+              {importMsg.text}
+              <button onClick={() => setImportMsg(null)} className="ml-2 opacity-60 hover:opacity-100">✕</button>
+            </span>
+          )}
+          {/* Exporter CSV */}
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            {exporting ? "Export…" : "Exporter CSV"}
+          </button>
+          {/* Importer CSV */}
+          <div className="relative">
+            <button
+              onClick={() => importRef.current?.click()}
+              title={`Format attendu : name,region,city,director,director_phone`}
+              className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              Importer CSV
+            </button>
+            <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
+          </div>
+          {/* Nouvelle école */}
+          <button onClick={openCreate}
+            className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            Nouvelle école
+          </button>
+        </div>
       </div>
 
       {/* Barre de recherche + filtres */}
@@ -164,10 +238,32 @@ export default function EcolesPage() {
           </svg>
         </div>
 
+        {/* Filtre Ville */}
+        <div className="relative">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+          </svg>
+          <select
+            value={filterCity}
+            onChange={e => { setFilterCity(e.target.value); setPage(1); }}
+            className={`pl-8 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[140px] ${
+              filterCity ? "border-brand text-brand font-medium" : "border-border text-tx"
+            }`}
+          >
+            <option value="">Toutes les villes</option>
+            {cities.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </div>
+
         {/* Reset filtres actifs */}
-        {(filterRegion) && (
+        {(filterRegion || filterCity) && (
           <button
-            onClick={() => setFilterRegion("")}
+            onClick={() => { setFilterRegion(""); setFilterCity(""); setPage(1); }}
             className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-brand/30 bg-brand-soft text-brand text-sm font-medium hover:bg-brand hover:text-white transition-colors"
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -183,9 +279,9 @@ export default function EcolesPage() {
             <SchoolIcon />
           </div>
           <p className="text-tx-muted text-sm mb-3">
-            {search ? "Aucune école ne correspond à votre recherche." : "Aucune école enregistrée."}
+            {(search || filterRegion || filterCity) ? "Aucune école ne correspond aux filtres." : "Aucune école enregistrée."}
           </p>
-          {!search && (
+          {!(search || filterRegion || filterCity) && (
             <button onClick={openCreate} className="text-brand text-sm font-medium hover:underline">
               Créer la première école →
             </button>
@@ -234,30 +330,7 @@ export default function EcolesPage() {
             ))}
           </div>
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-tx-muted">
-                Page {page} sur {totalPages} · {filtered.length} école{filtered.length > 1 ? "s" : ""}
-              </p>
-              <div className="flex items-center gap-1">
-                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg border border-border text-tx-muted hover:bg-surface-alt disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
-                </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map(n => (
-                  <button key={n} onClick={() => setPage(n)}
-                    className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs font-semibold transition-colors ${n === page ? "bg-brand text-white" : "border border-border text-tx-muted hover:bg-surface-alt"}`}>
-                    {n}
-                  </button>
-                ))}
-                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg border border-border text-tx-muted hover:bg-surface-alt disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M9 18l6-6-6-6"/></svg>
-                </button>
-              </div>
-            </div>
-          )}
+          <Pagination page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
         </>
       )}
 

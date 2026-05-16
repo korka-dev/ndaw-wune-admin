@@ -1,6 +1,9 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { suiviApi, sessionsApi } from "@/lib/api";
+import Pagination from "@/components/Pagination";
+
+const PAGE_SIZE = 20;
 
 /* ══ Types ═══════════════════════════════════════════════════════ */
 interface TeacherSuivi {
@@ -18,17 +21,37 @@ interface TeacherSuivi {
   derniere_matiere?:  string;
   derniere_classe?:   string;
   dernier_status?:    string;
+  // Métriques d'usage
+  taux_completion?:    number;
+  taux_rapport?:       number;
+  duree_moy_minutes?:  number;
+  taux_presence?:      number;
+  seances_7j:          number;
+  seances_30j:         number;
+  rapports_offline:    number;
+  total_rapports:      number;
+  jours_actifs:        number;
+  premiere_seance?:    string;
+  derniere_connexion?: string;
+  seances_planifiees:  number;
+  seances_ad_hoc:      number;
+  score_engagement:    number;
 }
 interface SeanceDetail {
-  id:             string;
-  date_seance:    string;
-  started_at?:    string;
-  finished_at?:   string;
-  duree_minutes?: number;
-  matiere?:       string;
-  classe:         string;
-  status:         string;
-  has_rapport:    boolean;
+  id:                  string;
+  date_seance:         string;
+  started_at?:         string;
+  finished_at?:        string;
+  duree_minutes?:      number;
+  matiere?:            string;
+  classe:              string;
+  status:              string;
+  has_rapport:         boolean;
+  nb_eleves_presents?: number;
+  nb_eleves_total?:    number;
+  planning_segment_id?: string;
+  soumis_offline?:     boolean;
+  rapport_at?:         string;
 }
 interface TeacherDetail {
   teacher_id:   string;
@@ -63,12 +86,30 @@ const fmtFull = (iso?: string) =>
   iso ? new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })
       + " à " + new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—";
 
+const fmtDateShort = (iso?: string) =>
+  iso ? new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—";
+
 function initials(name: string) {
   return name.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
 }
 
 function countActiveFilters(f: FilterState) {
   return (f.status !== "all" ? 1 : 0) + f.schools.length + f.classes.length + (f.withRapport !== "all" ? 1 : 0);
+}
+
+/** Retourne une classe CSS de couleur selon la valeur et les seuils [bon, moyen]. */
+function metricColor(value: number, seuils: [number, number]): string {
+  if (value >= seuils[0]) return "text-success";
+  if (value >= seuils[1]) return "text-warn";
+  return "text-danger";
+}
+
+/** Badge coloré pour le score d'engagement. */
+function scoreBadge(score: number): { label: string; cls: string } {
+  if (score >= 80) return { label: "Excellent", cls: "bg-success-soft text-success" };
+  if (score >= 60) return { label: "Bon",       cls: "bg-brand/10 text-brand" };
+  if (score >= 40) return { label: "Moyen",     cls: "bg-warn-soft text-warn" };
+  return              { label: "Faible",     cls: "bg-danger-soft text-danger" };
 }
 
 /* ══ Composants partagés ═════════════════════════════════════════ */
@@ -84,6 +125,16 @@ function StatusBadge({ status }: { status?: string }) {
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${cls}`}>
       {dot && <span className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse" />}
       {label}
+    </span>
+  );
+}
+
+function ScoreBadge({ score }: { score: number }) {
+  const { label, cls } = scoreBadge(score);
+  return (
+    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${cls}`}>
+      {score}
+      <span className="font-normal opacity-80">{label}</span>
     </span>
   );
 }
@@ -167,7 +218,7 @@ function FilterModal({
 
           {/* Section Statut */}
           <div>
-            <p className="text-[11px] font-semibold text-tx-muted uppercase tracking-widest mb-3">Statut d'activité</p>
+            <p className="text-[11px] font-semibold text-tx-muted uppercase tracking-widest mb-3">Statut d&apos;activité</p>
             <div className="grid grid-cols-2 gap-2">
               {STATUS_OPTS.map(o => (
                 <button
@@ -306,6 +357,124 @@ function FilterModal({
   );
 }
 
+/* ══ Section "Profil d'utilisation" dans la modal ═══════════════ */
+function ProfilUtilisation({ teacher }: { teacher: TeacherSuivi }) {
+  const { label: scoreLabel, cls: scoreCls } = scoreBadge(teacher.score_engagement);
+
+  return (
+    <div className="px-6 py-5 border-b border-border bg-surface-alt/30">
+      <p className="text-[11px] font-semibold text-tx-muted uppercase tracking-widest mb-4">Profil d&apos;utilisation</p>
+
+      <div className="grid grid-cols-3 gap-4">
+
+        {/* Bloc 1 — Score global */}
+        <div className="flex flex-col items-center justify-center bg-surface rounded-2xl border border-border px-4 py-5 gap-2">
+          <p className="text-[11px] font-semibold text-tx-muted uppercase tracking-widest">Score engagement</p>
+          <span className={`text-4xl font-extrabold ${scoreCls.replace("bg-success-soft ", "").replace("bg-brand/10 ", "").replace("bg-warn-soft ", "").replace("bg-danger-soft ", "")}`}>
+            {teacher.score_engagement}
+          </span>
+          <span className={`px-3 py-1 rounded-full text-xs font-bold ${scoreCls}`}>{scoreLabel}</span>
+          <div className="w-full mt-1">
+            <div className="h-1.5 rounded-full bg-surface-alt overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  teacher.score_engagement >= 80 ? "bg-success" :
+                  teacher.score_engagement >= 60 ? "bg-brand" :
+                  teacher.score_engagement >= 40 ? "bg-warn" : "bg-danger"
+                }`}
+                style={{ width: `${teacher.score_engagement}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Bloc 2 — Métriques clés (grille 2×3) */}
+        <div className="bg-surface rounded-2xl border border-border px-4 py-4">
+          <p className="text-[11px] font-semibold text-tx-muted uppercase tracking-widest mb-3">Métriques clés</p>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+            {/* Complétion */}
+            <div>
+              <p className="text-[10px] text-tx-muted">Complétion</p>
+              <p className={`text-sm font-bold ${teacher.taux_completion != null ? metricColor(teacher.taux_completion, [75, 50]) : "text-tx-muted"}`}>
+                {teacher.taux_completion != null ? `${Math.round(teacher.taux_completion)}%` : "—"}
+              </p>
+            </div>
+            {/* Rapport */}
+            <div>
+              <p className="text-[10px] text-tx-muted">Rapport</p>
+              <p className={`text-sm font-bold ${teacher.taux_rapport != null ? metricColor(teacher.taux_rapport, [75, 50]) : "text-tx-muted"}`}>
+                {teacher.taux_rapport != null ? `${Math.round(teacher.taux_rapport)}%` : "—"}
+              </p>
+            </div>
+            {/* Durée moy */}
+            <div>
+              <p className="text-[10px] text-tx-muted">Durée moy.</p>
+              <p className={`text-sm font-bold ${teacher.duree_moy_minutes != null ? metricColor(teacher.duree_moy_minutes, [45, 30]) : "text-tx-muted"}`}>
+                {teacher.duree_moy_minutes != null ? `${Math.round(teacher.duree_moy_minutes)} min` : "—"}
+              </p>
+            </div>
+            {/* Présence */}
+            <div>
+              <p className="text-[10px] text-tx-muted">Présence</p>
+              <p className={`text-sm font-bold ${teacher.taux_presence != null ? metricColor(teacher.taux_presence, [80, 60]) : "text-tx-muted"}`}>
+                {teacher.taux_presence != null ? `${Math.round(teacher.taux_presence)}%` : "—"}
+              </p>
+            </div>
+            {/* Actif 7j */}
+            <div>
+              <p className="text-[10px] text-tx-muted">Actif 7j</p>
+              <p className={`text-sm font-bold ${metricColor(teacher.seances_7j, [3, 1])}`}>
+                {teacher.seances_7j} séance{teacher.seances_7j !== 1 ? "s" : ""}
+              </p>
+            </div>
+            {/* Actif 30j */}
+            <div>
+              <p className="text-[10px] text-tx-muted">Actif 30j</p>
+              <p className={`text-sm font-bold ${metricColor(teacher.seances_30j, [8, 3])}`}>
+                {teacher.seances_30j} séance{teacher.seances_30j !== 1 ? "s" : ""}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Bloc 3 — Usage app */}
+        <div className="bg-surface rounded-2xl border border-border px-4 py-4">
+          <p className="text-[11px] font-semibold text-tx-muted uppercase tracking-widest mb-3">Usage app</p>
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-tx-muted">Séances planifiées</span>
+              <span className="font-semibold text-tx">{teacher.seances_planifiees}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-tx-muted">Séances ad-hoc</span>
+              <span className="font-semibold text-tx">{teacher.seances_ad_hoc}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-tx-muted">Rapports offline</span>
+              <span className={`font-semibold ${teacher.rapports_offline > 0 ? "text-warn" : "text-tx"}`}>{teacher.rapports_offline}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-tx-muted">Jours actifs</span>
+              <span className="font-semibold text-tx">{teacher.jours_actifs}</span>
+            </div>
+            <div className="pt-1 border-t border-border space-y-1.5">
+              <div className="text-xs text-tx-muted">
+                <span>Première séance : </span>
+                <span className="font-medium text-tx">{fmtDateShort(teacher.premiere_seance)}</span>
+              </div>
+              <div className="text-xs text-tx-muted">
+                <span>Dernière connexion : </span>
+                <span className="font-medium text-tx">{fmtFull(teacher.derniere_connexion)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
 /* ══ Modal détail enseignant ═════════════════════════════════════ */
 function TeacherModal({
   teacher, detail, loading, onClose,
@@ -320,7 +489,7 @@ function TeacherModal({
       className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-3xl max-h-[88vh] flex flex-col overflow-hidden">
+      <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
 
         {/* ── En-tête modal ── */}
         <div className="flex items-start gap-4 p-6 border-b border-border">
@@ -377,6 +546,9 @@ function TeacherModal({
           </button>
         </div>
 
+        {/* ── Profil d'utilisation ── */}
+        <ProfilUtilisation teacher={teacher} />
+
         {/* ── Corps : tableau des séances ── */}
         <div className="flex-1 overflow-y-auto">
           {loading ? (
@@ -395,20 +567,20 @@ function TeacherModal({
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-surface-alt border-b border-border">
                 <tr>
-                  {["Date", "Activité / Classe", "Lancement", "Fin", "Durée", "Statut", "Rapport"].map(h => (
-                    <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide whitespace-nowrap">{h}</th>
+                  {["Date", "Activité / Classe", "Lancement", "Fin", "Durée", "Élèves", "Type", "Statut", "Rapport"].map(h => (
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {detail.seances.map(s => (
                   <tr key={s.id} className="hover:bg-surface-alt/40 transition-colors">
-                    <td className="px-5 py-3.5 text-xs text-tx-muted whitespace-nowrap">{fmtDate(s.date_seance)}</td>
-                    <td className="px-5 py-3.5">
+                    <td className="px-4 py-3.5 text-xs text-tx-muted whitespace-nowrap">{fmtDate(s.date_seance)}</td>
+                    <td className="px-4 py-3.5">
                       <p className="font-medium text-tx">{s.matiere ?? "—"}</p>
                       <p className="text-xs text-tx-muted">{s.classe}</p>
                     </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap">
+                    <td className="px-4 py-3.5 whitespace-nowrap">
                       {s.started_at ? (
                         <span title={fmtFull(s.started_at)}>
                           <p className="font-mono font-semibold text-tx">{fmtTime(s.started_at)}</p>
@@ -416,18 +588,49 @@ function TeacherModal({
                         </span>
                       ) : <span className="text-tx-muted">—</span>}
                     </td>
-                    <td className="px-5 py-3.5 font-mono text-xs text-tx-muted whitespace-nowrap">{fmtTime(s.finished_at)}</td>
-                    <td className="px-5 py-3.5 text-xs text-tx whitespace-nowrap">
+                    <td className="px-4 py-3.5 font-mono text-xs text-tx-muted whitespace-nowrap">{fmtTime(s.finished_at)}</td>
+                    <td className="px-4 py-3.5 text-xs text-tx whitespace-nowrap">
                       {s.duree_minutes != null ? `${s.duree_minutes} min` : "—"}
                     </td>
-                    <td className="px-5 py-3.5"><StatusBadge status={s.status} /></td>
-                    <td className="px-5 py-3.5 text-center">
-                      {s.has_rapport
-                        ? <span className="inline-flex items-center gap-1 text-xs text-success font-semibold">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>Oui
+                    {/* Colonne Élèves */}
+                    <td className="px-4 py-3.5 text-xs whitespace-nowrap">
+                      {s.nb_eleves_total != null ? (
+                        <span className={`font-semibold ${
+                          s.nb_eleves_presents != null && s.nb_eleves_total > 0
+                            ? metricColor(s.nb_eleves_presents / s.nb_eleves_total * 100, [80, 60])
+                            : "text-tx-muted"
+                        }`}>
+                          {s.nb_eleves_presents ?? "?"}/{s.nb_eleves_total}
+                        </span>
+                      ) : <span className="text-tx-muted">—</span>}
+                    </td>
+                    {/* Colonne Type */}
+                    <td className="px-4 py-3.5">
+                      {s.planning_segment_id ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-brand/10 text-brand border border-brand/20">
+                          Planifiée
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-surface-alt text-tx-muted border border-border">
+                          Ad-hoc
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3.5"><StatusBadge status={s.status} /></td>
+                    <td className="px-4 py-3.5">
+                      {s.has_rapport ? (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="inline-flex items-center gap-1 text-xs text-success font-semibold">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                            {s.rapport_at ? fmtTime(s.rapport_at) : "Oui"}
                           </span>
-                        : <span className="text-xs text-tx-muted">Non</span>
-                      }
+                          {s.soumis_offline && (
+                            <span className="text-[10px] text-warn font-medium">📶 offline</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-tx-muted">Non</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -448,8 +651,7 @@ export default function SuiviSeancesPage() {
   const [search,       setSearch]       = useState("");
   const [filters,      setFilters]      = useState<FilterState>(FILTER_EMPTY);
   const [loading,      setLoading]      = useState(false);
-  const [page,         setPage]         = useState(0);
-  const [perPage,      setPerPage]      = useState(10);
+  const [page,         setPage]         = useState(1);
   const [showFilters,  setShowFilters]  = useState(false);
 
   /* Modal enseignant */
@@ -494,16 +696,12 @@ export default function SuiviSeancesPage() {
     if (filters.status === "aucune"   && t.total_seances !== 0) return false;
     if (filters.schools.length > 0   && !filters.schools.includes(t.school_name ?? "")) return false;
     if (filters.classes.length > 0   && !filters.classes.some(c => t.classes?.includes(c))) return false;
-    // withRapport: on filtrerait idéalement côté serveur, ici on n'a pas l'info globale → skipped au niveau liste
     return true;
   });
 
   /* ── Pagination ── */
-  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
-  const safePage   = Math.min(page, totalPages - 1);
-  const paginated  = filtered.slice(safePage * perPage, (safePage + 1) * perPage);
-  const goTo       = (p: number) => setPage(Math.max(0, Math.min(p, totalPages - 1)));
-  const resetPage  = () => setPage(0);
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const resetPage = () => setPage(1);
 
   /* ── Ouvrir modal enseignant ── */
   const openModal = async (t: TeacherSuivi) => {
@@ -681,12 +879,13 @@ export default function SuiviSeancesPage() {
 
         {/* Header colonnes */}
         <div className="flex items-center justify-between px-5 py-3 bg-surface-alt border-b border-border">
-          <div className="grid grid-cols-[2fr_1.5fr_1.5fr_1fr_1fr_80px] gap-x-4 flex-1 text-xs font-semibold text-tx-muted uppercase tracking-wide">
+          <div className="grid grid-cols-[2fr_1.5fr_1.5fr_1fr_1fr_90px_90px] gap-x-4 flex-1 text-xs font-semibold text-tx-muted uppercase tracking-wide">
             <span>Enseignant</span>
             <span>Dernière activité</span>
             <span>Heure de lancement</span>
             <span>Statut</span>
             <span>Séances</span>
+            <span>Score</span>
             <span className="text-center">Détail</span>
           </div>
         </div>
@@ -714,7 +913,7 @@ export default function SuiviSeancesPage() {
             {paginated.map(t => (
               <div
                 key={t.teacher_id}
-                className="grid grid-cols-[2fr_1.5fr_1.5fr_1fr_1fr_80px] gap-x-4 px-5 py-4 items-center hover:bg-surface-alt/60 transition-colors"
+                className="grid grid-cols-[2fr_1.5fr_1.5fr_1fr_1fr_90px_90px] gap-x-4 px-5 py-4 items-center hover:bg-surface-alt/60 transition-colors"
               >
                 {/* Identité */}
                 <div className="flex items-center gap-3 min-w-0">
@@ -754,10 +953,32 @@ export default function SuiviSeancesPage() {
                 {/* Statut */}
                 <div><StatusBadge status={t.dernier_status} /></div>
 
-                {/* Compteur */}
+                {/* Compteur + mini-activité */}
                 <div>
                   <p className="text-base font-bold text-tx">{t.total_seances}</p>
                   <p className="text-xs text-tx-muted">{t.seances_terminees} terminée{t.seances_terminees !== 1 ? "s" : ""}</p>
+                  {/* Mini-indicateurs d'activité */}
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                      t.seances_7j > 0 ? "bg-success-soft text-success" : "bg-surface-alt text-tx-muted"
+                    }`}>
+                      7j:{t.seances_7j}
+                    </span>
+                    {t.taux_rapport != null && (
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                        t.taux_rapport >= 75 ? "bg-success-soft text-success" :
+                        t.taux_rapport >= 50 ? "bg-warn-soft text-warn" :
+                        "bg-danger-soft text-danger"
+                      }`}>
+                        R:{Math.round(t.taux_rapport)}%
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Score */}
+                <div>
+                  <ScoreBadge score={t.score_engagement} />
                 </div>
 
                 {/* Bouton détail */}
@@ -775,51 +996,9 @@ export default function SuiviSeancesPage() {
           </div>
         )}
 
-        {/* ── Pagination ── */}
-        {!loading && filtered.length > 0 && (
-          <div className="flex items-center justify-between gap-4 px-5 py-3 border-t border-border bg-surface-alt/40">
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-tx-muted whitespace-nowrap">
-                {safePage * perPage + 1}–{Math.min((safePage + 1) * perPage, filtered.length)}{" "}
-                sur <span className="font-semibold text-tx">{filtered.length}</span> résultat{filtered.length !== 1 ? "s" : ""}
-              </span>
-              <select
-                value={perPage}
-                onChange={e => { setPerPage(Number(e.target.value)); setPage(0); }}
-                className="text-xs bg-surface border border-border rounded-lg px-2 py-1.5 text-tx focus:outline-none focus:ring-2 focus:ring-brand/30"
-              >
-                {[10, 25, 50].map(n => <option key={n} value={n}>{n} / page</option>)}
-              </select>
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => goTo(safePage - 1)} disabled={safePage === 0}
-                className="w-8 h-8 flex items-center justify-center rounded-lg border border-border text-tx-muted hover:bg-surface-alt hover:text-tx transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-              </button>
-              {(() => {
-                const w = 5;
-                let start = Math.max(0, safePage - Math.floor(w / 2));
-                const end = Math.min(totalPages, start + w);
-                if (end - start < w) start = Math.max(0, end - w);
-                return Array.from({ length: end - start }, (_, i) => start + i).map(p => (
-                  <button key={p} onClick={() => goTo(p)}
-                    className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs font-semibold transition-colors ${
-                      p === safePage ? "bg-brand text-white shadow-sm" : "border border-border text-tx-muted hover:bg-surface-alt hover:text-tx"
-                    }`}
-                  >{p + 1}</button>
-                ));
-              })()}
-              <button
-                onClick={() => goTo(safePage + 1)} disabled={safePage >= totalPages - 1}
-                className="w-8 h-8 flex items-center justify-center rounded-lg border border-border text-tx-muted hover:bg-surface-alt hover:text-tx transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-              </button>
-            </div>
-          </div>
-        )}
+        <div className="px-5 pb-4">
+          <Pagination page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
+        </div>
       </div>
 
       {/* ══ Modal filtres avancés ══ */}

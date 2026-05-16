@@ -1,6 +1,9 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { suiviSuperviseurApi, sessionsApi } from "@/lib/api";
+import Pagination from "@/components/Pagination";
+
+const PAGE_SIZE = 20;
 
 /* ══ Types ═══════════════════════════════════════════════════════ */
 interface SuperviseurSuivi {
@@ -284,8 +287,7 @@ export default function SuiviSuperviseurPage() {
   const [sessId,       setSessId]       = useState("");
   const [search,       setSearch]       = useState("");
   const [loading,      setLoading]      = useState(false);
-  const [page,         setPage]         = useState(0);
-  const [perPage,      setPerPage]      = useState(10);
+  const [page,         setPage]         = useState(1);
 
   /* Modal */
   const [modalSup,     setModalSup]     = useState<SuperviseurSuivi | null>(null);
@@ -315,11 +317,8 @@ export default function SuiviSuperviseurPage() {
   useEffect(() => { load(); }, [load]);
 
   /* Pagination */
-  const totalPages = Math.max(1, Math.ceil(superviseurs.length / perPage));
-  const safePage   = Math.min(page, totalPages - 1);
-  const paginated  = superviseurs.slice(safePage * perPage, (safePage + 1) * perPage);
-  const goTo       = (p: number) => setPage(Math.max(0, Math.min(p, totalPages - 1)));
-  const resetPage  = () => setPage(0);
+  const paginated = superviseurs.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const resetPage = () => setPage(1);
 
   /* Ouvrir modal */
   const openModal = async (sup: SuperviseurSuivi) => {
@@ -489,46 +488,9 @@ export default function SuiviSuperviseurPage() {
           </div>
         )}
 
-        {/* ── Pagination ── */}
-        {!loading && superviseurs.length > 0 && (
-          <div className="flex items-center justify-between gap-4 px-5 py-3 border-t border-border bg-surface-alt/40">
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-tx-muted whitespace-nowrap">
-                {safePage * perPage + 1}–{Math.min((safePage + 1) * perPage, superviseurs.length)}{" "}
-                sur <span className="font-semibold text-tx">{superviseurs.length}</span> résultat{superviseurs.length !== 1 ? "s" : ""}
-              </span>
-              <select
-                value={perPage}
-                onChange={e => { setPerPage(Number(e.target.value)); setPage(0); }}
-                className="text-xs bg-surface border border-border rounded-lg px-2 py-1.5 text-tx focus:outline-none focus:ring-2 focus:ring-brand/30"
-              >
-                {[10, 25, 50].map(n => <option key={n} value={n}>{n} / page</option>)}
-              </select>
-            </div>
-            <div className="flex items-center gap-1">
-              <button onClick={() => goTo(safePage - 1)} disabled={safePage === 0}
-                className="w-8 h-8 flex items-center justify-center rounded-lg border border-border text-tx-muted hover:bg-surface-alt hover:text-tx transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-              </button>
-              {(() => {
-                const w = 5;
-                let start = Math.max(0, safePage - Math.floor(w / 2));
-                const end = Math.min(totalPages, start + w);
-                if (end - start < w) start = Math.max(0, end - w);
-                return Array.from({ length: end - start }, (_, i) => start + i).map(p => (
-                  <button key={p} onClick={() => goTo(p)}
-                    className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs font-semibold transition-colors ${
-                      p === safePage ? "bg-brand text-white shadow-sm" : "border border-border text-tx-muted hover:bg-surface-alt hover:text-tx"
-                    }`}>{p + 1}</button>
-                ));
-              })()}
-              <button onClick={() => goTo(safePage + 1)} disabled={safePage >= totalPages - 1}
-                className="w-8 h-8 flex items-center justify-center rounded-lg border border-border text-tx-muted hover:bg-surface-alt hover:text-tx transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-              </button>
-            </div>
-          </div>
-        )}
+        <div className="px-5 pb-4">
+          <Pagination page={page} total={superviseurs.length} pageSize={PAGE_SIZE} onChange={setPage} />
+        </div>
       </div>
 
       {/* ══ Modal ══ */}

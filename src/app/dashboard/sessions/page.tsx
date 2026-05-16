@@ -1,6 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import { sessionsApi } from "@/lib/api";
+import Pagination from "@/components/Pagination";
+
+const PAGE_SIZE = 20;
 
 interface Session { id:string; name:string; date_debut:string; date_fin:string; status:string; description?:string; }
 const EMPTY: Omit<Session,"id"> = { name:"", date_debut:"", date_fin:"", status:"inactive", description:"" };
@@ -16,9 +19,12 @@ export default function SessionsPage() {
   const [modal,   setModal]   = useState<null|"create"|Session>(null);
   const [form,    setForm]    = useState(EMPTY);
   const [loading, setLoading] = useState(false);
+  const [page,    setPage]    = useState(1);
 
   const load = () => sessionsApi.list().then(r => setItems(r.data.items ?? [])).catch(()=>{});
   useEffect(() => { load(); }, []);
+
+  const paginated = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const save = async () => {
     setLoading(true);
@@ -60,7 +66,7 @@ export default function SessionsPage() {
             </tr>
           </thead>
           <tbody>
-            {items.map(s=>(
+            {paginated.map(s=>(
               <tr key={s.id} className="border-t border-border hover:bg-surface-alt transition-colors">
                 <td className="px-5 py-3.5 font-medium text-tx text-center">{s.name}</td>
                 <td className="px-5 py-3.5 text-tx-muted text-center">{s.date_debut}</td>
@@ -97,6 +103,9 @@ export default function SessionsPage() {
             )}
           </tbody>
         </table>
+        <div className="pb-4 px-5">
+          <Pagination page={page} total={items.length} pageSize={PAGE_SIZE} onChange={setPage} />
+        </div>
       </div>
 
       {modal && (

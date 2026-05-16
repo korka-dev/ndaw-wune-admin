@@ -68,6 +68,11 @@ export const teachersApi = {
   update:       (id: string, d: unknown) => api.patch(`/admin/teachers/${id}`, d),
   delete:       (id: string)    => api.delete(`/admin/teachers/${id}`),
   toggleStatus: (id: string)    => api.post(`/admin/teachers/${id}/toggle-status`),
+  importCsv: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post("/admin/teachers/import/csv", fd, { headers: { "Content-Type": "multipart/form-data" } });
+  },
 };
 
 export const schoolsApi = {
@@ -75,6 +80,11 @@ export const schoolsApi = {
   create: (d: unknown)    => api.post("/admin/schools", d),
   update: (id: string, d: unknown) => api.patch(`/admin/schools/${id}`, d),
   delete: (id: string)    => api.delete(`/admin/schools/${id}`),
+  importCsv: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post("/admin/schools/import/csv", fd, { headers: { "Content-Type": "multipart/form-data" } });
+  },
 };
 
 export const planningApi = {
@@ -137,4 +147,29 @@ export const evaluateursApi = {
   delete:         (id: string)                    => api.delete(`/admin/evaluateurs/${id}`),
   toggleStatus:   (id: string)                    => api.post(`/admin/evaluateurs/${id}/toggle-status`),
   assignTeachers: (id: string, ids: string[])     => api.post(`/admin/evaluateurs/${id}/assign-teachers`, { assigned_teacher_ids: ids }),
+};
+
+export const rapportJournalierAdminApi = {
+  list: (params?: { teacher_id?: string; skip?: number; limit?: number }) =>
+    api.get("/admin/rapports/journalier", { params }),
+  exportCsv: (teacher_id?: string) =>
+    api.get("/admin/rapports/journalier/export/csv", {
+      params: teacher_id ? { teacher_id } : {},
+      responseType: "blob",
+    }),
+};
+
+export const elevesApi = {
+  list:   (params?: { school_id?: string; session_id?: string; classe?: string; skip?: number; limit?: number }) =>
+    api.get("/admin/eleves", { params }),
+  create: (d: unknown) => api.post("/admin/eleves", d),
+  update: (id: string, d: unknown) => api.patch(`/admin/eleves/${id}`, d),
+  delete: (id: string) => api.delete(`/admin/eleves/${id}`),
+};
+
+// Export CSV pour les autres entités
+export const exportApi = {
+  teachers: () => api.get("/admin/teachers/export/csv", { responseType: "blob" }),
+  schools:  () => api.get("/admin/schools/export/csv",  { responseType: "blob" }),
+  planning: () => api.get("/admin/planning/export/csv", { responseType: "blob" }),
 };

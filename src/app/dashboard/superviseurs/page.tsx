@@ -1,13 +1,16 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { superviseursApi, schoolsApi, teachersApi } from "@/lib/api";
+import Pagination from "@/components/Pagination";
+
+const PAGE_SIZE = 20;
 
 interface Superviseur {
   id: string; name: string; phone?: string; title?: string;
   status: string; school_id?: string; assigned_teacher_ids?: string[];
 }
 interface School  { id: string; name: string; }
-interface Teacher { id: string; name: string; school_id?: string; classes?: string[]; }
+interface Teacher { id: string; name: string; phone?: string; school_id?: string; classes?: string[]; }
 
 const EMPTY = { name:"", phone:"", title:"", school_id:"", assigned_teacher_ids:[] as string[] };
 type ModalState = null | "create"
@@ -34,6 +37,7 @@ export default function SuperviseursPage() {
   /* état modal assignation */
   const [assignIds,    setAssignIds]    = useState<string[]>([]);
   const [assignSearch, setAssignSearch] = useState("");
+  const [page,         setPage]         = useState(1);
 
   /* auto-focus premier champ à l'ouverture du modal */
   const firstFieldRef = useRef<HTMLInputElement>(null);
@@ -107,6 +111,9 @@ export default function SuperviseursPage() {
   const schoolTeachers  = (sid: string) => teachers.filter(t => t.school_id === sid);
   const assignedTeachers = (ids?: string[]) => teachers.filter(t => ids?.includes(t.id));
 
+  /* Réinitialiser la page quand les filtres changent */
+  useEffect(() => { setPage(1); }, [search, filterSchool, filterStatus]);
+
   const hasFilters = !!(search || filterSchool || filterStatus);
   const filtered = sups.filter(s => {
     const matchSearch = !search.trim() ||
@@ -116,6 +123,7 @@ export default function SuperviseursPage() {
     const matchStatus = !filterStatus || s.status === filterStatus;
     return matchSearch && matchSchool && matchStatus;
   });
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const openCreate = () => { setForm(EMPTY); setPhoneError(""); setModal("create"); };
   const openEdit   = (sup: Superviseur) => {
@@ -230,12 +238,12 @@ export default function SuperviseursPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 && (
+            {paginated.length === 0 && (
               <tr><td colSpan={6} className="px-5 py-12 text-center text-tx-muted text-sm">
                 {hasFilters ? "Aucun superviseur ne correspond aux filtres." : "Aucun superviseur pour l'instant."}
               </td></tr>
             )}
-            {filtered.map(sup => {
+            {paginated.map(sup => {
               const assigned = assignedTeachers(sup.assigned_teacher_ids);
               return (
                 <tr key={sup.id} onClick={() => setModal({ kind:"view", sup })}
@@ -281,6 +289,9 @@ export default function SuperviseursPage() {
             })}
           </tbody>
         </table>
+        <div className="px-5 pb-4">
+          <Pagination page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
+        </div>
       </div>
 
       {/* ── Modal Gérer ── */}

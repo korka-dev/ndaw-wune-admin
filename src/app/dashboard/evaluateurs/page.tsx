@@ -1,6 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import { evaluateursApi, schoolsApi, teachersApi } from "@/lib/api";
+import Pagination from "@/components/Pagination";
+
+const PAGE_SIZE = 20;
 
 interface Evaluateur {
   id: string; name: string; email?: string; phone?: string; title?: string;
@@ -20,6 +23,7 @@ export default function EvaluateursPage() {
   const [form,     setForm]     = useState<typeof EMPTY>(EMPTY);
   const [loading,  setLoading]  = useState(false);
   const [search,   setSearch]   = useState("");
+  const [page,     setPage]     = useState(1);
 
   const load = () => {
     evaluateursApi.list().then(r => setEvs(r.data.items ?? [])).catch(() => {});
@@ -66,10 +70,14 @@ export default function EvaluateursPage() {
   const schoolTeachers = (schoolId: string) => teachers.filter(t => (t as any).school_id === schoolId);
   const assignedTeachers = (ids?: string[]) => teachers.filter(t => ids?.includes(t.id));
 
+  /* Réinitialiser la page quand la recherche change */
+  useEffect(() => { setPage(1); }, [search]);
+
   const filtered = evs.filter(e =>
     !search.trim() || e.name.toLowerCase().includes(search.toLowerCase()) ||
     schoolName(e.school_id).toLowerCase().includes(search.toLowerCase())
   );
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const openCreate = () => { setForm(EMPTY); setModal("create"); };
   const openEdit = (ev: Evaluateur) => {
@@ -183,10 +191,10 @@ export default function EvaluateursPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 && (
+            {paginated.length === 0 && (
               <tr><td colSpan={6} className="px-5 py-12 text-center text-tx-muted text-sm">Aucun évaluateur trouvé</td></tr>
             )}
-            {filtered.map(ev => {
+            {paginated.map(ev => {
               const assigned = assignedTeachers(ev.assigned_teacher_ids);
               return (
                 <tr key={ev.id} className="border-t border-border hover:bg-surface-alt transition-colors">
@@ -235,6 +243,9 @@ export default function EvaluateursPage() {
             })}
           </tbody>
         </table>
+        <div className="px-5 pb-4">
+          <Pagination page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
+        </div>
       </div>
 
       {modal === "create" && <FormModal title="Nouvel évaluateur" onSave={save} />}

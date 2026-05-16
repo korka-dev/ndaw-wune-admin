@@ -1,6 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import { rapportsApi, sessionsApi, teachersApi } from "@/lib/api";
+import Pagination from "@/components/Pagination";
+
+const PAGE_SIZE = 20;
 
 interface Rapport { id:string; seance_id:string; teacher_id:string; contenu:string; difficultes?:string; points_positifs?:string; soumis_en_offline:boolean; created_at:string; }
 
@@ -11,6 +14,7 @@ export default function RapportsPage() {
   const [sessId,   setSessId]   = useState("");
   const [teachId,  setTeachId]  = useState("");
   const [detail,   setDetail]   = useState<Rapport|null>(null);
+  const [page,     setPage]     = useState(1);
 
   useEffect(() => {
     sessionsApi.list().then(r=>setSessions(r.data.items??[])).catch(()=>{});
@@ -29,17 +33,17 @@ export default function RapportsPage() {
       <h1 className="text-2xl font-bold mb-6">Rapports enseignants</h1>
 
       <div className="flex gap-3 mb-4">
-        <select value={sessId} onChange={e=>setSessId(e.target.value)} className="border rounded-lg px-3 py-2 text-sm">
+        <select value={sessId} onChange={e=>{ setSessId(e.target.value); setPage(1); }} className="border rounded-lg px-3 py-2 text-sm">
           <option value="">Toutes les sessions</option>
           {sessions.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        <select value={teachId} onChange={e=>setTeachId(e.target.value)} className="border rounded-lg px-3 py-2 text-sm">
+        <select value={teachId} onChange={e=>{ setTeachId(e.target.value); setPage(1); }} className="border rounded-lg px-3 py-2 text-sm">
           <option value="">Tous les enseignants</option>
           {teachers.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-surface rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500">
             <tr>{["Enseignant","Date","Offline","Actions"].map(h=>(
@@ -47,7 +51,7 @@ export default function RapportsPage() {
             ))}</tr>
           </thead>
           <tbody>
-            {items.map(r=>(
+            {items.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE).map(r=>(
               <tr key={r.id} className="border-t border-gray-50 hover:bg-gray-50">
                 <td className="px-4 py-3 font-medium">{teacher(r.teacher_id)}</td>
                 <td className="px-4 py-3 text-gray-500">{new Date(r.created_at).toLocaleDateString("fr")}</td>
@@ -64,6 +68,9 @@ export default function RapportsPage() {
             {items.length===0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400">Aucun rapport</td></tr>}
           </tbody>
         </table>
+        <div className="px-5 pb-4">
+          <Pagination page={page} total={items.length} pageSize={PAGE_SIZE} onChange={setPage} />
+        </div>
       </div>
 
       {detail && (

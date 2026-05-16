@@ -1,8 +1,12 @@
 "use client";
-import { useEffect, useState } from "react";
-import { teachersApi, schoolsApi } from "@/lib/api";
+import { useEffect, useRef, useState } from "react";
+import { teachersApi, schoolsApi, exportApi } from "@/lib/api";
+import { downloadBlob } from "@/lib/csv";
+import Pagination from "@/components/Pagination";
 
-interface Teacher { id:string; name:string; phone?:string; title?:string; status:string; school_id?:string; classes?:string[]; }
+const PAGE_SIZE = 20;
+
+interface Teacher { id:string; name:string; phone?:string; email?:string; title?:string; status:string; school_id?:string; classes?:string[]; }
 interface School  { id:string; name:string; }
 const EMPTY_T = { name:"", phone:"", title:"", school_id:"", classes:[] as string[] };
 
@@ -23,12 +27,17 @@ export default function TeachersPage() {
   const [search,        setSearch]        = useState("");
   const [filterSchool,  setFilterSchool]  = useState("");
   const [filterStatus,  setFilterStatus]  = useState("");
+  const [exporting,     setExporting]     = useState(false);
+  const [importMsg,     setImportMsg]     = useState<{ ok: boolean; text: string } | null>(null);
+  const [page,          setPage]          = useState(1);
+  const importRef = useRef<HTMLInputElement>(null);
 
   const load = () => {
     teachersApi.list().then(r=>setTeachers(r.data.items??[])).catch(()=>{});
     schoolsApi.list().then(r=>setSchools(r.data.items??[])).catch(()=>{});
   };
   useEffect(()=>{ load(); },[]);
+  useEffect(()=>{ setPage(1); },[search, filterSchool, filterStatus]);
 
   const hasFilters = !!(search || filterSchool || filterStatus);
   const filtered = teachers.filter(t => {
@@ -38,6 +47,31 @@ export default function TeachersPage() {
     const matchStatus = !filterStatus || t.status === filterStatus;
     return matchSearch && matchSchool && matchStatus;
   });
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const res = await exportApi.teachers();
+      downloadBlob(res.data, "enseignants.csv");
+    } catch { /* silencieux */ }
+    finally { setExporting(false); }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const res = await teachersApi.importCsv(file);
+      const count = res.data?.imported ?? res.data?.count ?? "?";
+      setImportMsg({ ok: true, text: `${count} enseignant${count !== 1 ? "s" : ""} importé${count !== 1 ? "s" : ""} avec succès.` });
+      load();
+    } catch (err: any) {
+      setImportMsg({ ok: false, text: err?.response?.data?.detail ?? "Erreur lors de l'import." });
+    } finally {
+      if (importRef.current) importRef.current.value = "";
+    }
+  };
 
   const checkPhone = (phone: string, excludeId?: string) => {
     const t = phone.trim();
@@ -80,15 +114,54 @@ export default function TeachersPage() {
           <h1 className="text-xl font-bold text-tx">Gestion Enseignants</h1>
           <p className="text-tx-muted text-sm mt-0.5">
             {hasFilters
-              ? `${filtered.length} résultat${filtered.length!==1?"s":""} sur ${teachers.length} enseignant${teachers.length!==1?"s":""}`
-              : `${teachers.length} enseignant${teachers.length!==1?"s":""} au total`}
+              ? `${filtered.length} résultat${filtered.length!==1?"s":""} sur ${teachers.length} enseignant${teachers.length!==1?"s":""} · Page ${page}/${Math.ceil(filtered.length/PAGE_SIZE)||1}`
+              : `${teachers.length} enseignant${teachers.length!==1?"s":""} au total · Page ${page}/${Math.ceil(filtered.length/PAGE_SIZE)||1}`}
           </p>
         </div>
-        <button onClick={()=>{ setForm(EMPTY_T); setModal("create"); }}
-          className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-          Ajouter
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Message import */}
+          {importMsg && (
+            <span className={`text-xs font-medium px-3 py-1.5 rounded-xl ${importMsg.ok ? "bg-success-soft text-success" : "bg-danger-soft text-danger"}`}>
+              {importMsg.text}
+              <button onClick={() => setImportMsg(null)} className="ml-2 opacity-60 hover:opacity-100">✕</button>
+            </span>
+          )}
+          {/* Exporter CSV */}
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            {exporting ? "Export…" : "Exporter CSV"}
+          </button>
+          {/* Importer CSV */}
+          <div className="relative group">
+            <button
+              onClick={() => importRef.current?.click()}
+              title={`Format attendu : name,phone,title,email,school_id,classes\nLes classes sont séparées par le caractère |`}
+              className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              Importer CSV
+            </button>
+            <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
+          </div>
+          {/* Ajouter */}
+          <button onClick={()=>{ setForm(EMPTY_T); setModal("create"); }}
+            className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            Ajouter
+          </button>
+        </div>
       </div>
 
       {/* Barre de recherche + filtres */}
@@ -176,7 +249,7 @@ export default function TeachersPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(t=>{
+            {paginated.map(t=>{
               const school=schools.find(s=>s.id===t.school_id);
               return (
                 <tr key={t.id} onClick={()=>setModal({kind:"view",teacher:t})}
@@ -227,6 +300,9 @@ export default function TeachersPage() {
             )}
           </tbody>
         </table>
+        <div className="pb-4 px-5">
+          <Pagination page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
+        </div>
       </div>
 
       {/* ── Modal Vue détail ──────────────────────────────────────────── */}

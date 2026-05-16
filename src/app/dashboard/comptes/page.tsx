@@ -2,6 +2,9 @@
 import { useEffect, useState } from "react";
 import { usersApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import Pagination from "@/components/Pagination";
+
+const PAGE_SIZE = 20;
 
 interface Compte { id: string; name: string; email?: string; phone?: string; title?: string; role: string; status: string; }
 const EMPTY = { name: "", email: "", phone: "", password: "", title: "", role: "coordonnateur" };
@@ -12,6 +15,7 @@ export default function ComptesPage() {
   const [modal,   setModal]   = useState<null | "create" | Compte>(null);
   const [form,    setForm]    = useState<typeof EMPTY>(EMPTY);
   const [loading, setLoading] = useState(false);
+  const [page,    setPage]    = useState(1);
 
   const load = () => usersApi.list().then(r => setItems(r.data.items ?? [])).catch(() => {});
   useEffect(() => { load(); }, []);
@@ -32,6 +36,7 @@ export default function ComptesPage() {
 
   const isAdmin = me?.role === "admin";
   const initials = (n: string) => n.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase();
+  const paginated = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <div className="px-7 pb-7">
@@ -61,7 +66,7 @@ export default function ComptesPage() {
             </tr>
           </thead>
           <tbody>
-            {items.map(u => (
+            {paginated.map(u => (
               <tr key={u.id} className="border-t border-border hover:bg-surface-alt transition-colors">
                 <td className="px-5 py-3.5">
                   <div className="flex items-center gap-2.5">
@@ -106,6 +111,9 @@ export default function ComptesPage() {
             )}
           </tbody>
         </table>
+        <div className="px-5 pb-4">
+          <Pagination page={page} total={items.length} pageSize={PAGE_SIZE} onChange={setPage} />
+        </div>
       </div>
 
       {modal && (

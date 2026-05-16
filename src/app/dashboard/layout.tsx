@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
+import { sessionsApi } from "@/lib/api";
+import { ActiveSessionCtx } from "@/lib/session-context";
 
 type NavItem = {
   href: string;
@@ -28,9 +30,10 @@ const NAV_SECTIONS: NavSection[] = [
     label: "Gestion",
     items: [
       { href: "/dashboard/sessions",     label: "Gestion Sessions",     icon: "calendar"   },
-      { href: "/dashboard/ecoles",       label: "Gestion Écoles",       icon: "school",    adminOnly: true },
-      { href: "/dashboard/teachers",     label: "Gestion Enseignants",  icon: "users"      },
       { href: "/dashboard/superviseurs", label: "Gestion Superviseurs", icon: "supervisor", adminOnly: true },
+      { href: "/dashboard/ecoles",       label: "Gestion Écoles",       icon: "school",     adminOnly: true },
+      { href: "/dashboard/teachers",     label: "Gestion Enseignants",  icon: "users"      },
+      { href: "/dashboard/eleves",       label: "Gestion Élèves",       icon: "users-sm"   },
     ],
   },
   {
@@ -38,7 +41,8 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/dashboard/planning",           label: "Gestion Planning",      icon: "clock"      },
       { href: "/dashboard/suivi-seances",      label: "Suivi des séances",     icon: "activity"   },
-      { href: "/dashboard/suivi-superviseurs", label: "Suivi superviseurs",     icon: "eye"        },
+      { href: "/dashboard/suivi-superviseurs",   label: "Suivi superviseurs",    icon: "eye"        },
+      { href: "/dashboard/rapports-journaliers", label: "Rapports Journaliers",  icon: "file-text"  },
     ],
   },
   {
@@ -49,7 +53,7 @@ const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
-type IconName = "calendar"|"home"|"school"|"users"|"activity"|"clock"|"book"|"check"|"shield"|"doc"|"lock"|"supervisor"|"eye";
+type IconName = "calendar"|"home"|"school"|"users"|"users-sm"|"activity"|"clock"|"book"|"check"|"shield"|"doc"|"lock"|"supervisor"|"eye"|"file-text";
 
 function NavIcon({ name }: { name: IconName }) {
   const p = { width:17, height:17, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:2, strokeLinecap:"round" as const, strokeLinejoin:"round" as const };
@@ -58,6 +62,7 @@ function NavIcon({ name }: { name: IconName }) {
     case "home":     return <svg {...p}><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>;
     case "school":   return <svg {...p}><path d="M3 9l9-5 9 5-9 5-9-5z"/><path d="M5 10v6c0 2 3 4 7 4s7-2 7-4v-6"/></svg>;
     case "users":    return <svg {...p}><circle cx="9" cy="8" r="3.5"/><path d="M2 21c0-4 3.5-6 7-6s7 2 7 6"/><circle cx="17" cy="9" r="2.5"/><path d="M22 19c0-2.8-2-4.5-5-4.5"/></svg>;
+    case "users-sm": return <svg {...p}><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/><line x1="20" y1="8" x2="20" y2="14"/></svg>;
     case "activity": return <svg {...p}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>;
     case "clock":    return <svg {...p}><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>;
     case "book":     return <svg {...p}><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>;
@@ -67,6 +72,7 @@ function NavIcon({ name }: { name: IconName }) {
     case "lock":       return <svg {...p}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>;
     case "supervisor": return <svg {...p}><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/><circle cx="20" cy="8" r="1" fill="currentColor"/><path d="M18 6l4 4-4 4"/></svg>;
     case "eye":        return <svg {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>;
+    case "file-text":  return <svg {...p}><path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9l-6-6z"/><path d="M14 3v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="12" y2="17"/></svg>;
   }
 }
 
@@ -75,6 +81,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router   = useRouter();
   const pathname = usePathname();
   const [showLogout, setShowLogout] = useState(false);
+  const [activeSession, setActiveSession] = useState<{ id: string; name: string } | null | "loading">("loading");
 
   useEffect(() => {
     fetchMe().then(() => {
@@ -83,6 +90,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       if (state.mustChangePassword || state.user.must_change_password) {
         router.replace("/change-password");
       }
+    });
+    // Charger la session active
+    sessionsApi.list().then(({ data }) => {
+      const active = (data.items ?? []).find((s: any) => s.status === "active") ?? null;
+      setActiveSession(active);
+    }).catch(() => {
+      setActiveSession(null);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -172,7 +186,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* ── Main ── */}
       <main className="flex-1 h-full overflow-y-auto flex flex-col">
-        {children}
+        {/* Banner : aucune session active */}
+        {activeSession !== "loading" && !activeSession && (
+          <div className="mx-7 mt-5 flex items-center gap-3 bg-warn-soft border border-warn/20 rounded-xl px-4 py-3 text-sm text-warn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <span>
+              <strong>Aucune session active.</strong> Activez une session dans{" "}
+              <a href="/dashboard/sessions" className="underline font-semibold">Gestion Sessions</a>{" "}
+              pour accéder à toutes les fonctionnalités.
+            </span>
+          </div>
+        )}
+        <ActiveSessionCtx.Provider value={activeSession === "loading" ? null : activeSession}>
+          {children}
+        </ActiveSessionCtx.Provider>
       </main>
 
       {/* ── Modal déconnexion ── */}
