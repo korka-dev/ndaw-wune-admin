@@ -9,6 +9,7 @@ const PAGE_SIZE = 20;
 interface Teacher { id:string; name:string; phone?:string; email?:string; title?:string; status:string; school_id?:string; classes?:string[]; }
 interface School  { id:string; name:string; }
 const EMPTY_T = { name:"", phone:"", title:"", school_id:"", classes:[] as string[] };
+const CLASSES = ["CP", "CE1"] as const;
 
 type ModalState = null | "create"
   | { kind:"view";   teacher:Teacher }
@@ -472,11 +473,42 @@ export default function TeachersPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-tx mb-1">Classes (séparées par virgule)</label>
-                <input type="text" value={form.classes?.join(",")??""}
-                  onChange={e=>setForm(f=>({...f,classes:e.target.value.split(",").map(c=>c.trim()).filter(Boolean)}))}
-                  placeholder="CE1, CE2, CM1"
-                  className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 transition"/>
+                <label className="block text-sm font-medium text-tx mb-2">Classes</label>
+                <div className="flex gap-3">
+                  {CLASSES.map(cls => (
+                    <label key={cls}
+                      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border cursor-pointer transition-colors select-none ${
+                        form.classes?.includes(cls)
+                          ? "border-brand bg-brand-soft text-brand font-semibold"
+                          : "border-border bg-surface-alt text-tx hover:border-brand/40"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="hidden"
+                        checked={form.classes?.includes(cls) ?? false}
+                        onChange={e => setForm(f => ({
+                          ...f,
+                          classes: e.target.checked
+                            ? [...(f.classes ?? []), cls]
+                            : (f.classes ?? []).filter(c => c !== cls),
+                        }))}
+                      />
+                      <span className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border ${
+                        form.classes?.includes(cls)
+                          ? "bg-brand border-brand"
+                          : "border-border bg-surface"
+                      }`}>
+                        {form.classes?.includes(cls) && (
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12"/>
+                          </svg>
+                        )}
+                      </span>
+                      {cls}
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="flex gap-3 mt-5 justify-end">
@@ -520,11 +552,42 @@ export default function TeachersPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-tx mb-1">Classes (séparées par virgule)</label>
-                <input type="text" value={form.classes?.join(",")??""}
-                  onChange={e=>setForm(f=>({...f,classes:e.target.value.split(",").map(c=>c.trim()).filter(Boolean)}))}
-                  placeholder="CE1, CE2, CM1"
-                  className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 transition"/>
+                <label className="block text-sm font-medium text-tx mb-2">Classes</label>
+                <div className="flex gap-3">
+                  {CLASSES.map(cls => (
+                    <label key={cls}
+                      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border cursor-pointer transition-colors select-none ${
+                        form.classes?.includes(cls)
+                          ? "border-brand bg-brand-soft text-brand font-semibold"
+                          : "border-border bg-surface-alt text-tx hover:border-brand/40"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="hidden"
+                        checked={form.classes?.includes(cls) ?? false}
+                        onChange={e => setForm(f => ({
+                          ...f,
+                          classes: e.target.checked
+                            ? [...(f.classes ?? []), cls]
+                            : (f.classes ?? []).filter(c => c !== cls),
+                        }))}
+                      />
+                      <span className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border ${
+                        form.classes?.includes(cls)
+                          ? "bg-brand border-brand"
+                          : "border-border bg-surface"
+                      }`}>
+                        {form.classes?.includes(cls) && (
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12"/>
+                          </svg>
+                        )}
+                      </span>
+                      {cls}
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="flex gap-3 mt-5 justify-end">

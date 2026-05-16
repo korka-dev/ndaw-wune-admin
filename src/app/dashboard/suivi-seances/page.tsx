@@ -653,6 +653,7 @@ export default function SuiviSeancesPage() {
   const [loading,      setLoading]      = useState(false);
   const [page,         setPage]         = useState(1);
   const [showFilters,  setShowFilters]  = useState(false);
+  const [quickStatus,  setQuickStatus]  = useState<FilterStatus>("all");
 
   /* Modal enseignant */
   const [modalTeacher, setModalTeacher] = useState<TeacherSuivi | null>(null);
@@ -690,10 +691,11 @@ export default function SuiviSeancesPage() {
   ).sort();
 
   /* ── Filtre côté client ── */
+  const activeStatus = filters.status !== "all" ? filters.status : quickStatus;
   const filtered = teachers.filter(t => {
-    if (filters.status === "en_cours" && t.seances_en_cours === 0) return false;
-    if (filters.status === "terminee" && (t.seances_terminees === 0 || t.seances_en_cours > 0)) return false;
-    if (filters.status === "aucune"   && t.total_seances !== 0) return false;
+    if (activeStatus === "en_cours" && t.seances_en_cours === 0) return false;
+    if (activeStatus === "terminee" && (t.seances_terminees === 0 || t.seances_en_cours > 0)) return false;
+    if (activeStatus === "aucune"   && t.total_seances !== 0) return false;
     if (filters.schools.length > 0   && !filters.schools.includes(t.school_name ?? "")) return false;
     if (filters.classes.length > 0   && !filters.classes.some(c => t.classes?.includes(c))) return false;
     return true;
@@ -718,8 +720,8 @@ export default function SuiviSeancesPage() {
   const closeModal = () => { setModalTeacher(null); setModalDetail(null); };
 
   /* ── Appliquer filtres ── */
-  const applyFilters = (f: FilterState) => { setFilters(f); resetPage(); };
-  const resetFilters = () => { setFilters(FILTER_EMPTY); resetPage(); };
+  const applyFilters = (f: FilterState) => { setFilters(f); setQuickStatus("all"); resetPage(); };
+  const resetFilters = () => { setFilters(FILTER_EMPTY); setQuickStatus("all"); resetPage(); };
 
   /* ── Supprimer un filtre individuel ── */
   const removeFilter = (key: keyof FilterState, val?: string) => {
@@ -856,9 +858,9 @@ export default function SuiviSeancesPage() {
         ].map(stat => (
           <button
             key={stat.label}
-            onClick={() => { setFilters(f => ({ ...f, status: stat.fStatus })); resetPage(); }}
+            onClick={() => { setQuickStatus(prev => prev === stat.fStatus ? "all" : stat.fStatus); setFilters(f => ({ ...f, status: "all" })); resetPage(); }}
             className={`bg-surface border rounded-2xl px-5 py-4 flex items-center gap-4 text-left transition-all hover:shadow-sm ${
-              filters.status === stat.fStatus ? "border-brand ring-2 ring-brand/20" : "border-border"
+              activeStatus === stat.fStatus ? "border-brand ring-2 ring-brand/20" : "border-border"
             }`}
           >
             <div className={`w-10 h-10 rounded-xl ${stat.bg} flex items-center justify-center flex-shrink-0`}>

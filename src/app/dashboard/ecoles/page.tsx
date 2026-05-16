@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { schoolsApi, exportApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
+import { SENEGAL_REGIONS, getCommunesByRegion } from "@/lib/senegal-geo";
 
 interface School {
   id:             string;
@@ -396,41 +397,112 @@ export default function EcolesPage() {
             )}
 
             <div className="space-y-3">
-              {([
-                ["Nom de l'école *",       "name",           "École primaire de …"],
-                ["Région",                  "region",         "Dakar, Thiès, …"],
-                ["Ville / Commune",         "city",           "Dakar, Rufisque, …"],
-                ["Directeur(trice)",        "director",       "Prénom NOM"],
-                ["N° du Directeur(trice)",  "director_phone", "77 000 00 00"],
-              ] as [string, keyof typeof EMPTY, string][]).map(([label, key, placeholder]) => (
-                <div key={key}>
-                  <label className="block text-sm font-medium text-tx mb-1">{label}</label>
-                  <input
-                    type={key === "director_phone" ? "tel" : "text"}
-                    value={(form[key] as string) ?? ""}
-                    onChange={e => {
-                      const val = e.target.value;
-                      setForm(f => ({ ...f, [key]: val }));
-                      if (key === "director_phone") {
-                        const excludeId = modal !== "create" ? (modal as School).id : undefined;
-                        checkPhone(val, excludeId);
-                      }
-                    }}
-                    placeholder={placeholder}
-                    className={`w-full bg-surface-alt border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 transition ${
-                      key === "director_phone" && phoneError
-                        ? "border-danger focus:ring-danger/30 focus:border-danger/40"
-                        : "border-border focus:ring-brand/30 focus:border-brand/40"
-                    }`}
-                  />
-                  {key === "director_phone" && phoneError && (
-                    <p className="mt-1.5 text-xs text-danger flex items-center gap-1">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                      {phoneError}
-                    </p>
-                  )}
+              {/* Nom */}
+              <div>
+                <label className="block text-sm font-medium text-tx mb-1">Nom de l'école *</label>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="École primaire de …"
+                  className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition"
+                />
+              </div>
+
+              {/* Région */}
+              <div>
+                <label className="block text-sm font-medium text-tx mb-1">Région</label>
+                <div className="relative">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
+                    <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>
+                  </svg>
+                  <select
+                    value={form.region ?? ""}
+                    onChange={e => setForm(f => ({ ...f, region: e.target.value, city: "" }))}
+                    className="w-full bg-surface-alt border border-border rounded-xl pl-9 pr-9 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none cursor-pointer"
+                  >
+                    <option value="">— Sélectionner une région —</option>
+                    {SENEGAL_REGIONS.map(r => (
+                      <option key={r.label} value={r.label}>{r.label}</option>
+                    ))}
+                  </select>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
+                    <path d="M6 9l6 6 6-6"/>
+                  </svg>
                 </div>
-              ))}
+              </div>
+
+              {/* Commune / Ville — dépend de la région */}
+              <div>
+                <label className="block text-sm font-medium text-tx mb-1">Commune / Ville</label>
+                <div className="relative">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+                  </svg>
+                  <select
+                    value={form.city ?? ""}
+                    onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
+                    disabled={!form.region}
+                    className="w-full bg-surface-alt border border-border rounded-xl pl-9 pr-9 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="">
+                      {form.region ? "— Sélectionner une commune —" : "— Choisissez d'abord une région —"}
+                    </option>
+                    {getCommunesByRegion(form.region ?? "").map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
+                    <path d="M6 9l6 6 6-6"/>
+                  </svg>
+                </div>
+                {!form.region && (
+                  <p className="mt-1 text-xs text-tx-muted">Sélectionnez une région pour afficher les communes.</p>
+                )}
+              </div>
+
+              {/* Directeur */}
+              <div>
+                <label className="block text-sm font-medium text-tx mb-1">Directeur(trice)</label>
+                <input
+                  type="text"
+                  value={form.director ?? ""}
+                  onChange={e => setForm(f => ({ ...f, director: e.target.value }))}
+                  placeholder="Prénom NOM"
+                  className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition"
+                />
+              </div>
+
+              {/* Téléphone directeur */}
+              <div>
+                <label className="block text-sm font-medium text-tx mb-1">N° du Directeur(trice)</label>
+                <input
+                  type="tel"
+                  value={form.director_phone ?? ""}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setForm(f => ({ ...f, director_phone: val }));
+                    const excludeId = modal !== "create" ? (modal as School).id : undefined;
+                    checkPhone(val, excludeId);
+                  }}
+                  placeholder="77 000 00 00"
+                  className={`w-full bg-surface-alt border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 transition ${
+                    phoneError
+                      ? "border-danger focus:ring-danger/30 focus:border-danger/40"
+                      : "border-border focus:ring-brand/30 focus:border-brand/40"
+                  }`}
+                />
+                {phoneError && (
+                  <p className="mt-1.5 text-xs text-danger flex items-center gap-1">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    {phoneError}
+                  </p>
+                )}
+              </div>
             </div>
 
             <div className="flex gap-3 mt-5 justify-end">

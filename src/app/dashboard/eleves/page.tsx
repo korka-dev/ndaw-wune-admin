@@ -22,6 +22,7 @@ interface Session { id: string; name: string; status: string; }
 const EMPTY_FORM = {
   nom: "", prenom: "", genre: "", date_naissance: "", classe: "", school_id: "", session_id: "",
 };
+const ELEVE_CLASSES = ["CP", "CE1"] as const;
 
 type ModalState =
   | null
@@ -159,12 +160,26 @@ export default function ElevesPage() {
 
       <div>
         <label className="block text-sm font-medium text-tx mb-1">Classe</label>
-        <input
-          type="text" value={form.classe}
-          onChange={e => setForm(f => ({ ...f, classe: e.target.value }))}
-          placeholder="CE1, CM2…"
-          className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 transition"
-        />
+        <div className="relative">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
+            <path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>
+          </svg>
+          <select
+            value={form.classe}
+            onChange={e => setForm(f => ({ ...f, classe: e.target.value }))}
+            className="w-full bg-surface-alt border border-border rounded-xl pl-9 pr-9 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none cursor-pointer"
+          >
+            <option value="">— Sélectionner une classe —</option>
+            {ELEVE_CLASSES.map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </div>
       </div>
 
       <div>
@@ -272,7 +287,7 @@ export default function ElevesPage() {
             }`}
           >
             <option value="">Toutes les classes</option>
-            {uniqueClasses.map(c => <option key={c} value={c}>{c}</option>)}
+            {ELEVE_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
             className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
