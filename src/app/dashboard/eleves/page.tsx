@@ -16,7 +16,7 @@ interface Eleve {
   session_id?: string;
   statut: string;
 }
-interface School  { id: string; name: string; }
+interface School { id: string; name: string; }
 interface Session { id: string; name: string; status: string; }
 
 const EMPTY_FORM = {
@@ -27,28 +27,28 @@ const ELEVE_CLASSES = ["CP", "CE1"] as const;
 type ModalState =
   | null
   | "create"
-  | { kind: "view";   eleve: Eleve }
-  | { kind: "edit";   eleve: Eleve }
+  | { kind: "view"; eleve: Eleve }
+  | { kind: "edit"; eleve: Eleve }
   | { kind: "delete"; eleve: Eleve };
 
 export default function ElevesPage() {
-  const [eleves,        setEleves]        = useState<Eleve[]>([]);
-  const [schools,       setSchools]       = useState<School[]>([]);
-  const [sessions,      setSessions]      = useState<Session[]>([]);
-  const [modal,         setModal]         = useState<ModalState>(null);
-  const [form,          setForm]          = useState<typeof EMPTY_FORM>(EMPTY_FORM);
-  const [loading,       setLoading]       = useState(false);
-  const [search,        setSearch]        = useState("");
-  const [filterSchool,  setFilterSchool]  = useState("");
-  const [filterClasse,  setFilterClasse]  = useState("");
+  const [eleves, setEleves] = useState<Eleve[]>([]);
+  const [schools, setSchools] = useState<School[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [modal, setModal] = useState<ModalState>(null);
+  const [form, setForm] = useState<typeof EMPTY_FORM>(EMPTY_FORM);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [filterSchool, setFilterSchool] = useState("");
+  const [filterClasse, setFilterClasse] = useState("");
   const [filterSession, setFilterSession] = useState("");
-  const [filterGenre,   setFilterGenre]   = useState("");
-  const [page,          setPage]          = useState(1);
+  const [filterGenre, setFilterGenre] = useState("");
+  const [page, setPage] = useState(1);
 
   const load = () => {
-    elevesApi.list().then(r => setEleves(r.data.items ?? [])).catch(() => {});
-    schoolsApi.list().then(r => setSchools(r.data.items ?? [])).catch(() => {});
-    sessionsApi.list().then(r => setSessions(r.data.items ?? [])).catch(() => {});
+    elevesApi.list().then(r => setEleves(r.data.items ?? [])).catch(() => { });
+    schoolsApi.list().then(r => setSchools(r.data.items ?? [])).catch(() => { });
+    sessionsApi.list().then(r => setSessions(r.data.items ?? [])).catch(() => { });
   };
   useEffect(() => { load(); }, []);
   useEffect(() => { setPage(1); }, [search, filterSchool, filterClasse, filterSession, filterGenre]);
@@ -60,25 +60,25 @@ export default function ElevesPage() {
 
   const filtered = eleves.filter(e => {
     const fullName = `${e.nom} ${e.prenom ?? ""}`.toLowerCase();
-    const matchSearch  = !search.trim() || fullName.includes(search.toLowerCase());
-    const matchSchool  = !filterSchool  || e.school_id  === filterSchool;
-    const matchClasse  = !filterClasse  || e.classe     === filterClasse;
+    const matchSearch = !search.trim() || fullName.includes(search.toLowerCase());
+    const matchSchool = !filterSchool || e.school_id === filterSchool;
+    const matchClasse = !filterClasse || e.classe === filterClasse;
     const matchSession = !filterSession || e.session_id === filterSession;
-    const matchGenre   = !filterGenre   || e.genre      === filterGenre;
+    const matchGenre = !filterGenre || e.genre === filterGenre;
     return matchSearch && matchSchool && matchClasse && matchSession && matchGenre;
   });
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const openCreate = () => { setForm(EMPTY_FORM); setModal("create"); };
-  const openEdit   = (eleve: Eleve) => {
+  const openEdit = (eleve: Eleve) => {
     setForm({
-      nom:            eleve.nom           ?? "",
-      prenom:         eleve.prenom        ?? "",
-      genre:          eleve.genre         ?? "",
+      nom: eleve.nom ?? "",
+      prenom: eleve.prenom ?? "",
+      genre: eleve.genre ?? "",
       date_naissance: eleve.date_naissance ?? "",
-      classe:         eleve.classe        ?? "",
-      school_id:      eleve.school_id     ?? "",
-      session_id:     eleve.session_id    ?? "",
+      classe: eleve.classe ?? "",
+      school_id: eleve.school_id ?? "",
+      session_id: eleve.session_id ?? "",
     });
     setModal({ kind: "edit", eleve });
   };
@@ -105,11 +105,11 @@ export default function ElevesPage() {
     finally { setLoading(false); }
   };
 
-  const schoolName   = (id?: string) => schools.find(s => s.id === id)?.name ?? "—";
-  const sessionName  = (id?: string) => sessions.find(s => s.id === id)?.name ?? "—";
-  const genreLabel   = (g?: string) => g === "Masculin" ? "M" : g === "Féminin" ? "F" : "—";
-  const fullName     = (e: Eleve)   => [e.nom, e.prenom].filter(Boolean).join(" ");
-  const initials     = (e: Eleve)   => [e.nom?.[0], e.prenom?.[0]].filter(Boolean).join("").toUpperCase() || "?";
+  const schoolName = (id?: string) => schools.find(s => s.id === id)?.name ?? "—";
+  const sessionName = (id?: string) => sessions.find(s => s.id === id)?.name ?? "—";
+  const genreLabel = (g?: string) => g === "Masculin" ? "M" : g === "Féminin" ? "F" : "—";
+  const fullName = (e: Eleve) => [e.nom, e.prenom].filter(Boolean).join(" ");
+  const initials = (e: Eleve) => [e.nom?.[0], e.prenom?.[0]].filter(Boolean).join("").toUpperCase() || "?";
 
   // ── Form fields shared between create/edit ──────────────────────────────────
   const FormFields = () => (
@@ -163,7 +163,7 @@ export default function ElevesPage() {
         <div className="relative">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
             className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>
+            <path d="M4 19.5A2.5 2.5 0 016.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
           </svg>
           <select
             value={form.classe}
@@ -177,7 +177,7 @@ export default function ElevesPage() {
           </select>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
             className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <path d="M6 9l6 6 6-6"/>
+            <path d="M6 9l6 6 6-6" />
           </svg>
         </div>
       </div>
@@ -226,7 +226,7 @@ export default function ElevesPage() {
             className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M12 5v14M5 12h14"/>
+              <path d="M12 5v14M5 12h14" />
             </svg>
             Ajouter
           </button>
@@ -239,7 +239,7 @@ export default function ElevesPage() {
         <div className="relative flex-1 min-w-[200px]">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
             className="absolute left-3.5 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/>
+            <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.35-4.35" />
           </svg>
           <input
             type="text" value={search} onChange={e => setSearch(e.target.value)}
@@ -248,7 +248,7 @@ export default function ElevesPage() {
           />
           {search && (
             <button onClick={() => setSearch("")} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-tx-muted hover:text-tx">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
             </button>
           )}
         </div>
@@ -257,20 +257,19 @@ export default function ElevesPage() {
         <div className="relative">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
             className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <path d="M3 9l9-5 9 5-9 5-9-5z"/><path d="M5 10v6c0 2 3 4 7 4s7-2 7-4v-6"/>
+            <path d="M3 9l9-5 9 5-9 5-9-5z" /><path d="M5 10v6c0 2 3 4 7 4s7-2 7-4v-6" />
           </svg>
           <select
             value={filterSchool} onChange={e => setFilterSchool(e.target.value)}
-            className={`pl-8 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[160px] ${
-              filterSchool ? "border-brand text-brand font-medium" : "border-border text-tx"
-            }`}
+            className={`pl-8 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[160px] ${filterSchool ? "border-brand text-brand font-medium" : "border-border text-tx"
+              }`}
           >
             <option value="">Toutes les écoles</option>
             {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
             className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <path d="M6 9l6 6 6-6"/>
+            <path d="M6 9l6 6 6-6" />
           </svg>
         </div>
 
@@ -278,20 +277,19 @@ export default function ElevesPage() {
         <div className="relative">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
             className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>
+            <path d="M4 19.5A2.5 2.5 0 016.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
           </svg>
           <select
             value={filterClasse} onChange={e => setFilterClasse(e.target.value)}
-            className={`pl-8 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[140px] ${
-              filterClasse ? "border-brand text-brand font-medium" : "border-border text-tx"
-            }`}
+            className={`pl-8 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[140px] ${filterClasse ? "border-brand text-brand font-medium" : "border-border text-tx"
+              }`}
           >
             <option value="">Toutes les classes</option>
             {ELEVE_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
             className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <path d="M6 9l6 6 6-6"/>
+            <path d="M6 9l6 6 6-6" />
           </svg>
         </div>
 
@@ -299,20 +297,19 @@ export default function ElevesPage() {
         <div className="relative">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
             className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+            <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
           </svg>
           <select
             value={filterSession} onChange={e => setFilterSession(e.target.value)}
-            className={`pl-8 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[150px] ${
-              filterSession ? "border-brand text-brand font-medium" : "border-border text-tx"
-            }`}
+            className={`pl-8 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[150px] ${filterSession ? "border-brand text-brand font-medium" : "border-border text-tx"
+              }`}
           >
             <option value="">Toutes les sessions</option>
             {sessions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
             className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <path d="M6 9l6 6 6-6"/>
+            <path d="M6 9l6 6 6-6" />
           </svg>
         </div>
 
@@ -320,13 +317,12 @@ export default function ElevesPage() {
         <div className="relative">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
             className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <circle cx="12" cy="8" r="4"/><path d="M12 12v8M9 18h6"/>
+            <circle cx="12" cy="8" r="4" /><path d="M12 12v8M9 18h6" />
           </svg>
           <select
             value={filterGenre} onChange={e => setFilterGenre(e.target.value)}
-            className={`pl-8 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[130px] ${
-              filterGenre ? "border-brand text-brand font-medium" : "border-border text-tx"
-            }`}
+            className={`pl-8 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[130px] ${filterGenre ? "border-brand text-brand font-medium" : "border-border text-tx"
+              }`}
           >
             <option value="">Tous les genres</option>
             <option value="Masculin">Masculin</option>
@@ -334,7 +330,7 @@ export default function ElevesPage() {
           </select>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
             className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <path d="M6 9l6 6 6-6"/>
+            <path d="M6 9l6 6 6-6" />
           </svg>
         </div>
 
@@ -344,7 +340,7 @@ export default function ElevesPage() {
             onClick={() => { setSearch(""); setFilterSchool(""); setFilterClasse(""); setFilterSession(""); setFilterGenre(""); }}
             className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-brand/30 bg-brand-soft text-brand text-sm font-medium hover:bg-brand hover:text-white transition-colors"
           >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
             Réinitialiser
           </button>
         )}
@@ -354,13 +350,13 @@ export default function ElevesPage() {
       <div className="bg-surface rounded-2xl border border-border overflow-hidden flex-1">
         <table className="w-full text-sm table-fixed">
           <colgroup>
-            <col className="w-[22%]"/>
-            <col className="w-[8%]"/>
-            <col className="w-[10%]"/>
-            <col className="w-[18%]"/>
-            <col className="w-[16%]"/>
-            <col className="w-[12%]"/>
-            <col className="w-[14%]"/>
+            <col className="w-[22%]" />
+            <col className="w-[8%]" />
+            <col className="w-[10%]" />
+            <col className="w-[18%]" />
+            <col className="w-[16%]" />
+            <col className="w-[12%]" />
+            <col className="w-[14%]" />
           </colgroup>
           <thead>
             <tr className="border-b border-border bg-surface-alt">
@@ -391,9 +387,8 @@ export default function ElevesPage() {
                 {/* Genre */}
                 <td className="px-5 py-3.5 text-center">
                   {e.genre ? (
-                    <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
-                      e.genre === "Masculin" ? "bg-blue-100 text-blue-600" : "bg-pink-100 text-pink-600"
-                    }`}>
+                    <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${e.genre === "Masculin" ? "bg-blue-100 text-blue-600" : "bg-pink-100 text-pink-600"
+                      }`}>
                       {genreLabel(e.genre)}
                     </span>
                   ) : <span className="text-tx-muted">—</span>}
@@ -410,10 +405,9 @@ export default function ElevesPage() {
                 <td className="px-5 py-3.5 text-tx-muted text-center truncate">{sessionName(e.session_id)}</td>
                 {/* Statut */}
                 <td className="px-5 py-3.5 text-center">
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                    e.statut === "actif" ? "bg-success-soft text-success" : "bg-danger-soft text-danger"
-                  }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${e.statut === "actif" ? "bg-success" : "bg-danger"}`}/>
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${e.statut === "actif" ? "bg-success-soft text-success" : "bg-danger-soft text-danger"
+                    }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${e.statut === "actif" ? "bg-success" : "bg-danger"}`} />
                     {e.statut}
                   </span>
                 </td>
@@ -465,10 +459,9 @@ export default function ElevesPage() {
                 <div className="flex-1 min-w-0">
                   <div className="font-bold text-tx text-base truncate">{fullName(e)}</div>
                   {e.classe && <div className="text-xs text-tx-muted mt-0.5">Classe : {e.classe}</div>}
-                  <span className={`inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                    e.statut === "actif" ? "bg-success/10 text-success" : "bg-danger/10 text-danger"
-                  }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${e.statut === "actif" ? "bg-success" : "bg-danger"}`}/>
+                  <span className={`inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold ${e.statut === "actif" ? "bg-success/10 text-success" : "bg-danger/10 text-danger"
+                    }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${e.statut === "actif" ? "bg-success" : "bg-danger"}`} />
                     {e.statut}
                   </span>
                 </div>
@@ -476,10 +469,10 @@ export default function ElevesPage() {
               {/* Infos */}
               <div className="px-6 py-4 space-y-3">
                 {[
-                  { label: "Genre",            value: e.genre ?? "—" },
+                  { label: "Genre", value: e.genre ?? "—" },
                   { label: "Date de naissance", value: e.date_naissance ? new Date(e.date_naissance).toLocaleDateString("fr-FR") : "—" },
-                  { label: "École",            value: schoolName(e.school_id) },
-                  { label: "Session",          value: sessionName(e.session_id) },
+                  { label: "École", value: schoolName(e.school_id) },
+                  { label: "Session", value: sessionName(e.session_id) },
                 ].map(({ label, value }) => (
                   <div key={label} className="flex justify-between text-sm">
                     <span className="text-tx-muted">{label}</span>
@@ -552,8 +545,8 @@ export default function ElevesPage() {
             <div className="flex items-start gap-4 mb-5">
               <div className="w-10 h-10 rounded-full bg-danger-soft flex items-center justify-center flex-shrink-0">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-danger">
-                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
-                  <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
+                  <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                  <path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
                 </svg>
               </div>
               <div>

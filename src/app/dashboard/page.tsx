@@ -279,10 +279,10 @@ export default function DashboardHome() {
         .slice(0, 5);
 
       /* ── Chart : durée planning par jour ── */
-      const JOURS = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
-      const durByDay = new Array(6).fill(0);
+      const JOURS = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"];
+      const durByDay = new Array(7).fill(0);
       segs.forEach((seg:any) => {
-        if (seg.jour >= 0 && seg.jour < 6) {
+        if (seg.jour >= 0 && seg.jour < 7) {
           durByDay[seg.jour] += toMinutes(seg.heure_fin) - toMinutes(seg.heure_debut);
         }
       });

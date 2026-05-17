@@ -4,7 +4,7 @@ import { planningApi, sessionsApi, exportApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 
-const JOURS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
+const JOURS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 const DAYS_PER_PAGE = 3;
 
 /* ── Template CSV téléchargeable ── */
@@ -13,7 +13,8 @@ const CSV_TEMPLATE =
   "Lundi,08:00,10:00,Mathématiques\n" +
   "Lundi,10:00,12:00,Français\n" +
   "Mardi,08:00,10:00,Sciences\n" +
-  "Mardi,10:00,12:00,Histoire-Géo\n";
+  "Mardi,10:00,12:00,Histoire-Géo\n" +
+  "Dimanche,08:00,10:00,Révisions\n";
 
 /* ── Parse CSV côté client pour prévisualisation ── */
 const JOURS_MAP: Record<string, number> = {
