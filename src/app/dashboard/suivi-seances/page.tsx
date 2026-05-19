@@ -89,8 +89,9 @@ const fmtFull = (iso?: string) =>
 const fmtDateShort = (iso?: string) =>
   iso ? new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—";
 
-function initials(name: string) {
-  return name.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
+function initials(name?: string | null) {
+  if (!name) return "?";
+  return name.split(" ").map(w => w[0] ?? "").filter(Boolean).slice(0, 2).join("").toUpperCase() || "?";
 }
 
 function countActiveFilters(f: FilterState) {
@@ -497,7 +498,7 @@ function TeacherModal({
             {initials(teacher.name)}
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-base font-bold text-tx">{teacher.name}</h2>
+            <h2 className="text-base font-bold text-tx">{teacher.name ?? "—"}</h2>
             {teacher.title && <p className="text-sm text-tx-muted">{teacher.title}</p>}
             <div className="flex flex-wrap gap-x-5 gap-y-1 mt-2">
               {teacher.phone && (
@@ -923,7 +924,7 @@ export default function SuiviSeancesPage() {
                     {initials(t.name)}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-tx truncate">{t.name}</p>
+                    <p className="text-sm font-semibold text-tx truncate">{t.name ?? "—"}</p>
                     <p className="text-xs text-tx-muted truncate">
                       {[t.title, t.school_name].filter(Boolean).join(" · ")}
                     </p>
