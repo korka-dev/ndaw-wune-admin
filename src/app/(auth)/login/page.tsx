@@ -33,7 +33,17 @@ export default function LoginPage() {
       const { mustChangePassword } = await login(identifier, password);
       router.push(mustChangePassword ? "/change-password" : "/dashboard");
     } catch (err: any) {
-      setError(err?.response?.data?.detail ?? "Identifiant ou mot de passe incorrect.");
+      let msg = "Identifiant ou mot de passe incorrect.";
+      const detail = err?.response?.data?.detail;
+      if (typeof detail === "string") {
+        msg = detail;
+      } else if (Array.isArray(detail)) {
+        // Formate élégamment la liste d'erreurs Pydantic
+        msg = detail.map((d: any) => d.msg).join(", ");
+      } else if (detail && typeof detail === "object") {
+        msg = detail.message || JSON.stringify(detail);
+      }
+      setError(msg);
     }
   }
 

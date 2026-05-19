@@ -65,6 +65,7 @@ export default function PlanningPage() {
   const [modal,         setModal]         = useState<null | "create" | Seg>(null);
   const [form,          setForm]          = useState<typeof EMPTY>(EMPTY);
   const [loading,       setLoading]       = useState(false);
+  const [saveError,     setSaveError]     = useState<string | null>(null);
   const [delTarget,     setDelTarget]     = useState<Seg | null>(null);
   const [page,          setPage]          = useState(1);
   const [filterJour,    setFilterJour]    = useState<string>("");
@@ -151,12 +152,22 @@ export default function PlanningPage() {
 
   // ── CRUD ────────────────────────────────────────────────────────────────────
   const save = async () => {
+    setSaveError(null);
     setLoading(true);
     try {
-      if (modal === "create") await planningApi.create(form);
-      else await planningApi.update((modal as Seg).id, form);
+      // Sanitize : matiere vide → null (le backend attend Optional[str])
+      const payload = { ...form, matiere: form.matiere || undefined };
+      if (modal === "create") await planningApi.create(payload);
+      else await planningApi.update((modal as Seg).id, payload);
       loadSegs();
       setModal(null);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      if (Array.isArray(detail)) {
+        setSaveError(detail.map((e: any) => e.msg ?? String(e)).join(" · "));
+      } else {
+        setSaveError(detail ?? "Une erreur est survenue. Vérifiez les champs et réessayez.");
+      }
     } finally { setLoading(false); }
   };
 
@@ -228,7 +239,7 @@ export default function PlanningPage() {
             Importer
           </button>
           <button
-            onClick={() => { setForm({ ...EMPTY, session_id: sessId }); setModal("create"); }}
+            onClick={() => { setForm({ ...EMPTY, session_id: sessId }); setSaveError(null); setModal("create"); }}
             className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <path d="M12 5v14M5 12h14"/>
@@ -308,7 +319,7 @@ export default function PlanningPage() {
           <p className="text-tx-muted text-sm">Aucun créneau pour l'instant</p>
           {sessId && (
             <button
-              onClick={() => { setForm({ ...EMPTY, session_id: sessId }); setModal("create"); }}
+              onClick={() => { setForm({ ...EMPTY, session_id: sessId }); setSaveError(null); setModal("create"); }}
               className="mt-1 text-xs text-brand hover:underline font-medium">
               + Ajouter le premier créneau
             </button>
@@ -346,7 +357,7 @@ export default function PlanningPage() {
                         {rows.length} créneau{rows.length !== 1 ? "x" : ""}
                       </span>
                       <button
-                        onClick={() => { setForm({ ...EMPTY, session_id: sessId, jour }); setModal("create"); }}
+                        onClick={() => { setForm({ ...EMPTY, session_id: sessId, jour }); setSaveError(null); setModal("create"); }}
                         className="flex items-center gap-1 text-xs text-brand hover:text-brand-dark font-semibold transition-colors">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                           <path d="M12 5v14M5 12h14"/>
@@ -402,6 +413,7 @@ export default function PlanningPage() {
                                     heure_fin: s.heure_fin,
                                     matiere: s.matiere ?? "",
                                   });
+                                  setSaveError(null);
                                   setModal(s);
                                 }}
                                 className="text-xs bg-primary-soft text-primary px-2.5 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors">
@@ -437,6 +449,12 @@ export default function PlanningPage() {
             <h2 className="text-base font-bold text-tx mb-5">
               {modal === "create" ? "Nouveau créneau" : "Modifier le créneau"}
             </h2>
+            {saveError && (
+              <div className="mb-4 flex items-start gap-2.5 px-4 py-3 rounded-xl bg-danger-soft border border-danger/20 text-danger text-sm">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="flex-shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span>{saveError}</span>
+              </div>
+            )}
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium text-tx mb-1">Jour</label>
@@ -467,7 +485,7 @@ export default function PlanningPage() {
             </div>
             <div className="flex gap-3 mt-5 justify-end">
               <button
-                onClick={() => setModal(null)}
+                onClick={() => { setModal(null); setSaveError(null); }}
                 className="px-4 py-2 rounded-xl border border-border text-sm text-tx-muted hover:bg-surface-alt transition-colors">
                 Annuler
               </button>

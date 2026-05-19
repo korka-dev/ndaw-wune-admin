@@ -24,6 +24,7 @@ export default function TeachersPage() {
   const [modal, setModal] = useState<ModalState>(null);
   const [form, setForm] = useState<typeof EMPTY_T>(EMPTY_T);
   const [loading, setLoading] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [phoneError, setPhoneError] = useState("");
   const [search, setSearch] = useState("");
   const [filterSchool, setFilterSchool] = useState("");
@@ -83,11 +84,37 @@ export default function TeachersPage() {
 
   const save = async () => {
     if (phoneError) return;
+    // Vérification côté client : le téléphone est requis à la création
+    if (modal === "create" && !form.phone?.trim()) {
+      setSaveError("Le numéro de téléphone est requis (il sert d'identifiant de connexion).");
+      return;
+    }
+    setSaveError(null);
     setLoading(true);
     try {
-      if (modal === "create") await teachersApi.create({ ...form, password: "P@sser123", role: "enseignant" });
-      else if (modal && typeof modal === "object" && modal.kind === "edit") await teachersApi.update(modal.teacher.id, form);
-      load(); setModal(null);
+      // Nettoyer les champs vides avant envoi : "" → undefined pour les UUID optionnels
+      const payload = {
+        ...form,
+        title:     form.title     || undefined,
+        phone:     form.phone     || undefined,
+        school_id: form.school_id || undefined,
+        classes:   form.classes?.length ? form.classes : undefined,
+      };
+      if (modal === "create") {
+        await teachersApi.create({ ...payload, password: "P@sser123", role: "enseignant" });
+      } else if (modal && typeof modal === "object" && modal.kind === "edit") {
+        await teachersApi.update(modal.teacher.id, payload);
+      }
+      load();
+      setModal(null);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      // detail peut être une string ou un tableau Pydantic [{loc, msg, type}]
+      if (Array.isArray(detail)) {
+        setSaveError(detail.map((e: any) => e.msg ?? String(e)).join(" · "));
+      } else {
+        setSaveError(detail ?? "Une erreur est survenue. Vérifiez les champs et réessayez.");
+      }
     } finally { setLoading(false); }
   };
 
@@ -157,7 +184,7 @@ export default function TeachersPage() {
             <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
           </div>
           {/* Ajouter */}
-          <button onClick={() => { setForm(EMPTY_T); setModal("create"); }}
+          <button onClick={() => { setForm(EMPTY_T); setSaveError(null); setModal("create"); }}
             className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
             Ajouter
@@ -417,7 +444,7 @@ export default function TeachersPage() {
             </div>
             <div className="space-y-2">
               <button
-                onClick={() => { const t = modal.teacher; setModal({ kind: "edit", teacher: t }); setForm({ ...EMPTY_T, ...t }); setPhoneError(""); }}
+                onClick={() => { const t = modal.teacher; setModal({ kind: "edit", teacher: t }); setForm({ ...EMPTY_T, ...t }); setPhoneError(""); setSaveError(null); }}
                 className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-surface-alt hover:bg-primary-soft text-tx hover:text-primary text-sm font-medium transition-colors text-left">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
                 Modifier l'enseignant
@@ -445,6 +472,12 @@ export default function TeachersPage() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <h2 className="text-base font-bold text-tx mb-5">Modifier l'enseignant</h2>
+            {saveError && (
+              <div className="mb-4 flex items-start gap-2.5 px-4 py-3 rounded-xl bg-danger-soft border border-danger/20 text-danger text-sm">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="flex-shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span>{saveError}</span>
+              </div>
+            )}
             <div className="space-y-3">
               {([["Nom complet", "name"], ["Titre (optionnel)", "title"]] as [string, string][]).map(([l, k]) => (
                 <div key={k}>
@@ -522,6 +555,12 @@ export default function TeachersPage() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <h2 className="text-base font-bold text-tx mb-5">Nouvel enseignant</h2>
+            {saveError && (
+              <div className="mb-4 flex items-start gap-2.5 px-4 py-3 rounded-xl bg-danger-soft border border-danger/20 text-danger text-sm">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="flex-shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span>{saveError}</span>
+              </div>
+            )}
             <div className="space-y-3">
               {([["Nom complet", "name"], ["Titre (optionnel)", "title"]] as [string, string][]).map(([l, k]) => (
                 <div key={k}>
@@ -532,7 +571,10 @@ export default function TeachersPage() {
                 </div>
               ))}
               <div>
-                <label className="block text-sm font-medium text-tx mb-1">Téléphone</label>
+                <label className="block text-sm font-medium text-tx mb-1">
+                  Téléphone <span className="text-danger">*</span>
+                  <span className="text-tx-muted font-normal ml-1">(identifiant de connexion)</span>
+                </label>
                 <input type="tel" value={form.phone ?? ""}
                   onChange={e => { setForm(f => ({ ...f, phone: e.target.value })); checkPhone(e.target.value); }}
                   placeholder="77 XXX XX XX"
@@ -543,7 +585,7 @@ export default function TeachersPage() {
                 <label className="block text-sm font-medium text-tx mb-1">École</label>
                 <select value={form.school_id} onChange={e => setForm(f => ({ ...f, school_id: e.target.value }))}
                   className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 transition">
-                  <option value="">— Sélectionner —</option>
+                  <option value="">— Sélectionner (optionnel) —</option>
                   {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>

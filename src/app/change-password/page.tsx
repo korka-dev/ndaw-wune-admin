@@ -38,7 +38,16 @@ export default function ChangePasswordPage() {
       setSuccess(true);
       setTimeout(() => { logout(); router.replace("/login"); }, 2000);
     } catch (err: any) {
-      setError(err?.response?.data?.detail ?? "Une erreur est survenue.");
+      let msg = "Une erreur est survenue.";
+      const detail = err?.response?.data?.detail;
+      if (typeof detail === "string") {
+        msg = detail;
+      } else if (Array.isArray(detail)) {
+        msg = detail.map((d: any) => d.msg).join(", ");
+      } else if (detail && typeof detail === "object") {
+        msg = detail.message || JSON.stringify(detail);
+      }
+      setError(msg);
     } finally {
       setLoading(false);
     }

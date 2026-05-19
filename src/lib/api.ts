@@ -1,35 +1,52 @@
 import axios from "axios";
+import {
+  getAccessToken,
+  setAccessToken,
+  setRefreshToken,
+  getRefreshToken,
+  clearAuthCookies,
+} from "./cookies";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://api.ndawwune.cloud/api/v1";
 
 export const api = axios.create({ baseURL: API_URL });
 
-// Injecter le token sur chaque requête
+// ── Intercepteur requête : injection du Bearer token depuis le cookie ─────────
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
-    const token = localStorage.getItem("access_token");
+    const token = getAccessToken();
     if (token) config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
-// Refresh automatique si 401
+// ── Intercepteur réponse : refresh automatique sur 401 ───────────────────────
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config;
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
-      const refresh = localStorage.getItem("refresh_token");
+      // Lire le refresh token via la route API Next.js (cookie httpOnly)
+      const refresh = await getRefreshToken();
       if (refresh) {
         try {
-          const { data } = await axios.post(`${API_URL}/auth/refresh`, { refresh_token: refresh });
-          localStorage.setItem("access_token", data.access_token);
-          localStorage.setItem("refresh_token", data.refresh_token);
+          const { data } = await axios.post(`${API_URL}/auth/refresh`, {
+            refresh_token: refresh,
+          });
+          // Stocker les nouveaux tokens dans les cookies
+          setAccessToken(data.access_token);
+          await setRefreshToken(data.refresh_token);
           original.headers.Authorization = `Bearer ${data.access_token}`;
           return api(original);
         } catch {
-          localStorage.clear();
+          await clearAuthCookies();
+          if (typeof window !== "undefined") {
+            window.location.href = "/login";
+          }
+        }
+      } else {
+        if (typeof window !== "undefined") {
           window.location.href = "/login";
         }
       }
@@ -45,6 +62,9 @@ export const authApi = {
   me:      () => api.get("/auth/me"),
   refresh: (refresh_token: string) =>
     api.post("/auth/refresh", { refresh_token }),
+  logout:  () => api.post("/auth/logout"),
+  changePassword: (new_password: string) =>
+    api.post("/auth/change-password", { new_password }),
   resetPassword: (identifier: string, new_password: string, confirm_password: string) =>
     api.post("/auth/reset-password", { identifier, new_password, confirm_password }),
 };
@@ -150,11 +170,25 @@ export const evaluateursApi = {
 };
 
 export const rapportJournalierAdminApi = {
-  list: (params?: { teacher_id?: string; skip?: number; limit?: number }) =>
+  list: (params?: {
+    teacher_id?: string;
+    search?:     string;
+    date_from?:  string;
+    date_to?:    string;
+    ief?:        string;
+    skip?:       number;
+    limit?:      number;
+  }) =>
     api.get("/admin/rapports/journalier", { params }),
-  exportCsv: (teacher_id?: string) =>
+  exportCsv: (params?: {
+    teacher_id?: string;
+    search?:     string;
+    date_from?:  string;
+    date_to?:    string;
+    ief?:        string;
+  }) =>
     api.get("/admin/rapports/journalier/export/csv", {
-      params: teacher_id ? { teacher_id } : {},
+      params: params ?? {},
       responseType: "blob",
     }),
 };
