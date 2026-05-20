@@ -173,7 +173,7 @@ export default function ComptesPage() {
               ))}
               <div>
                 <label className="block text-sm font-medium text-tx mb-1">Rôle</label>
-                <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
+                <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value as UIRole }))}
                   className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 transition">
                   {UI_ROLES.map(r => (
                     <option key={r.value} value={r.value}>{r.label}</option>
