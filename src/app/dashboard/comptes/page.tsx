@@ -123,7 +123,7 @@ export default function ComptesPage() {
                   {isAdmin && (
                     <div className="flex gap-2">
                       <button
-                        onClick={() => { setForm({ ...EMPTY, ...u, password: "" }); setModal(u); }}
+                        onClick={() => { setForm({ ...EMPTY, ...u, password: "", role: (u.role as UIRole) ?? "superviseur" }); setModal(u); }}
                         className="text-xs bg-primary-soft text-primary px-2.5 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors"
                       >Modifier</button>
                       {u.id !== me?.id && (
