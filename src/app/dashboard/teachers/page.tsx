@@ -9,7 +9,7 @@ const PAGE_SIZE = 20;
 interface Teacher { id: string; name: string; phone?: string; email?: string; title?: string; status: string; school_id?: string; classes?: string[]; }
 interface School { id: string; name: string; }
 const EMPTY_T = { name: "", phone: "", title: "", school_id: "", classes: [] as string[] };
-const CLASSES = ["CP", "CE1"] as const;
+const CLASSES = ["CP", "CE1", "CE2", "CM1", "CM2", "Enseignant Communautaire"] as const;
 
 type ModalState = null | "create"
   | { kind: "view"; teacher: Teacher }
@@ -76,9 +76,10 @@ export default function TeachersPage() {
   };
 
   const checkPhone = (phone: string, excludeId?: string) => {
-    const t = phone.trim();
-    if (!t) { setPhoneError(""); return; }
-    const dup = teachers.find(x => x.phone?.trim() === t && x.id !== excludeId);
+    const t = phone.trim().replace(/\D/g, "");
+    if (!phone.trim()) { setPhoneError(""); return; }
+    if (t.length !== 9) { setPhoneError("Le numéro doit contenir exactement 9 chiffres."); return; }
+    const dup = teachers.find(x => x.phone?.trim().replace(/\D/g, "") === t && x.id !== excludeId);
     setPhoneError(dup ? `Ce numéro est déjà utilisé par « ${dup.name} ».` : "");
   };
 

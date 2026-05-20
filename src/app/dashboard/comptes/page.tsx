@@ -6,8 +6,23 @@ import Pagination from "@/components/Pagination";
 
 const PAGE_SIZE = 20;
 
-interface Compte { id: string; name: string; email?: string; phone?: string; title?: string; role: string; status: string; }
-const EMPTY = { name: "", email: "", phone: "", password: "", title: "", role: "coordonnateur" };
+/**
+ * Rôles UI → rôle backend (le modèle ne connaît que 3 rôles).
+ * "superviseur" est un alias UI pour "coordonnateur".
+ */
+const UI_ROLES = [
+  { value: "superviseur",   label: "Superviseur",    apiRole: "coordonnateur" },
+  { value: "coordonnateur", label: "Coordonnateur",  apiRole: "coordonnateur" },
+  { value: "admin",         label: "Administrateur", apiRole: "admin"         },
+] as const;
+type UIRole = typeof UI_ROLES[number]["value"];
+
+function toApiRole(uiRole: UIRole | string): string {
+  return UI_ROLES.find(r => r.value === uiRole)?.apiRole ?? uiRole;
+}
+
+interface Compte { id: string; name: string; email?: string; phone?: string; title?: string; role: string; uiRole?: UIRole; status: string; }
+const EMPTY = { name: "", email: "", phone: "", password: "", title: "", role: "superviseur" as UIRole };
 
 export default function ComptesPage() {
   const { user: me } = useAuth();
@@ -23,8 +38,10 @@ export default function ComptesPage() {
   const save = async () => {
     setLoading(true);
     try {
-      if (modal === "create") await usersApi.create(form);
-      else await usersApi.update((modal as Compte).id, form);
+      // Convertir le rôle UI en rôle API avant envoi
+      const payload = { ...form, role: toApiRole(form.role) };
+      if (modal === "create") await usersApi.create(payload);
+      else await usersApi.update((modal as Compte).id, payload);
       load(); setModal(null);
     } finally { setLoading(false); }
   };
@@ -43,7 +60,7 @@ export default function ComptesPage() {
       <div className="sticky top-0 z-10 bg-bg flex items-center justify-between pt-7 pb-4 mb-6 border-b border-border">
         <div>
           <h1 className="text-xl font-bold text-tx">Comptes utilisateurs</h1>
-          <p className="text-tx-muted text-sm mt-0.5">Administrateurs & coordonnateurs</p>
+          <p className="text-tx-muted text-sm mt-0.5">Administrateurs, superviseurs & coordonnateurs</p>
         </div>
         {isAdmin && (
           <button
@@ -84,9 +101,23 @@ export default function ComptesPage() {
                 </td>
                 <td className="px-5 py-3.5 text-tx-muted">{u.email ?? u.phone ?? "—"}</td>
                 <td className="px-5 py-3.5">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${u.role === "admin" ? "bg-brand-soft text-brand" : "bg-primary-soft text-primary"}`}>
-                    {u.role === "admin" ? "Administrateur" : "Coordonnateur"}
-                  </span>
+                  {(() => {
+                    if (u.role === "admin") return (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-soft text-brand">
+                        Administrateur
+                      </span>
+                    );
+                    if (u.role === "coordonnateur") return (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
+                        Superviseur
+                      </span>
+                    );
+                    return (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-surface-alt text-tx-muted">
+                        {u.role}
+                      </span>
+                    );
+                  })()}
                 </td>
                 <td className="px-5 py-3.5">
                   {isAdmin && (
@@ -144,9 +175,15 @@ export default function ComptesPage() {
                 <label className="block text-sm font-medium text-tx mb-1">Rôle</label>
                 <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
                   className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 transition">
-                  <option value="coordonnateur">Coordonnateur</option>
-                  <option value="admin">Administrateur</option>
+                  {UI_ROLES.map(r => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
                 </select>
+                {form.role === "superviseur" && (
+                  <p className="mt-1.5 text-xs text-tx-muted">
+                    Le superviseur peut se connecter au dashboard et suivre les enseignants.
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex gap-3 mt-5 justify-end">

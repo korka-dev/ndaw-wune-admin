@@ -199,6 +199,12 @@ export const elevesApi = {
   create: (d: unknown) => api.post("/admin/eleves", d),
   update: (id: string, d: unknown) => api.patch(`/admin/eleves/${id}`, d),
   delete: (id: string) => api.delete(`/admin/eleves/${id}`),
+  exportCsv: () => api.get("/admin/eleves/export/csv", { responseType: "blob" }),
+  importCsv: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post("/admin/eleves/import/csv", fd, { headers: { "Content-Type": "multipart/form-data" } });
+  },
 };
 
 // Export CSV pour les autres entités
@@ -206,4 +212,5 @@ export const exportApi = {
   teachers: () => api.get("/admin/teachers/export/csv", { responseType: "blob" }),
   schools:  () => api.get("/admin/schools/export/csv",  { responseType: "blob" }),
   planning: () => api.get("/admin/planning/export/csv", { responseType: "blob" }),
+  eleves:   () => api.get("/admin/eleves/export/csv",   { responseType: "blob" }),
 };

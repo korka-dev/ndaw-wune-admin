@@ -81,9 +81,9 @@ export default function SessionsPage() {
                       </button>
                     )}
                     {s.status === "active" && (
-                      <button onClick={()=>{ sessionsApi.deactivate(s.id).then(load); }}
+                      <button onClick={()=>{ if(!confirm("Archiver cette session ? Elle passera en statut Inactive et ne pourra plus recevoir de nouvelles séances.")) return; sessionsApi.deactivate(s.id).then(load); }}
                         className="text-xs bg-warn-soft text-warn px-2.5 py-1 rounded-lg font-medium hover:bg-warn hover:text-white transition-colors">
-                        Désactiver
+                        Archiver
                       </button>
                     )}
                     <button onClick={()=>{ setForm(s); setModal(s); }}

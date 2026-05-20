@@ -273,67 +273,77 @@ export default function EcolesPage() {
         )}
       </div>
 
-      {/* Grille */}
-      {paginated.length === 0 ? (
-        <div className="bg-surface rounded-2xl border border-border p-12 text-center">
-          <div className="w-14 h-14 bg-brand-soft rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <SchoolIcon />
-          </div>
-          <p className="text-tx-muted text-sm mb-3">
-            {(search || filterRegion || filterCity) ? "Aucune école ne correspond aux filtres." : "Aucune école enregistrée."}
-          </p>
-          {!(search || filterRegion || filterCity) && (
-            <button onClick={openCreate} className="text-brand text-sm font-medium hover:underline">
-              Créer la première école →
-            </button>
-          )}
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-5">
+      {/* ── Liste ── */}
+      <div className="bg-surface rounded-2xl border border-border overflow-hidden flex-1">
+        <table className="w-full text-sm table-fixed">
+          <colgroup>
+            <col className="w-[28%]" />
+            <col className="w-[18%]" />
+            <col className="w-[18%]" />
+            <col className="w-[20%]" />
+            <col className="w-[16%]" />
+          </colgroup>
+          <thead>
+            <tr className="border-b border-border bg-surface-alt">
+              {["École", "Région", "Commune", "Directeur(trice)", "Actions"].map(h => (
+                <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
             {paginated.map(s => (
-              <div key={s.id}
-                onClick={() => openView(s)}
-                className="bg-surface rounded-2xl border border-border p-5 flex flex-col gap-3 hover:shadow-md hover:border-brand/30 transition-all cursor-pointer group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-brand-soft flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform">
-                    <SchoolIcon />
+              <tr key={s.id} onClick={() => openView(s)}
+                className="border-t border-border hover:bg-surface-alt transition-colors cursor-pointer">
+                {/* École */}
+                <td className="px-5 py-3.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-brand-soft flex items-center justify-center flex-shrink-0">
+                      <SchoolIcon />
+                    </div>
+                    <span className="font-medium text-tx truncate">{s.name}</span>
                   </div>
-                  <div className="min-w-0">
-                    <h2 className="font-semibold text-tx leading-snug truncate group-hover:text-brand transition-colors">{s.name}</h2>
-                    {(s.city || s.region) && (
-                      <p className="text-xs text-tx-muted mt-0.5 truncate">
-                        {[s.city, s.region].filter(Boolean).join(" — ")}
-                      </p>
-                    )}
+                </td>
+                <td className="px-5 py-3.5 text-tx-muted truncate">{s.region ?? "—"}</td>
+                <td className="px-5 py-3.5 text-tx-muted truncate">{s.city ?? "—"}</td>
+                <td className="px-5 py-3.5 text-tx-muted truncate">
+                  {s.director ? (
+                    <div>
+                      <div className="text-tx truncate">{s.director}</div>
+                      {s.director_phone && <div className="text-xs text-tx-muted">{s.director_phone}</div>}
+                    </div>
+                  ) : "—"}
+                </td>
+                {/* Actions */}
+                <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
+                  <div className="flex gap-2">
+                    <button onClick={() => openEdit(s)}
+                      className="text-xs bg-primary-soft text-primary px-2.5 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors">
+                      Modifier
+                    </button>
+                    <button onClick={() => del(s.id)}
+                      className="text-xs bg-danger-soft text-danger px-2.5 py-1 rounded-lg font-medium hover:bg-danger hover:text-white transition-colors">
+                      Supprimer
+                    </button>
                   </div>
-                </div>
-
-                {s.director && (
-                  <div className="text-xs text-tx-muted flex items-center gap-1.5">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-6 8-6s8 2 8 6"/></svg>
-                    <span className="truncate">{s.director}</span>
-                  </div>
-                )}
-
-                <div className="flex gap-2 mt-auto pt-3 border-t border-border" onClick={e => e.stopPropagation()}>
-                  <button onClick={() => openEdit(s)}
-                    className="flex-1 text-xs bg-primary-soft text-primary py-1.5 rounded-lg hover:bg-primary hover:text-white font-medium transition-colors">
-                    Modifier
-                  </button>
-                  <button onClick={() => del(s.id)}
-                    className="flex-1 text-xs bg-danger-soft text-danger py-1.5 rounded-lg hover:bg-danger hover:text-white font-medium transition-colors">
-                    Supprimer
-                  </button>
-                </div>
-              </div>
+                </td>
+              </tr>
             ))}
-          </div>
-
+            {paginated.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-5 py-16 text-center text-tx-muted text-sm">
+                  {(search || filterRegion || filterCity)
+                    ? "Aucune école ne correspond aux filtres."
+                    : <span>Aucune école enregistrée. <button onClick={openCreate} className="text-brand font-medium hover:underline">Créer la première →</button></span>
+                  }
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+        <div className="px-5 pb-4">
           <Pagination page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
-        </>
-      )}
+        </div>
+      </div>
 
       {/* ── Modal détail (vue) ── */}
       {modal === "view" && viewData && (

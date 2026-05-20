@@ -1,6 +1,7 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { elevesApi, schoolsApi, sessionsApi } from "@/lib/api";
+import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 
 const PAGE_SIZE = 20;
@@ -16,103 +17,35 @@ interface Eleve {
   session_id?: string;
   statut: string;
 }
-interface School { id: string; name: string; }
-interface Session { id: string; name: string; status: string; }
+interface School   { id: string; name: string; }
+interface Session  { id: string; name: string; status: string; }
+
+const ELEVE_CLASSES = ["CP", "CE1", "CE2", "CM1", "CM2"];
 
 const EMPTY_FORM = {
   nom: "", prenom: "", genre: "", date_naissance: "", classe: "", school_id: "", session_id: "",
 };
-const ELEVE_CLASSES = ["CP", "CE1"] as const;
+
+type FormType = typeof EMPTY_FORM;
 
 type ModalState =
   | null
   | "create"
-  | { kind: "view"; eleve: Eleve }
-  | { kind: "edit"; eleve: Eleve }
+  | { kind: "view";   eleve: Eleve }
+  | { kind: "edit";   eleve: Eleve }
   | { kind: "delete"; eleve: Eleve };
 
-export default function ElevesPage() {
-  const [eleves, setEleves] = useState<Eleve[]>([]);
-  const [schools, setSchools] = useState<School[]>([]);
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [modal, setModal] = useState<ModalState>(null);
-  const [form, setForm] = useState<typeof EMPTY_FORM>(EMPTY_FORM);
-  const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState("");
-  const [filterSchool, setFilterSchool] = useState("");
-  const [filterClasse, setFilterClasse] = useState("");
-  const [filterSession, setFilterSession] = useState("");
-  const [filterGenre, setFilterGenre] = useState("");
-  const [page, setPage] = useState(1);
-
-  const load = () => {
-    elevesApi.list().then(r => setEleves(r.data.items ?? [])).catch(() => { });
-    schoolsApi.list().then(r => setSchools(r.data.items ?? [])).catch(() => { });
-    sessionsApi.list().then(r => setSessions(r.data.items ?? [])).catch(() => { });
-  };
-  useEffect(() => { load(); }, []);
-  useEffect(() => { setPage(1); }, [search, filterSchool, filterClasse, filterSession, filterGenre]);
-
-  // Valeurs uniques de classe extraites des élèves
-  const uniqueClasses = Array.from(new Set(eleves.map(e => e.classe).filter(Boolean) as string[])).sort();
-
-  const hasFilters = !!(search || filterSchool || filterClasse || filterSession || filterGenre);
-
-  const filtered = eleves.filter(e => {
-    const fullName = `${e.nom} ${e.prenom ?? ""}`.toLowerCase();
-    const matchSearch = !search.trim() || fullName.includes(search.toLowerCase());
-    const matchSchool = !filterSchool || e.school_id === filterSchool;
-    const matchClasse = !filterClasse || e.classe === filterClasse;
-    const matchSession = !filterSession || e.session_id === filterSession;
-    const matchGenre = !filterGenre || e.genre === filterGenre;
-    return matchSearch && matchSchool && matchClasse && matchSession && matchGenre;
-  });
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  const openCreate = () => { setForm(EMPTY_FORM); setModal("create"); };
-  const openEdit = (eleve: Eleve) => {
-    setForm({
-      nom: eleve.nom ?? "",
-      prenom: eleve.prenom ?? "",
-      genre: eleve.genre ?? "",
-      date_naissance: eleve.date_naissance ?? "",
-      classe: eleve.classe ?? "",
-      school_id: eleve.school_id ?? "",
-      session_id: eleve.session_id ?? "",
-    });
-    setModal({ kind: "edit", eleve });
-  };
-
-  const save = async () => {
-    if (!form.nom.trim()) return;
-    setLoading(true);
-    try {
-      if (modal === "create") {
-        await elevesApi.create(form);
-      } else if (modal && typeof modal === "object" && modal.kind === "edit") {
-        await elevesApi.update(modal.eleve.id, form);
-      }
-      load();
-      setModal(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const doDelete = async (eleve: Eleve) => {
-    setLoading(true);
-    try { await elevesApi.delete(eleve.id); load(); setModal(null); }
-    finally { setLoading(false); }
-  };
-
-  const schoolName = (id?: string) => schools.find(s => s.id === id)?.name ?? "—";
-  const sessionName = (id?: string) => sessions.find(s => s.id === id)?.name ?? "—";
-  const genreLabel = (g?: string) => g === "Masculin" ? "M" : g === "Féminin" ? "F" : "—";
-  const fullName = (e: Eleve) => [e.nom, e.prenom].filter(Boolean).join(" ");
-  const initials = (e: Eleve) => [e.nom?.[0], e.prenom?.[0]].filter(Boolean).join("").toUpperCase() || "?";
-
-  // ── Form fields shared between create/edit ──────────────────────────────────
-  const FormFields = () => (
+// ── FormFields défini EN DEHORS du composant pour éviter le bug de curseur ──
+// (Si défini à l'intérieur, React le remonte à chaque rendu, ce qui sort le curseur du champ)
+function EleveFormFields({
+  form, setForm, schools, sessions,
+}: {
+  form: FormType;
+  setForm: React.Dispatch<React.SetStateAction<FormType>>;
+  schools: School[];
+  sessions: Session[];
+}) {
+  return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
         <div>
@@ -137,15 +70,15 @@ export default function ElevesPage() {
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-sm font-medium text-tx mb-1">Genre</label>
+          <label className="block text-sm font-medium text-tx mb-1">Sexe</label>
           <select
             value={form.genre}
             onChange={e => setForm(f => ({ ...f, genre: e.target.value }))}
             className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 transition"
           >
             <option value="">— Sélectionner —</option>
-            <option value="Masculin">Masculin</option>
-            <option value="Féminin">Féminin</option>
+            <option value="Garçon">Garçon</option>
+            <option value="Fille">Fille</option>
           </select>
         </div>
         <div>
@@ -159,7 +92,7 @@ export default function ElevesPage() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-tx mb-1">Classe</label>
+        <label className="block text-sm font-medium text-tx mb-1">Classe <span className="text-danger">*</span></label>
         <div className="relative">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
             className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
@@ -171,9 +104,7 @@ export default function ElevesPage() {
             className="w-full bg-surface-alt border border-border rounded-xl pl-9 pr-9 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none cursor-pointer"
           >
             <option value="">— Sélectionner une classe —</option>
-            {ELEVE_CLASSES.map(c => (
-              <option key={c} value={c}>{c}</option>
-            ))}
+            {ELEVE_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
             className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
@@ -207,6 +138,122 @@ export default function ElevesPage() {
       </div>
     </div>
   );
+}
+
+export default function ElevesPage() {
+  const [eleves,   setEleves]   = useState<Eleve[]>([]);
+  const [schools,  setSchools]  = useState<School[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [modal,    setModal]    = useState<ModalState>(null);
+  const [form,     setForm]     = useState<FormType>(EMPTY_FORM);
+  const [loading,   setLoading]   = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [search,        setSearch]        = useState("");
+  const [filterSchool,  setFilterSchool]  = useState("");
+  const [filterClasse,  setFilterClasse]  = useState("");
+  const [filterSession, setFilterSession] = useState("");
+  const [filterSexe,    setFilterSexe]    = useState("");
+  const [page, setPage] = useState(1);
+  const importRef = useRef<HTMLInputElement>(null);
+
+  const load = () => {
+    elevesApi.list().then(r => setEleves(r.data.items ?? [])).catch(() => {});
+    schoolsApi.list().then(r => setSchools(r.data.items ?? [])).catch(() => {});
+    sessionsApi.list().then(r => setSessions(r.data.items ?? [])).catch(() => {});
+  };
+  useEffect(() => { load(); }, []);
+  useEffect(() => { setPage(1); }, [search, filterSchool, filterClasse, filterSession, filterSexe]);
+
+  const hasFilters = !!(search || filterSchool || filterClasse || filterSession || filterSexe);
+
+  const filtered = eleves.filter(e => {
+    const fullName = `${e.nom} ${e.prenom ?? ""}`.toLowerCase();
+    const matchSearch  = !search.trim() || fullName.includes(search.toLowerCase());
+    const matchSchool  = !filterSchool  || e.school_id === filterSchool;
+    const matchClasse  = !filterClasse  || e.classe === filterClasse;
+    const matchSession = !filterSession || e.session_id === filterSession;
+    const matchSexe    = !filterSexe    || e.genre === filterSexe;
+    return matchSearch && matchSchool && matchClasse && matchSession && matchSexe;
+  });
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const openCreate = () => { setForm(EMPTY_FORM); setSaveError(null); setModal("create"); };
+  const openEdit   = (eleve: Eleve) => {
+    setForm({
+      nom:            eleve.nom ?? "",
+      prenom:         eleve.prenom ?? "",
+      genre:          eleve.genre ?? "",
+      date_naissance: eleve.date_naissance ?? "",
+      classe:         eleve.classe ?? "",
+      school_id:      eleve.school_id ?? "",
+      session_id:     eleve.session_id ?? "",
+    });
+    setSaveError(null);
+    setModal({ kind: "edit", eleve });
+  };
+
+  const save = async () => {
+    if (!form.nom.trim()) { setSaveError("Le nom est requis."); return; }
+    if (!form.classe)     { setSaveError("La classe est requise."); return; }
+    setSaveError(null);
+    setLoading(true);
+    try {
+      if (modal === "create") {
+        await elevesApi.create(form);
+      } else if (modal && typeof modal === "object" && modal.kind === "edit") {
+        await elevesApi.update(modal.eleve.id, form);
+      }
+      load();
+      setModal(null);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      if (Array.isArray(detail)) {
+        setSaveError(detail.map((d: any) => d.msg).join(", "));
+      } else {
+        setSaveError(detail ?? "Une erreur est survenue.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const doDelete = async (eleve: Eleve) => {
+    setLoading(true);
+    try { await elevesApi.delete(eleve.id); load(); setModal(null); }
+    finally { setLoading(false); }
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const res = await elevesApi.exportCsv();
+      downloadBlob(res.data, "eleves.csv");
+    } catch { /* silencieux */ }
+    finally { setExporting(false); }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const res = await elevesApi.importCsv(file);
+      const count = res.data?.imported ?? "?";
+      setImportMsg({ ok: true, text: `${count} élève${count !== 1 ? "s" : ""} importé${count !== 1 ? "s" : ""}.` });
+      load();
+    } catch (err: any) {
+      setImportMsg({ ok: false, text: err?.response?.data?.detail ?? "Erreur lors de l'import." });
+    } finally {
+      if (importRef.current) importRef.current.value = "";
+    }
+  };
+
+  const schoolName  = (id?: string) => schools.find(s => s.id === id)?.name ?? "—";
+  const sessionName = (id?: string) => sessions.find(s => s.id === id)?.name ?? "—";
+  const sexeIcon    = (g?: string)  => g === "Garçon" ? "G" : g === "Fille" ? "F" : "—";
+  const fullName    = (e: Eleve)    => [e.nom, e.prenom].filter(Boolean).join(" ");
+  const initials    = (e: Eleve)    => [e.nom?.[0], e.prenom?.[0]].filter(Boolean).join("").toUpperCase() || "?";
 
   return (
     <div className="flex flex-col min-h-full px-7 pb-7">
@@ -216,18 +263,42 @@ export default function ElevesPage() {
           <h1 className="text-xl font-bold text-tx">Gestion Élèves</h1>
           <p className="text-tx-muted text-sm mt-0.5">
             {hasFilters
-              ? `${filtered.length} résultat${filtered.length !== 1 ? "s" : ""} sur ${eleves.length} élève${eleves.length !== 1 ? "s" : ""} · Page ${page}/${Math.ceil(filtered.length / PAGE_SIZE) || 1}`
-              : `${eleves.length} élève${eleves.length !== 1 ? "s" : ""} au total · Page ${page}/${Math.ceil(eleves.length / PAGE_SIZE) || 1}`}
+              ? `${filtered.length} résultat${filtered.length !== 1 ? "s" : ""} sur ${eleves.length} élève${eleves.length !== 1 ? "s" : ""}`
+              : `${eleves.length} élève${eleves.length !== 1 ? "s" : ""} au total`}
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Import message */}
+          {importMsg && (
+            <span className={`text-xs font-medium px-3 py-1.5 rounded-xl ${importMsg.ok ? "bg-success-soft text-success" : "bg-danger-soft text-danger"}`}>
+              {importMsg.text}
+            </span>
+          )}
+          {/* Import */}
+          <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
+          <button
+            onClick={() => { setImportMsg(null); importRef.current?.click(); }}
+            title="Importer un CSV (nom, prenom, sexe, date_naissance, classe)"
+            className="flex items-center gap-2 border border-border bg-surface text-tx px-3.5 py-2.5 rounded-xl text-sm font-medium hover:bg-surface-alt transition-colors"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Importer
+          </button>
+          {/* Export */}
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="flex items-center gap-2 border border-border bg-surface text-tx px-3.5 py-2.5 rounded-xl text-sm font-medium hover:bg-surface-alt transition-colors disabled:opacity-60"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            {exporting ? "Export…" : "Exporter"}
+          </button>
+          {/* Ajouter */}
           <button
             onClick={openCreate}
             className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
             Ajouter
           </button>
         </div>
@@ -255,89 +326,49 @@ export default function ElevesPage() {
 
         {/* Filtre École */}
         <div className="relative">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <path d="M3 9l9-5 9 5-9 5-9-5z" /><path d="M5 10v6c0 2 3 4 7 4s7-2 7-4v-6" />
-          </svg>
-          <select
-            value={filterSchool} onChange={e => setFilterSchool(e.target.value)}
-            className={`pl-8 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[160px] ${filterSchool ? "border-brand text-brand font-medium" : "border-border text-tx"
-              }`}
-          >
+          <select value={filterSchool} onChange={e => setFilterSchool(e.target.value)}
+            className={`pl-4 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 transition appearance-none min-w-[160px] ${filterSchool ? "border-brand text-brand font-medium" : "border-border text-tx"}`}>
             <option value="">Toutes les écoles</option>
             {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <path d="M6 9l6 6 6-6" />
-          </svg>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none"><path d="M6 9l6 6 6-6" /></svg>
         </div>
 
         {/* Filtre Classe */}
         <div className="relative">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <path d="M4 19.5A2.5 2.5 0 016.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
-          </svg>
-          <select
-            value={filterClasse} onChange={e => setFilterClasse(e.target.value)}
-            className={`pl-8 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[140px] ${filterClasse ? "border-brand text-brand font-medium" : "border-border text-tx"
-              }`}
-          >
+          <select value={filterClasse} onChange={e => setFilterClasse(e.target.value)}
+            className={`pl-4 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 transition appearance-none min-w-[130px] ${filterClasse ? "border-brand text-brand font-medium" : "border-border text-tx"}`}>
             <option value="">Toutes les classes</option>
             {ELEVE_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <path d="M6 9l6 6 6-6" />
-          </svg>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none"><path d="M6 9l6 6 6-6" /></svg>
         </div>
 
         {/* Filtre Session */}
         <div className="relative">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
-          </svg>
-          <select
-            value={filterSession} onChange={e => setFilterSession(e.target.value)}
-            className={`pl-8 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[150px] ${filterSession ? "border-brand text-brand font-medium" : "border-border text-tx"
-              }`}
-          >
+          <select value={filterSession} onChange={e => setFilterSession(e.target.value)}
+            className={`pl-4 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 transition appearance-none min-w-[150px] ${filterSession ? "border-brand text-brand font-medium" : "border-border text-tx"}`}>
             <option value="">Toutes les sessions</option>
             {sessions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <path d="M6 9l6 6 6-6" />
-          </svg>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none"><path d="M6 9l6 6 6-6" /></svg>
         </div>
 
-        {/* Filtre Genre */}
+        {/* Filtre Sexe */}
         <div className="relative">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <circle cx="12" cy="8" r="4" /><path d="M12 12v8M9 18h6" />
-          </svg>
-          <select
-            value={filterGenre} onChange={e => setFilterGenre(e.target.value)}
-            className={`pl-8 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[130px] ${filterGenre ? "border-brand text-brand font-medium" : "border-border text-tx"
-              }`}
-          >
-            <option value="">Tous les genres</option>
-            <option value="Masculin">Masculin</option>
-            <option value="Féminin">Féminin</option>
+          <select value={filterSexe} onChange={e => setFilterSexe(e.target.value)}
+            className={`pl-4 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 transition appearance-none min-w-[120px] ${filterSexe ? "border-brand text-brand font-medium" : "border-border text-tx"}`}>
+            <option value="">Tous les sexes</option>
+            <option value="Garçon">Garçon</option>
+            <option value="Fille">Fille</option>
           </select>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <path d="M6 9l6 6 6-6" />
-          </svg>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none"><path d="M6 9l6 6 6-6" /></svg>
         </div>
 
         {/* Reset */}
         {hasFilters && (
           <button
-            onClick={() => { setSearch(""); setFilterSchool(""); setFilterClasse(""); setFilterSession(""); setFilterGenre(""); }}
+            onClick={() => { setSearch(""); setFilterSchool(""); setFilterClasse(""); setFilterSession(""); setFilterSexe(""); }}
             className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-brand/30 bg-brand-soft text-brand text-sm font-medium hover:bg-brand hover:text-white transition-colors"
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
@@ -360,53 +391,42 @@ export default function ElevesPage() {
           </colgroup>
           <thead>
             <tr className="border-b border-border bg-surface-alt">
-              {["Élève", "Genre", "Classe", "École", "Session", "Statut", "Actions"].map(h => (
+              {["Élève", "Sexe", "Classe", "École", "Session", "Statut", "Actions"].map(h => (
                 <th key={h} className="px-5 py-3 text-center text-xs font-semibold text-tx-muted uppercase tracking-wide">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {paginated.map(e => (
-              <tr
-                key={e.id}
-                onClick={() => setModal({ kind: "view", eleve: e })}
-                className="border-t border-border hover:bg-surface-alt transition-colors cursor-pointer"
-              >
+              <tr key={e.id} onClick={() => setModal({ kind: "view", eleve: e })}
+                className="border-t border-border hover:bg-surface-alt transition-colors cursor-pointer">
                 {/* Élève */}
                 <td className="px-5 py-3.5 text-center">
                   <div className="flex items-center justify-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-primary-soft text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">
-                      {initials(e)}
-                    </div>
+                    <div className="w-8 h-8 rounded-full bg-primary-soft text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">{initials(e)}</div>
                     <div className="text-left">
                       <div className="font-medium text-tx">{e.nom}</div>
                       {e.prenom && <div className="text-xs text-tx-muted">{e.prenom}</div>}
                     </div>
                   </div>
                 </td>
-                {/* Genre */}
+                {/* Sexe */}
                 <td className="px-5 py-3.5 text-center">
                   {e.genre ? (
-                    <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${e.genre === "Masculin" ? "bg-blue-100 text-blue-600" : "bg-pink-100 text-pink-600"
-                      }`}>
-                      {genreLabel(e.genre)}
+                    <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${e.genre === "Garçon" ? "bg-blue-100 text-blue-600" : "bg-pink-100 text-pink-600"}`}>
+                      {sexeIcon(e.genre)}
                     </span>
                   ) : <span className="text-tx-muted">—</span>}
                 </td>
                 {/* Classe */}
                 <td className="px-5 py-3.5 text-center">
-                  {e.classe
-                    ? <span className="bg-primary-soft text-primary text-xs font-bold px-2 py-0.5 rounded-md">{e.classe}</span>
-                    : <span className="text-tx-muted">—</span>}
+                  {e.classe ? <span className="bg-primary-soft text-primary text-xs font-bold px-2 py-0.5 rounded-md">{e.classe}</span> : <span className="text-tx-muted">—</span>}
                 </td>
-                {/* École */}
                 <td className="px-5 py-3.5 text-tx-muted text-center truncate">{schoolName(e.school_id)}</td>
-                {/* Session */}
                 <td className="px-5 py-3.5 text-tx-muted text-center truncate">{sessionName(e.session_id)}</td>
                 {/* Statut */}
                 <td className="px-5 py-3.5 text-center">
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${e.statut === "actif" ? "bg-success-soft text-success" : "bg-danger-soft text-danger"
-                    }`}>
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${e.statut === "actif" ? "bg-success-soft text-success" : "bg-danger-soft text-danger"}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${e.statut === "actif" ? "bg-success" : "bg-danger"}`} />
                     {e.statut}
                   </span>
@@ -414,28 +434,16 @@ export default function ElevesPage() {
                 {/* Actions */}
                 <td className="px-5 py-3.5" onClick={ev => ev.stopPropagation()}>
                   <div className="flex justify-center gap-2">
-                    <button
-                      onClick={() => openEdit(e)}
-                      className="text-xs bg-primary-soft text-primary px-3 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors"
-                    >
-                      Modifier
-                    </button>
-                    <button
-                      onClick={() => setModal({ kind: "delete", eleve: e })}
-                      className="text-xs bg-danger-soft text-danger px-3 py-1 rounded-lg font-medium hover:bg-danger hover:text-white transition-colors"
-                    >
-                      Supprimer
-                    </button>
+                    <button onClick={() => openEdit(e)} className="text-xs bg-primary-soft text-primary px-3 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors">Modifier</button>
+                    <button onClick={() => setModal({ kind: "delete", eleve: e })} className="text-xs bg-danger-soft text-danger px-3 py-1 rounded-lg font-medium hover:bg-danger hover:text-white transition-colors">Supprimer</button>
                   </div>
                 </td>
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-5 py-16 text-center text-tx-muted text-sm">
-                  {hasFilters ? "Aucun élève ne correspond aux filtres." : "Aucun élève pour l'instant."}
-                </td>
-              </tr>
+              <tr><td colSpan={7} className="px-5 py-16 text-center text-tx-muted text-sm">
+                {hasFilters ? "Aucun élève ne correspond aux filtres." : "Aucun élève pour l'instant."}
+              </td></tr>
             )}
           </tbody>
         </table>
@@ -451,25 +459,20 @@ export default function ElevesPage() {
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4"
             onClick={ev => { if (ev.target === ev.currentTarget) setModal(null); }}>
             <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-sm">
-              {/* En-tête */}
               <div className="bg-primary-soft rounded-t-2xl px-6 pt-6 pb-5 flex items-center gap-4">
-                <div className="w-14 h-14 rounded-full bg-primary text-white flex items-center justify-center text-lg font-bold flex-shrink-0">
-                  {initials(e)}
-                </div>
+                <div className="w-14 h-14 rounded-full bg-primary text-white flex items-center justify-center text-lg font-bold flex-shrink-0">{initials(e)}</div>
                 <div className="flex-1 min-w-0">
                   <div className="font-bold text-tx text-base truncate">{fullName(e)}</div>
                   {e.classe && <div className="text-xs text-tx-muted mt-0.5">Classe : {e.classe}</div>}
-                  <span className={`inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold ${e.statut === "actif" ? "bg-success/10 text-success" : "bg-danger/10 text-danger"
-                    }`}>
+                  <span className={`inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold ${e.statut === "actif" ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${e.statut === "actif" ? "bg-success" : "bg-danger"}`} />
                     {e.statut}
                   </span>
                 </div>
               </div>
-              {/* Infos */}
               <div className="px-6 py-4 space-y-3">
                 {[
-                  { label: "Genre", value: e.genre ?? "—" },
+                  { label: "Sexe", value: e.genre ?? "—" },
                   { label: "Date de naissance", value: e.date_naissance ? new Date(e.date_naissance).toLocaleDateString("fr-FR") : "—" },
                   { label: "École", value: schoolName(e.school_id) },
                   { label: "Session", value: sessionName(e.session_id) },
@@ -480,56 +483,30 @@ export default function ElevesPage() {
                   </div>
                 ))}
               </div>
-              {/* Actions */}
               <div className="px-6 pb-5 flex gap-3">
-                <button onClick={() => setModal(null)}
-                  className="flex-1 py-2.5 rounded-xl border border-border text-sm text-tx-muted font-medium hover:bg-surface-alt transition-colors">
-                  Fermer
-                </button>
-                <button onClick={() => openEdit(e)}
-                  className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:opacity-90 transition-opacity">
-                  Modifier
-                </button>
+                <button onClick={() => setModal(null)} className="flex-1 py-2.5 rounded-xl border border-border text-sm text-tx-muted font-medium hover:bg-surface-alt transition-colors">Fermer</button>
+                <button onClick={() => openEdit(e)} className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:opacity-90 transition-opacity">Modifier</button>
               </div>
             </div>
           </div>
         );
       })()}
 
-      {/* ── Modal Créer ── */}
-      {modal === "create" && (
+      {/* ── Modal Créer / Modifier ── */}
+      {(modal === "create" || (modal && typeof modal === "object" && modal.kind === "edit")) && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4"
           onClick={ev => { if (ev.target === ev.currentTarget) setModal(null); }}>
           <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <h2 className="text-base font-bold text-tx mb-5">Nouvel élève</h2>
-            <FormFields />
+            <h2 className="text-base font-bold text-tx mb-5">
+              {modal === "create" ? "Nouvel élève" : "Modifier l'élève"}
+            </h2>
+            <EleveFormFields form={form} setForm={setForm} schools={schools} sessions={sessions} />
+            {saveError && (
+              <p className="mt-3 text-sm text-danger bg-danger-soft rounded-xl px-3.5 py-2">{saveError}</p>
+            )}
             <div className="flex gap-3 mt-5 justify-end">
-              <button onClick={() => setModal(null)}
-                className="px-4 py-2 rounded-xl border border-border text-sm text-tx-muted hover:bg-surface-alt transition-colors">
-                Annuler
-              </button>
-              <button onClick={save} disabled={loading || !form.nom.trim()}
-                className="px-4 py-2 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold disabled:opacity-60 transition-colors">
-                {loading ? "Enregistrement…" : "Enregistrer"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Modal Modifier ── */}
-      {modal && typeof modal === "object" && modal.kind === "edit" && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4"
-          onClick={ev => { if (ev.target === ev.currentTarget) setModal(null); }}>
-          <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <h2 className="text-base font-bold text-tx mb-5">Modifier l'élève</h2>
-            <FormFields />
-            <div className="flex gap-3 mt-5 justify-end">
-              <button onClick={() => setModal(null)}
-                className="px-4 py-2 rounded-xl border border-border text-sm text-tx-muted hover:bg-surface-alt transition-colors">
-                Annuler
-              </button>
-              <button onClick={save} disabled={loading || !form.nom.trim()}
+              <button onClick={() => setModal(null)} className="px-4 py-2 rounded-xl border border-border text-sm text-tx-muted hover:bg-surface-alt transition-colors">Annuler</button>
+              <button onClick={save} disabled={loading || !form.nom.trim() || !form.classe}
                 className="px-4 py-2 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold disabled:opacity-60 transition-colors">
                 {loading ? "Enregistrement…" : "Enregistrer"}
               </button>
@@ -552,17 +529,12 @@ export default function ElevesPage() {
               <div>
                 <h2 className="text-base font-bold text-tx">Supprimer l'élève</h2>
                 <p className="text-sm text-tx-muted mt-1">
-                  Êtes-vous sûr de vouloir supprimer{" "}
-                  <span className="font-semibold text-tx">{fullName(modal.eleve)}</span> ?
-                  Cette action est irréversible.
+                  Êtes-vous sûr de vouloir supprimer <span className="font-semibold text-tx">{fullName(modal.eleve)}</span> ? Cette action est irréversible.
                 </p>
               </div>
             </div>
             <div className="flex gap-3 justify-end">
-              <button onClick={() => setModal(null)}
-                className="px-4 py-2 rounded-xl border border-border text-sm text-tx-muted hover:bg-surface-alt transition-colors">
-                Annuler
-              </button>
+              <button onClick={() => setModal(null)} className="px-4 py-2 rounded-xl border border-border text-sm text-tx-muted hover:bg-surface-alt transition-colors">Annuler</button>
               <button onClick={() => doDelete(modal.eleve)} disabled={loading}
                 className="px-4 py-2 rounded-xl bg-danger hover:bg-danger/90 text-white text-sm font-semibold disabled:opacity-60 transition-colors">
                 {loading ? "Suppression…" : "Supprimer"}

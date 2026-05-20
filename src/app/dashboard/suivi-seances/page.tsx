@@ -37,21 +37,27 @@ interface TeacherSuivi {
   seances_ad_hoc:      number;
   score_engagement:    number;
 }
+interface PauseEvent {
+  paused_at:   string;        // ISO 8601
+  resumed_at?: string | null; // null si encore en pause
+}
 interface SeanceDetail {
-  id:                  string;
-  date_seance:         string;
-  started_at?:         string;
-  finished_at?:        string;
-  duree_minutes?:      number;
-  matiere?:            string;
-  classe:              string;
-  status:              string;
-  has_rapport:         boolean;
-  nb_eleves_presents?: number;
-  nb_eleves_total?:    number;
+  id:                   string;
+  date_seance:          string;
+  started_at?:          string;
+  finished_at?:         string;
+  duree_minutes?:       number;
+  matiere?:             string;
+  classe:               string;
+  status:               string;
+  has_rapport:          boolean;
+  nb_eleves_presents?:  number;
+  nb_eleves_total?:     number;
   planning_segment_id?: string;
-  soumis_offline?:     boolean;
-  rapport_at?:         string;
+  soumis_offline?:      boolean;
+  rapport_at?:          string;
+  pauses?:              PauseEvent[];
+  total_paused_minutes?: number;
 }
 interface TeacherDetail {
   teacher_id:   string;
@@ -568,7 +574,7 @@ function TeacherModal({
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-surface-alt border-b border-border">
                 <tr>
-                  {["Date", "Activité / Classe", "Lancement", "Fin", "Durée", "Élèves", "Type", "Statut", "Rapport"].map(h => (
+                  {["Date", "Activité / Classe", "Lancement", "Pauses", "Fin", "Durée", "Élèves", "Type", "Statut", "Rapport"].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -581,6 +587,7 @@ function TeacherModal({
                       <p className="font-medium text-tx">{s.matiere ?? "—"}</p>
                       <p className="text-xs text-tx-muted">{s.classe}</p>
                     </td>
+                    {/* Lancement */}
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       {s.started_at ? (
                         <span title={fmtFull(s.started_at)}>
@@ -589,7 +596,45 @@ function TeacherModal({
                         </span>
                       ) : <span className="text-tx-muted">—</span>}
                     </td>
-                    <td className="px-4 py-3.5 font-mono text-xs text-tx-muted whitespace-nowrap">{fmtTime(s.finished_at)}</td>
+                    {/* Pauses */}
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      {s.pauses && s.pauses.length > 0 ? (
+                        <div className="space-y-1">
+                          {s.pauses.map((p, i) => (
+                            <div key={i} className="text-xs leading-tight">
+                              <span className="inline-flex items-center gap-1 text-warn font-semibold">
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                                {fmtTime(p.paused_at)}
+                              </span>
+                              {p.resumed_at && (
+                                <span className="text-tx-muted ml-1">
+                                  → <span className="text-success font-semibold">{fmtTime(p.resumed_at)}</span>
+                                </span>
+                              )}
+                              {!p.resumed_at && (
+                                <span className="ml-1 text-warn italic">en pause</span>
+                              )}
+                            </div>
+                          ))}
+                          {s.total_paused_minutes != null && s.total_paused_minutes > 0 && (
+                            <p className="text-[10px] text-tx-muted mt-0.5">
+                              Total pause : {s.total_paused_minutes} min
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-tx-muted text-xs">—</span>
+                      )}
+                    </td>
+                    {/* Fin */}
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      {s.finished_at ? (
+                        <span title={fmtFull(s.finished_at)}>
+                          <p className="font-mono font-semibold text-tx">{fmtTime(s.finished_at)}</p>
+                          <p className="text-xs text-tx-muted">{fmtDate(s.finished_at)}</p>
+                        </span>
+                      ) : <span className="text-tx-muted text-xs">—</span>}
+                    </td>
                     <td className="px-4 py-3.5 text-xs text-tx whitespace-nowrap">
                       {s.duree_minutes != null ? `${s.duree_minutes} min` : "—"}
                     </td>

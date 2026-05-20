@@ -69,7 +69,7 @@ export default function SuperviseursPage() {
     setLoading(true);
     try {
       if (modal === "create") {
-        await superviseursApi.create({ ...form, password: "P@sser123", role: "superviseur" });
+        await superviseursApi.create({ ...form, role: "coordonnateur" });
       } else if (modal && typeof modal === "object" && modal.kind === "edit") {
         await superviseursApi.update(modal.sup.id, form);
       }
