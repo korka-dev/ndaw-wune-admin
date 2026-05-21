@@ -199,6 +199,7 @@ export const elevesApi = {
   create: (d: unknown) => api.post("/admin/eleves", d),
   update: (id: string, d: unknown) => api.patch(`/admin/eleves/${id}`, d),
   delete: (id: string) => api.delete(`/admin/eleves/${id}`),
+  bulkDelete: (ids: string[]) => api.delete("/admin/eleves", { data: { ids } }),
   // Export
   exportCsv:  () => api.get("/admin/eleves/export/csv",  { responseType: "blob" }),
   exportXlsx: () => api.get("/admin/eleves/export/xlsx", { responseType: "blob" }),

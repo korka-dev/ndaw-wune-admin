@@ -32,12 +32,12 @@ type FormType = typeof EMPTY_FORM;
 type ModalState =
   | null
   | "create"
-  | { kind: "view";   eleve: Eleve }
-  | { kind: "edit";   eleve: Eleve }
-  | { kind: "delete"; eleve: Eleve };
+  | { kind: "view";        eleve: Eleve }
+  | { kind: "edit";        eleve: Eleve }
+  | { kind: "delete";      eleve: Eleve }
+  | { kind: "bulkDelete";  count: number };
 
 // ── FormFields défini EN DEHORS du composant pour éviter le bug de curseur ──
-// (Si défini à l'intérieur, React le remonte à chaque rendu, ce qui sort le curseur du champ)
 function EleveFormFields({
   form, setForm, schools, sessions,
 }: {
@@ -165,6 +165,10 @@ export default function ElevesPage() {
   const [page, setPage] = useState(1);
   const importRef = useRef<HTMLInputElement>(null);
 
+  // ── Sélection multiple ────────────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectAll,   setSelectAll]   = useState(false); // "tout filtré" sélectionné
+
   const load = () => {
     elevesApi.list().then(r => setEleves(r.data.items ?? [])).catch(() => {});
     schoolsApi.list().then(r => setSchools(r.data.items ?? [])).catch(() => {});
@@ -172,6 +176,8 @@ export default function ElevesPage() {
   };
   useEffect(() => { load(); }, []);
   useEffect(() => { setPage(1); }, [search, filterSchool, filterClasse, filterSession, filterSexe]);
+  // Réinitialiser la sélection quand les filtres changent
+  useEffect(() => { setSelectedIds(new Set()); setSelectAll(false); }, [search, filterSchool, filterClasse, filterSession, filterSexe]);
 
   const hasFilters = !!(search || filterSchool || filterClasse || filterSession || filterSexe);
 
@@ -186,6 +192,51 @@ export default function ElevesPage() {
   });
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  // ── Helpers de sélection ──────────────────────────────────────────────────
+  const pageIds      = paginated.map(e => e.id);
+  const allPageSel   = pageIds.length > 0 && pageIds.every(id => selectedIds.has(id));
+  const somePageSel  = pageIds.some(id => selectedIds.has(id));
+  const selCount     = selectAll ? filtered.length : selectedIds.size;
+
+  const toggleOne = (id: string) => {
+    setSelectAll(false);
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const togglePage = () => {
+    setSelectAll(false);
+    if (allPageSel) {
+      // Décocher toute la page
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        pageIds.forEach(id => next.delete(id));
+        return next;
+      });
+    } else {
+      // Cocher toute la page
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        pageIds.forEach(id => next.add(id));
+        return next;
+      });
+    }
+  };
+
+  const selectAllFiltered = () => {
+    setSelectAll(true);
+    setSelectedIds(new Set(filtered.map(e => e.id)));
+  };
+
+  const clearSelection = () => {
+    setSelectAll(false);
+    setSelectedIds(new Set());
+  };
+
+  // ── CRUD ──────────────────────────────────────────────────────────────────
   const openCreate = () => { setForm(EMPTY_FORM); setSaveError(null); setModal("create"); };
   const openEdit   = (eleve: Eleve) => {
     setForm({
@@ -232,6 +283,19 @@ export default function ElevesPage() {
     finally { setLoading(false); }
   };
 
+  const doBulkDelete = async () => {
+    setLoading(true);
+    try {
+      const ids = selectAll ? filtered.map(e => e.id) : Array.from(selectedIds);
+      await elevesApi.bulkDelete(ids);
+      clearSelection();
+      load();
+      setModal(null);
+    } catch { /* silencieux */ }
+    finally { setLoading(false); }
+  };
+
+  // ── Export / Import ───────────────────────────────────────────────────────
   const handleExportCsv = async () => {
     setExporting(true);
     try {
@@ -325,12 +389,11 @@ export default function ElevesPage() {
                 className="absolute right-0 mt-1.5 w-64 bg-surface border border-border rounded-xl shadow-lg z-20 py-1.5 text-sm"
                 onMouseLeave={() => setShowImportMenu(false)}
               >
-                {/* Importer un fichier */}
                 <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-tx-muted/60">Importer depuis</div>
                 {[
-                  { label: "Fichier CSV",         ext: ".csv",       icon: "📄" },
-                  { label: "Fichier Excel (.xlsx)","ext": ".xlsx,.xls", icon: "📊" },
-                  { label: "Fichier PDF",          ext: ".pdf",       icon: "📋" },
+                  { label: "Fichier CSV",          ext: ".csv",        icon: "📄" },
+                  { label: "Fichier Excel (.xlsx)", ext: ".xlsx,.xls",  icon: "📊" },
+                  { label: "Fichier PDF",           ext: ".pdf",        icon: "📋" },
                 ].map(f => (
                   <button
                     key={f.ext}
@@ -348,7 +411,6 @@ export default function ElevesPage() {
                   </button>
                 ))}
                 <div className="my-1.5 border-t border-border" />
-                {/* Télécharger modèles */}
                 <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-tx-muted/60">Télécharger un modèle</div>
                 <button
                   onClick={() => { setShowImportMenu(false); handleDownloadTemplate("csv"); }}
@@ -478,76 +540,154 @@ export default function ElevesPage() {
         )}
       </div>
 
+      {/* ── Barre de sélection multiple ── */}
+      {selCount > 0 && (
+        <div className="mb-3 flex items-center gap-3 px-4 py-2.5 bg-brand/8 border border-brand/20 rounded-xl">
+          {/* Icône + compteur */}
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <span className="min-w-[22px] h-[22px] flex items-center justify-center rounded-full bg-brand text-white text-[11px] font-bold">
+              {selCount}
+            </span>
+            <span className="text-sm font-medium text-brand">
+              {selCount} élève{selCount > 1 ? "s" : ""} sélectionné{selCount > 1 ? "s" : ""}
+            </span>
+            {/* Proposer de tout sélectionner si on n'a pas encore tout filtré */}
+            {!selectAll && selCount < filtered.length && (
+              <button
+                onClick={selectAllFiltered}
+                className="text-xs text-brand/70 hover:text-brand underline transition-colors ml-1"
+              >
+                Sélectionner les {filtered.length} résultats
+              </button>
+            )}
+          </div>
+          {/* Actions */}
+          <button
+            onClick={() => setModal({ kind: "bulkDelete", count: selCount })}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-danger text-white text-xs font-semibold hover:bg-danger/90 transition-colors"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+              <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
+            </svg>
+            Supprimer la sélection
+          </button>
+          <button
+            onClick={clearSelection}
+            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-brand/10 text-brand/60 hover:text-brand transition-colors"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+      )}
+
       {/* ── Tableau ── */}
-      {/* min-h-0 est essentiel : sans lui, un enfant flex ne peut pas rétrécir sous sa taille de contenu */}
       <div className="bg-surface rounded-2xl border border-border flex-1 min-h-0 flex flex-col overflow-hidden">
 
-        {/* Zone scrollable : uniquement les lignes du tableau */}
         <div className="overflow-y-auto flex-1">
           <table className="w-full text-sm table-fixed">
             <colgroup>
-              <col className="w-[22%]" />
-              <col className="w-[8%]" />
-              <col className="w-[10%]" />
-              <col className="w-[18%]" />
-              <col className="w-[16%]" />
-              <col className="w-[12%]" />
-              <col className="w-[14%]" />
+              <col className="w-[44px]" />  {/* Checkbox */}
+              <col className="w-[20%]" />
+              <col className="w-[7%]" />
+              <col className="w-[9%]" />
+              <col className="w-[17%]" />
+              <col className="w-[15%]" />
+              <col className="w-[11%]" />
+              <col className="w-[13%]" />
             </colgroup>
-            {/* En-têtes collés en haut lors du scroll */}
             <thead className="sticky top-0 z-10">
               <tr className="border-b border-border bg-surface-alt">
+                {/* Checkbox "tout sélectionner la page" */}
+                <th className="px-3 py-3 text-center">
+                  <button
+                    onClick={togglePage}
+                    className={`w-4.5 h-4.5 rounded border-2 flex items-center justify-center mx-auto transition-colors ${
+                      allPageSel
+                        ? "bg-brand border-brand"
+                        : somePageSel
+                          ? "bg-brand/30 border-brand"
+                          : "border-border hover:border-brand/50"
+                    }`}
+                    title={allPageSel ? "Tout désélectionner" : "Sélectionner la page"}
+                  >
+                    {allPageSel && (
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                    )}
+                    {somePageSel && !allPageSel && (
+                      <span className="w-2 h-0.5 bg-brand rounded-full block" />
+                    )}
+                  </button>
+                </th>
                 {["Élève", "Sexe", "Classe", "École", "Session", "Statut", "Actions"].map(h => (
                   <th key={h} className="px-5 py-3 text-center text-xs font-semibold text-tx-muted uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {paginated.map(e => (
-                <tr key={e.id} onClick={() => setModal({ kind: "view", eleve: e })}
-                  className="border-t border-border hover:bg-surface-alt transition-colors cursor-pointer">
-                  {/* Élève */}
-                  <td className="px-5 py-3.5 text-center">
-                    <div className="flex items-center justify-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-primary-soft text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">{initials(e)}</div>
-                      <div className="text-left">
-                        <div className="font-medium text-tx">{e.nom}</div>
-                        {e.prenom && <div className="text-xs text-tx-muted">{e.prenom}</div>}
+              {paginated.map(e => {
+                const isSel = selectedIds.has(e.id);
+                return (
+                  <tr
+                    key={e.id}
+                    className={`border-t border-border transition-colors ${isSel ? "bg-brand/5" : "hover:bg-surface-alt"}`}
+                  >
+                    {/* Checkbox individuelle */}
+                    <td className="px-3 py-3.5 text-center" onClick={ev => ev.stopPropagation()}>
+                      <button
+                        onClick={() => toggleOne(e.id)}
+                        className={`w-4.5 h-4.5 rounded border-2 flex items-center justify-center mx-auto transition-colors ${
+                          isSel ? "bg-brand border-brand" : "border-border hover:border-brand/50"
+                        }`}
+                      >
+                        {isSel && (
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                        )}
+                      </button>
+                    </td>
+                    {/* Élève */}
+                    <td className="px-5 py-3.5 text-center cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>
+                      <div className="flex items-center justify-center gap-2.5">
+                        <div className="w-8 h-8 rounded-full bg-primary-soft text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">{initials(e)}</div>
+                        <div className="text-left">
+                          <div className="font-medium text-tx">{e.nom}</div>
+                          {e.prenom && <div className="text-xs text-tx-muted">{e.prenom}</div>}
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  {/* Sexe */}
-                  <td className="px-5 py-3.5 text-center">
-                    {e.genre ? (
-                      <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${e.genre === "Garçon" ? "bg-blue-100 text-blue-600" : "bg-pink-100 text-pink-600"}`}>
-                        {sexeIcon(e.genre)}
+                    </td>
+                    {/* Sexe */}
+                    <td className="px-5 py-3.5 text-center cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>
+                      {e.genre ? (
+                        <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${e.genre === "Garçon" ? "bg-blue-100 text-blue-600" : "bg-pink-100 text-pink-600"}`}>
+                          {sexeIcon(e.genre)}
+                        </span>
+                      ) : <span className="text-tx-muted">—</span>}
+                    </td>
+                    {/* Classe */}
+                    <td className="px-5 py-3.5 text-center cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>
+                      {e.classe ? <span className="bg-primary-soft text-primary text-xs font-bold px-2 py-0.5 rounded-md">{e.classe}</span> : <span className="text-tx-muted">—</span>}
+                    </td>
+                    <td className="px-5 py-3.5 text-tx-muted text-center truncate cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>{schoolName(e.school_id)}</td>
+                    <td className="px-5 py-3.5 text-tx-muted text-center truncate cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>{sessionName(e.session_id)}</td>
+                    {/* Statut */}
+                    <td className="px-5 py-3.5 text-center cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${e.statut === "actif" ? "bg-success-soft text-success" : "bg-danger-soft text-danger"}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${e.statut === "actif" ? "bg-success" : "bg-danger"}`} />
+                        {e.statut}
                       </span>
-                    ) : <span className="text-tx-muted">—</span>}
-                  </td>
-                  {/* Classe */}
-                  <td className="px-5 py-3.5 text-center">
-                    {e.classe ? <span className="bg-primary-soft text-primary text-xs font-bold px-2 py-0.5 rounded-md">{e.classe}</span> : <span className="text-tx-muted">—</span>}
-                  </td>
-                  <td className="px-5 py-3.5 text-tx-muted text-center truncate">{schoolName(e.school_id)}</td>
-                  <td className="px-5 py-3.5 text-tx-muted text-center truncate">{sessionName(e.session_id)}</td>
-                  {/* Statut */}
-                  <td className="px-5 py-3.5 text-center">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${e.statut === "actif" ? "bg-success-soft text-success" : "bg-danger-soft text-danger"}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${e.statut === "actif" ? "bg-success" : "bg-danger"}`} />
-                      {e.statut}
-                    </span>
-                  </td>
-                  {/* Actions */}
-                  <td className="px-5 py-3.5" onClick={ev => ev.stopPropagation()}>
-                    <div className="flex justify-center gap-2">
-                      <button onClick={() => openEdit(e)} className="text-xs bg-primary-soft text-primary px-3 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors">Modifier</button>
-                      <button onClick={() => setModal({ kind: "delete", eleve: e })} className="text-xs bg-danger-soft text-danger px-3 py-1 rounded-lg font-medium hover:bg-danger hover:text-white transition-colors">Supprimer</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    {/* Actions */}
+                    <td className="px-5 py-3.5" onClick={ev => ev.stopPropagation()}>
+                      <div className="flex justify-center gap-2">
+                        <button onClick={() => openEdit(e)} className="text-xs bg-primary-soft text-primary px-3 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors">Modifier</button>
+                        <button onClick={() => setModal({ kind: "delete", eleve: e })} className="text-xs bg-danger-soft text-danger px-3 py-1 rounded-lg font-medium hover:bg-danger hover:text-white transition-colors">Supprimer</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {filtered.length === 0 && (
-                <tr><td colSpan={7} className="px-5 py-16 text-center text-tx-muted text-sm">
+                <tr><td colSpan={8} className="px-5 py-16 text-center text-tx-muted text-sm">
                   {hasFilters ? "Aucun élève ne correspond aux filtres." : "Aucun élève pour l'instant."}
                 </td></tr>
               )}
@@ -555,7 +695,7 @@ export default function ElevesPage() {
           </table>
         </div>
 
-        {/* Pagination — toujours visible en bas, hors de la zone scrollable */}
+        {/* Pagination */}
         <div className="border-t border-border px-5 py-3 flex-shrink-0">
           <Pagination page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
         </div>
@@ -633,7 +773,7 @@ export default function ElevesPage() {
         />
       )}
 
-      {/* ── Modal Suppression ── */}
+      {/* ── Modal Suppression unitaire ── */}
       {modal && typeof modal === "object" && modal.kind === "delete" && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-sm">
@@ -645,7 +785,7 @@ export default function ElevesPage() {
                 </svg>
               </div>
               <div>
-                <h2 className="text-base font-bold text-tx">Supprimer l'élève</h2>
+                <h2 className="text-base font-bold text-tx">Supprimer l&apos;élève</h2>
                 <p className="text-sm text-tx-muted mt-1">
                   Êtes-vous sûr de vouloir supprimer <span className="font-semibold text-tx">{fullName(modal.eleve)}</span> ? Cette action est irréversible.
                 </p>
@@ -656,6 +796,35 @@ export default function ElevesPage() {
               <button onClick={() => doDelete(modal.eleve)} disabled={loading}
                 className="px-4 py-2 rounded-xl bg-danger hover:bg-danger/90 text-white text-sm font-semibold disabled:opacity-60 transition-colors">
                 {loading ? "Suppression…" : "Supprimer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Suppression multiple ── */}
+      {modal && typeof modal === "object" && modal.kind === "bulkDelete" && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+            <div className="flex items-start gap-4 mb-5">
+              <div className="w-10 h-10 rounded-full bg-danger-soft flex items-center justify-center flex-shrink-0">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-danger">
+                  <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                  <path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-tx">Supprimer {modal.count} élève{modal.count > 1 ? "s" : ""}</h2>
+                <p className="text-sm text-tx-muted mt-1">
+                  Cette action va supprimer définitivement <span className="font-semibold text-tx">{modal.count} élève{modal.count > 1 ? "s" : ""}</span> sélectionné{modal.count > 1 ? "s" : ""}. Elle est irréversible.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setModal(null)} className="px-4 py-2 rounded-xl border border-border text-sm text-tx-muted hover:bg-surface-alt transition-colors">Annuler</button>
+              <button onClick={doBulkDelete} disabled={loading}
+                className="px-4 py-2 rounded-xl bg-danger hover:bg-danger/90 text-white text-sm font-semibold disabled:opacity-60 transition-colors">
+                {loading ? "Suppression…" : `Supprimer ${modal.count} élève${modal.count > 1 ? "s" : ""}`}
               </button>
             </div>
           </div>
