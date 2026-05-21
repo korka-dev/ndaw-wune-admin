@@ -199,12 +199,40 @@ export const elevesApi = {
   create: (d: unknown) => api.post("/admin/eleves", d),
   update: (id: string, d: unknown) => api.patch(`/admin/eleves/${id}`, d),
   delete: (id: string) => api.delete(`/admin/eleves/${id}`),
-  exportCsv: () => api.get("/admin/eleves/export/csv", { responseType: "blob" }),
+  // Export
+  exportCsv:  () => api.get("/admin/eleves/export/csv",  { responseType: "blob" }),
+  exportXlsx: () => api.get("/admin/eleves/export/xlsx", { responseType: "blob" }),
+  // Import unifié (CSV, Excel, PDF)
+  import: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post("/admin/eleves/import", fd, { headers: { "Content-Type": "multipart/form-data" } });
+  },
+  // Modèles à télécharger
+  templateCsv:  () => api.get("/admin/eleves/template/csv",  { responseType: "blob" }),
+  templateXlsx: () => api.get("/admin/eleves/template/xlsx", { responseType: "blob" }),
+  // Rétrocompat
   importCsv: (file: File) => {
     const fd = new FormData();
     fd.append("file", file);
     return api.post("/admin/eleves/import/csv", fd, { headers: { "Content-Type": "multipart/form-data" } });
   },
+};
+
+export const ressourcesApi = {
+  list: () => api.get("/admin/ressources"),
+  upload: (file: File, title?: string, description?: string) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    if (title)       fd.append("title", title);
+    if (description) fd.append("description", description);
+    return api.post("/admin/ressources", fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+  download: (id: string) =>
+    api.get(`/admin/ressources/${id}/download`, { responseType: "blob" }),
+  delete: (id: string) => api.delete(`/admin/ressources/${id}`),
 };
 
 // Export CSV pour les autres entités

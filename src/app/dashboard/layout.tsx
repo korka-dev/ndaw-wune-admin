@@ -46,6 +46,12 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    label: "Ressources",
+    items: [
+      { href: "/dashboard/ressources", label: "Ressources FLN", icon: "doc" },
+    ],
+  },
+  {
     label: "Administration",
     items: [
       { href: "/dashboard/comptes", label: "Comptes utilisateurs", icon: "lock", adminOnly: true },

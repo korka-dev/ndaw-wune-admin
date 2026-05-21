@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { elevesApi, schoolsApi, sessionsApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
+import ImportResultModal from "./ImportResultModal";
 
 const PAGE_SIZE = 20;
 
@@ -148,8 +149,14 @@ export default function ElevesPage() {
   const [form,     setForm]     = useState<FormType>(EMPTY_FORM);
   const [loading,   setLoading]   = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
-  const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [exporting, setExporting]   = useState(false);
+  const [exportingXlsx, setExportingXlsx] = useState(false);
+  const [importing, setImporting]   = useState(false);
+  const [showImportMenu, setShowImportMenu] = useState(false);
+  const [importResult, setImportResult] = useState<{
+    format: string; imported: number; skipped: number; errors: string[];
+  } | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
   const [search,        setSearch]        = useState("");
   const [filterSchool,  setFilterSchool]  = useState("");
   const [filterClasse,  setFilterClasse]  = useState("");
@@ -225,7 +232,7 @@ export default function ElevesPage() {
     finally { setLoading(false); }
   };
 
-  const handleExport = async () => {
+  const handleExportCsv = async () => {
     setExporting(true);
     try {
       const res = await elevesApi.exportCsv();
@@ -234,17 +241,37 @@ export default function ElevesPage() {
     finally { setExporting(false); }
   };
 
+  const handleExportXlsx = async () => {
+    setExportingXlsx(true);
+    try {
+      const res = await elevesApi.exportXlsx();
+      downloadBlob(res.data, "eleves.xlsx");
+    } catch { /* silencieux */ }
+    finally { setExportingXlsx(false); }
+  };
+
+  const handleDownloadTemplate = async (fmt: "csv" | "xlsx") => {
+    try {
+      const res = fmt === "csv" ? await elevesApi.templateCsv() : await elevesApi.templateXlsx();
+      downloadBlob(res.data, `modele_eleves.${fmt}`);
+    } catch { /* silencieux */ }
+  };
+
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setImporting(true);
+    setImportError(null);
+    setImportResult(null);
     try {
-      const res = await elevesApi.importCsv(file);
-      const count = res.data?.imported ?? "?";
-      setImportMsg({ ok: true, text: `${count} élève${count !== 1 ? "s" : ""} importé${count !== 1 ? "s" : ""}.` });
+      const res = await elevesApi.import(file);
+      setImportResult(res.data);
       load();
     } catch (err: any) {
-      setImportMsg({ ok: false, text: err?.response?.data?.detail ?? "Erreur lors de l'import." });
+      const detail = err?.response?.data?.detail;
+      setImportError(typeof detail === "string" ? detail : "Erreur lors de l'import.");
     } finally {
+      setImporting(false);
       if (importRef.current) importRef.current.value = "";
     }
   };
@@ -268,31 +295,105 @@ export default function ElevesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Import message */}
-          {importMsg && (
-            <span className={`text-xs font-medium px-3 py-1.5 rounded-xl ${importMsg.ok ? "bg-success-soft text-success" : "bg-danger-soft text-danger"}`}>
-              {importMsg.text}
-            </span>
-          )}
-          {/* Import */}
-          <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
-          <button
-            onClick={() => { setImportMsg(null); importRef.current?.click(); }}
-            title="Importer un CSV (nom, prenom, sexe, date_naissance, classe)"
-            className="flex items-center gap-2 border border-border bg-surface text-tx px-3.5 py-2.5 rounded-xl text-sm font-medium hover:bg-surface-alt transition-colors"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            Importer
-          </button>
-          {/* Export */}
-          <button
-            onClick={handleExport}
-            disabled={exporting}
-            className="flex items-center gap-2 border border-border bg-surface text-tx px-3.5 py-2.5 rounded-xl text-sm font-medium hover:bg-surface-alt transition-colors disabled:opacity-60"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            {exporting ? "Export…" : "Exporter"}
-          </button>
+          {/* Input fichier caché — tous formats */}
+          <input
+            ref={importRef}
+            type="file"
+            accept=".csv,.xlsx,.xls,.pdf"
+            className="hidden"
+            onChange={handleImport}
+          />
+
+          {/* ── Import dropdown ── */}
+          <div className="relative">
+            <button
+              onClick={() => setShowImportMenu(v => !v)}
+              disabled={importing}
+              className="flex items-center gap-2 border border-border bg-surface text-tx px-3.5 py-2.5 rounded-xl text-sm font-medium hover:bg-surface-alt transition-colors disabled:opacity-60"
+            >
+              {importing ? (
+                <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity=".3"/><path d="M12 2a10 10 0 0110 10"/></svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              )}
+              {importing ? "Import…" : "Importer"}
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+
+            {showImportMenu && (
+              <div
+                className="absolute right-0 mt-1.5 w-64 bg-surface border border-border rounded-xl shadow-lg z-20 py-1.5 text-sm"
+                onMouseLeave={() => setShowImportMenu(false)}
+              >
+                {/* Importer un fichier */}
+                <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-tx-muted/60">Importer depuis</div>
+                {[
+                  { label: "Fichier CSV",         ext: ".csv",       icon: "📄" },
+                  { label: "Fichier Excel (.xlsx)","ext": ".xlsx,.xls", icon: "📊" },
+                  { label: "Fichier PDF",          ext: ".pdf",       icon: "📋" },
+                ].map(f => (
+                  <button
+                    key={f.ext}
+                    onClick={() => {
+                      setShowImportMenu(false);
+                      if (importRef.current) {
+                        importRef.current.accept = f.ext;
+                        importRef.current.click();
+                      }
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-surface-alt transition-colors text-left"
+                  >
+                    <span>{f.icon}</span>
+                    <span className="text-tx">{f.label}</span>
+                  </button>
+                ))}
+                <div className="my-1.5 border-t border-border" />
+                {/* Télécharger modèles */}
+                <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-tx-muted/60">Télécharger un modèle</div>
+                <button
+                  onClick={() => { setShowImportMenu(false); handleDownloadTemplate("csv"); }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-surface-alt transition-colors text-left"
+                >
+                  <span>📄</span><span className="text-tx">Modèle CSV</span>
+                </button>
+                <button
+                  onClick={() => { setShowImportMenu(false); handleDownloadTemplate("xlsx"); }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-surface-alt transition-colors text-left"
+                >
+                  <span>📊</span><span className="text-tx">Modèle Excel</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* ── Export dropdown ── */}
+          <div className="relative group">
+            <button
+              disabled={exporting || exportingXlsx}
+              className="flex items-center gap-2 border border-border bg-surface text-tx px-3.5 py-2.5 rounded-xl text-sm font-medium hover:bg-surface-alt transition-colors disabled:opacity-60"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              {exporting || exportingXlsx ? "Export…" : "Exporter"}
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div className="hidden group-hover:block absolute right-0 mt-0 w-48 bg-surface border border-border rounded-xl shadow-lg z-20 py-1.5 text-sm">
+              <button
+                onClick={handleExportCsv}
+                disabled={exporting}
+                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-surface-alt transition-colors text-left"
+              >
+                <span>📄</span><span className="text-tx">Exporter en CSV</span>
+              </button>
+              <button
+                onClick={handleExportXlsx}
+                disabled={exportingXlsx}
+                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-surface-alt transition-colors text-left"
+              >
+                <span>📊</span><span className="text-tx">Exporter en Excel</span>
+              </button>
+            </div>
+          </div>
+
           {/* Ajouter */}
           <button
             onClick={openCreate}
@@ -513,6 +614,15 @@ export default function ElevesPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Modale résultat import ── */}
+      {(importResult || importError) && (
+        <ImportResultModal
+          result={importResult}
+          error={importError}
+          onClose={() => { setImportResult(null); setImportError(null); }}
+        />
       )}
 
       {/* ── Modal Suppression ── */}
