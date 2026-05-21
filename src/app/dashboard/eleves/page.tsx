@@ -5,7 +5,7 @@ import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 import ImportResultModal from "./ImportResultModal";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 50;
 
 interface Eleve {
   id: string;
@@ -283,7 +283,7 @@ export default function ElevesPage() {
   const initials    = (e: Eleve)    => [e.nom?.[0], e.prenom?.[0]].filter(Boolean).join("").toUpperCase() || "?";
 
   return (
-    <div className="flex flex-col min-h-full px-7 pb-7">
+    <div className="flex flex-col h-full px-7 pb-7">
       {/* ── Header ── */}
       <div className="sticky top-0 z-10 bg-bg flex items-center justify-between pt-7 pb-4 mb-6 border-b border-border">
         <div>
@@ -479,76 +479,84 @@ export default function ElevesPage() {
       </div>
 
       {/* ── Tableau ── */}
-      <div className="bg-surface rounded-2xl border border-border overflow-hidden flex-1">
-        <table className="w-full text-sm table-fixed">
-          <colgroup>
-            <col className="w-[22%]" />
-            <col className="w-[8%]" />
-            <col className="w-[10%]" />
-            <col className="w-[18%]" />
-            <col className="w-[16%]" />
-            <col className="w-[12%]" />
-            <col className="w-[14%]" />
-          </colgroup>
-          <thead>
-            <tr className="border-b border-border bg-surface-alt">
-              {["Élève", "Sexe", "Classe", "École", "Session", "Statut", "Actions"].map(h => (
-                <th key={h} className="px-5 py-3 text-center text-xs font-semibold text-tx-muted uppercase tracking-wide">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {paginated.map(e => (
-              <tr key={e.id} onClick={() => setModal({ kind: "view", eleve: e })}
-                className="border-t border-border hover:bg-surface-alt transition-colors cursor-pointer">
-                {/* Élève */}
-                <td className="px-5 py-3.5 text-center">
-                  <div className="flex items-center justify-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-primary-soft text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">{initials(e)}</div>
-                    <div className="text-left">
-                      <div className="font-medium text-tx">{e.nom}</div>
-                      {e.prenom && <div className="text-xs text-tx-muted">{e.prenom}</div>}
-                    </div>
-                  </div>
-                </td>
-                {/* Sexe */}
-                <td className="px-5 py-3.5 text-center">
-                  {e.genre ? (
-                    <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${e.genre === "Garçon" ? "bg-blue-100 text-blue-600" : "bg-pink-100 text-pink-600"}`}>
-                      {sexeIcon(e.genre)}
-                    </span>
-                  ) : <span className="text-tx-muted">—</span>}
-                </td>
-                {/* Classe */}
-                <td className="px-5 py-3.5 text-center">
-                  {e.classe ? <span className="bg-primary-soft text-primary text-xs font-bold px-2 py-0.5 rounded-md">{e.classe}</span> : <span className="text-tx-muted">—</span>}
-                </td>
-                <td className="px-5 py-3.5 text-tx-muted text-center truncate">{schoolName(e.school_id)}</td>
-                <td className="px-5 py-3.5 text-tx-muted text-center truncate">{sessionName(e.session_id)}</td>
-                {/* Statut */}
-                <td className="px-5 py-3.5 text-center">
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${e.statut === "actif" ? "bg-success-soft text-success" : "bg-danger-soft text-danger"}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${e.statut === "actif" ? "bg-success" : "bg-danger"}`} />
-                    {e.statut}
-                  </span>
-                </td>
-                {/* Actions */}
-                <td className="px-5 py-3.5" onClick={ev => ev.stopPropagation()}>
-                  <div className="flex justify-center gap-2">
-                    <button onClick={() => openEdit(e)} className="text-xs bg-primary-soft text-primary px-3 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors">Modifier</button>
-                    <button onClick={() => setModal({ kind: "delete", eleve: e })} className="text-xs bg-danger-soft text-danger px-3 py-1 rounded-lg font-medium hover:bg-danger hover:text-white transition-colors">Supprimer</button>
-                  </div>
-                </td>
+      {/* min-h-0 est essentiel : sans lui, un enfant flex ne peut pas rétrécir sous sa taille de contenu */}
+      <div className="bg-surface rounded-2xl border border-border flex-1 min-h-0 flex flex-col overflow-hidden">
+
+        {/* Zone scrollable : uniquement les lignes du tableau */}
+        <div className="overflow-y-auto flex-1">
+          <table className="w-full text-sm table-fixed">
+            <colgroup>
+              <col className="w-[22%]" />
+              <col className="w-[8%]" />
+              <col className="w-[10%]" />
+              <col className="w-[18%]" />
+              <col className="w-[16%]" />
+              <col className="w-[12%]" />
+              <col className="w-[14%]" />
+            </colgroup>
+            {/* En-têtes collés en haut lors du scroll */}
+            <thead className="sticky top-0 z-10">
+              <tr className="border-b border-border bg-surface-alt">
+                {["Élève", "Sexe", "Classe", "École", "Session", "Statut", "Actions"].map(h => (
+                  <th key={h} className="px-5 py-3 text-center text-xs font-semibold text-tx-muted uppercase tracking-wide">{h}</th>
+                ))}
               </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr><td colSpan={7} className="px-5 py-16 text-center text-tx-muted text-sm">
-                {hasFilters ? "Aucun élève ne correspond aux filtres." : "Aucun élève pour l'instant."}
-              </td></tr>
-            )}
-          </tbody>
-        </table>
-        <div className="pb-4 px-5">
+            </thead>
+            <tbody>
+              {paginated.map(e => (
+                <tr key={e.id} onClick={() => setModal({ kind: "view", eleve: e })}
+                  className="border-t border-border hover:bg-surface-alt transition-colors cursor-pointer">
+                  {/* Élève */}
+                  <td className="px-5 py-3.5 text-center">
+                    <div className="flex items-center justify-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-primary-soft text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">{initials(e)}</div>
+                      <div className="text-left">
+                        <div className="font-medium text-tx">{e.nom}</div>
+                        {e.prenom && <div className="text-xs text-tx-muted">{e.prenom}</div>}
+                      </div>
+                    </div>
+                  </td>
+                  {/* Sexe */}
+                  <td className="px-5 py-3.5 text-center">
+                    {e.genre ? (
+                      <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${e.genre === "Garçon" ? "bg-blue-100 text-blue-600" : "bg-pink-100 text-pink-600"}`}>
+                        {sexeIcon(e.genre)}
+                      </span>
+                    ) : <span className="text-tx-muted">—</span>}
+                  </td>
+                  {/* Classe */}
+                  <td className="px-5 py-3.5 text-center">
+                    {e.classe ? <span className="bg-primary-soft text-primary text-xs font-bold px-2 py-0.5 rounded-md">{e.classe}</span> : <span className="text-tx-muted">—</span>}
+                  </td>
+                  <td className="px-5 py-3.5 text-tx-muted text-center truncate">{schoolName(e.school_id)}</td>
+                  <td className="px-5 py-3.5 text-tx-muted text-center truncate">{sessionName(e.session_id)}</td>
+                  {/* Statut */}
+                  <td className="px-5 py-3.5 text-center">
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${e.statut === "actif" ? "bg-success-soft text-success" : "bg-danger-soft text-danger"}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${e.statut === "actif" ? "bg-success" : "bg-danger"}`} />
+                      {e.statut}
+                    </span>
+                  </td>
+                  {/* Actions */}
+                  <td className="px-5 py-3.5" onClick={ev => ev.stopPropagation()}>
+                    <div className="flex justify-center gap-2">
+                      <button onClick={() => openEdit(e)} className="text-xs bg-primary-soft text-primary px-3 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors">Modifier</button>
+                      <button onClick={() => setModal({ kind: "delete", eleve: e })} className="text-xs bg-danger-soft text-danger px-3 py-1 rounded-lg font-medium hover:bg-danger hover:text-white transition-colors">Supprimer</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr><td colSpan={7} className="px-5 py-16 text-center text-tx-muted text-sm">
+                  {hasFilters ? "Aucun élève ne correspond aux filtres." : "Aucun élève pour l'instant."}
+                </td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination — toujours visible en bas, hors de la zone scrollable */}
+        <div className="border-t border-border px-5 py-3 flex-shrink-0">
           <Pagination page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
         </div>
       </div>
