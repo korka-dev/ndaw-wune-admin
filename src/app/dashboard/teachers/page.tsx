@@ -6,10 +6,24 @@ import Pagination from "@/components/Pagination";
 
 const PAGE_SIZE = 20;
 
-interface Teacher { id: string; name: string; phone?: string; email?: string; title?: string; status: string; school_id?: string; classes?: string[]; }
+interface Teacher { id: string; name: string; phone?: string; email?: string; title?: string; status: string; school_id?: string; niveau?: string[]; classes?: string[]; }
 interface School { id: string; name: string; }
-const EMPTY_T = { name: "", phone: "", title: "", school_id: "", classes: [] as string[] };
-const CLASSES = ["CP", "CE1", "CE2", "CM1", "CM2", "Enseignant Communautaire"] as const;
+const EMPTY_T = { name: "", phone: "", title: "", school_id: "", niveau: [] as string[], classes: [] as string[] };
+const NIVEAUX  = ["CP", "CE1", "CE2", "CM1", "CM2"] as const;
+const ALL_CLASSES_BY_NIVEAU: Record<string, string[]> = {
+  CP:  ["CP A", "CP B", "CP C", "CP D"],
+  CE1: ["CE1 A", "CE1 B", "CE1 C", "CE1 D"],
+  CE2: ["CE2 A", "CE2 B", "CE2 C", "CE2 D"],
+  CM1: ["CM1 A", "CM1 B", "CM1 C"],
+  CM2: ["CM2 A", "CM2 B", "CM2 C"],
+};
+/** Retourne les classes disponibles selon les niveaux sélectionnés (+ Enseignant Communautaire toujours dispo). */
+function getAvailableClasses(niveaux: string[]): string[] {
+  if (!niveaux || niveaux.length === 0) {
+    return Object.values(ALL_CLASSES_BY_NIVEAU).flat().concat(["Enseignant Communautaire"]);
+  }
+  return niveaux.flatMap(n => ALL_CLASSES_BY_NIVEAU[n] ?? []).concat(["Enseignant Communautaire"]);
+}
 
 type ModalState = null | "create"
   | { kind: "view"; teacher: Teacher }
@@ -99,6 +113,7 @@ export default function TeachersPage() {
         title:     form.title     || undefined,
         phone:     form.phone     || undefined,
         school_id: form.school_id || undefined,
+        niveau:    form.niveau?.length  ? form.niveau  : undefined,
         classes:   form.classes?.length ? form.classes : undefined,
       };
       if (modal === "create") {
@@ -261,16 +276,17 @@ export default function TeachersPage() {
       <div className="bg-surface rounded-2xl border border-border overflow-hidden flex-1">
         <table className="w-full text-sm table-fixed">
           <colgroup>
-            <col className="w-[22%]" />
-            <col className="w-[18%]" />
             <col className="w-[20%]" />
-            <col className="w-[17%]" />
-            <col className="w-[13%]" />
+            <col className="w-[16%]" />
+            <col className="w-[18%]" />
+            <col className="w-[12%]" />
+            <col className="w-[15%]" />
             <col className="w-[10%]" />
+            <col className="w-[9%]" />
           </colgroup>
           <thead>
             <tr className="border-b border-border bg-surface-alt">
-              {["Enseignant", "Contact", "École", "Classes", "Statut", "Actions"].map(h => (
+              {["Enseignant", "Contact", "École", "Niveau", "Classes", "Statut", "Actions"].map(h => (
                 <th key={h} className="px-5 py-3 text-center text-xs font-semibold text-tx-muted uppercase tracking-wide">{h}</th>
               ))}
             </tr>
@@ -294,6 +310,15 @@ export default function TeachersPage() {
                   </td>
                   <td className="px-5 py-3.5 text-tx-muted text-center">{t.phone ?? "—"}</td>
                   <td className="px-5 py-3.5 text-tx-muted text-center">{school?.name ?? "—"}</td>
+                  <td className="px-5 py-3.5 text-center">
+                    <div className="flex gap-1 flex-wrap justify-center">
+                      {(t.niveau && t.niveau.length > 0)
+                        ? t.niveau.map(n => (
+                          <span key={n} className="bg-warn-soft text-warn text-[11px] font-bold px-2 py-0.5 rounded-md">{n}</span>
+                        ))
+                        : "—"}
+                    </div>
+                  </td>
                   <td className="px-5 py-3.5 text-center">
                     <div className="flex gap-1 flex-wrap justify-center">
                       {(t.classes && t.classes.length > 0)
@@ -364,6 +389,22 @@ export default function TeachersPage() {
                   </div>
                 </div>
               ))}
+              {/* Niveau */}
+              <div className="flex items-start gap-3">
+                <div className="w-7 h-7 rounded-lg bg-surface-alt flex items-center justify-center text-tx-muted flex-shrink-0 mt-0.5">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M2 20h20M6 20V10l6-6 6 6v10"/><path d="M10 20v-6h4v6"/></svg>
+                </div>
+                <div>
+                  <div className="text-[11px] text-tx-muted mb-1">Niveau</div>
+                  {modal.teacher.niveau && modal.teacher.niveau.length > 0 ? (
+                    <div className="flex gap-1 flex-wrap">
+                      {modal.teacher.niveau.map(n => (
+                        <span key={n} className="bg-warn-soft text-warn text-[11px] font-bold px-2 py-0.5 rounded-md">{n}</span>
+                      ))}
+                    </div>
+                  ) : <span className="text-sm text-tx-muted">—</span>}
+                </div>
+              </div>
               {/* Classes */}
               <div className="flex items-start gap-3">
                 <div className="w-7 h-7 rounded-lg bg-surface-alt flex items-center justify-center text-tx-muted flex-shrink-0 mt-0.5">
@@ -505,9 +546,43 @@ export default function TeachersPage() {
                 </select>
               </div>
               <div>
+                <label className="block text-sm font-medium text-tx mb-2">Niveau</label>
+                <div className="flex flex-wrap gap-2">
+                  {NIVEAUX.map(niv => (
+                    <label key={niv}
+                      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border cursor-pointer transition-colors select-none ${form.niveau?.includes(niv)
+                          ? "border-warn bg-warn-soft text-warn font-semibold"
+                          : "border-border bg-surface-alt text-tx hover:border-warn/40"
+                        }`}
+                    >
+                      <input type="checkbox" className="hidden"
+                        checked={form.niveau?.includes(niv) ?? false}
+                        onChange={e => setForm(f => {
+                          const newNiveau = e.target.checked
+                            ? [...(f.niveau ?? []), niv]
+                            : (f.niveau ?? []).filter(n => n !== niv);
+                          const valid = getAvailableClasses(newNiveau);
+                          return {
+                            ...f,
+                            niveau: newNiveau,
+                            classes: (f.classes ?? []).filter(c => valid.includes(c)),
+                          };
+                        })}
+                      />
+                      <span className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border ${form.niveau?.includes(niv) ? "bg-warn border-warn" : "border-border bg-surface"}`}>
+                        {form.niveau?.includes(niv) && (
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                        )}
+                      </span>
+                      {niv}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-tx mb-2">Classes</label>
-                <div className="flex gap-3">
-                  {CLASSES.map(cls => (
+                <div className="flex flex-wrap gap-2">
+                  {getAvailableClasses(form.niveau).map(cls => (
                     <label key={cls}
                       className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border cursor-pointer transition-colors select-none ${form.classes?.includes(cls)
                           ? "border-brand bg-brand-soft text-brand font-semibold"
@@ -591,9 +666,43 @@ export default function TeachersPage() {
                 </select>
               </div>
               <div>
+                <label className="block text-sm font-medium text-tx mb-2">Niveau</label>
+                <div className="flex flex-wrap gap-2">
+                  {NIVEAUX.map(niv => (
+                    <label key={niv}
+                      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border cursor-pointer transition-colors select-none ${form.niveau?.includes(niv)
+                          ? "border-warn bg-warn-soft text-warn font-semibold"
+                          : "border-border bg-surface-alt text-tx hover:border-warn/40"
+                        }`}
+                    >
+                      <input type="checkbox" className="hidden"
+                        checked={form.niveau?.includes(niv) ?? false}
+                        onChange={e => setForm(f => {
+                          const newNiveau = e.target.checked
+                            ? [...(f.niveau ?? []), niv]
+                            : (f.niveau ?? []).filter(n => n !== niv);
+                          const valid = getAvailableClasses(newNiveau);
+                          return {
+                            ...f,
+                            niveau: newNiveau,
+                            classes: (f.classes ?? []).filter(c => valid.includes(c)),
+                          };
+                        })}
+                      />
+                      <span className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border ${form.niveau?.includes(niv) ? "bg-warn border-warn" : "border-border bg-surface"}`}>
+                        {form.niveau?.includes(niv) && (
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                        )}
+                      </span>
+                      {niv}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-tx mb-2">Classes</label>
-                <div className="flex gap-3">
-                  {CLASSES.map(cls => (
+                <div className="flex flex-wrap gap-2">
+                  {getAvailableClasses(form.niveau).map(cls => (
                     <label key={cls}
                       className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border cursor-pointer transition-colors select-none ${form.classes?.includes(cls)
                           ? "border-brand bg-brand-soft text-brand font-semibold"

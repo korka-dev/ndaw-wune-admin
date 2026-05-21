@@ -220,6 +220,14 @@ export const elevesApi = {
   },
 };
 
+export const classesApi = {
+  list:   (params?: { school_id?: string; niveau?: string; skip?: number; limit?: number }) =>
+    api.get("/admin/classes", { params }),
+  create: (d: unknown)    => api.post("/admin/classes", d),
+  update: (id: string, d: unknown) => api.patch(`/admin/classes/${id}`, d),
+  delete: (id: string)    => api.delete(`/admin/classes/${id}`),
+};
+
 export const ressourcesApi = {
   list: () => api.get("/admin/ressources"),
   upload: (file: File, title?: string, description?: string) => {
