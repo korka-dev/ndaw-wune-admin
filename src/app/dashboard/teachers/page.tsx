@@ -68,7 +68,7 @@ export default function TeachersPage() {
 
   const load = () => {
     // limit=10000 pour charger tous les enseignants sans pagination
-    teachersApi.list({ limit: 10000 } as any).then(r => setTeachers(r.data.items ?? [])).catch(() => { });
+    teachersApi.list({ limit: 10000 }).then(r => setTeachers(r.data.items ?? [])).catch(() => { });
     schoolsApi.list().then(r => setSchools(r.data.items ?? [])).catch(() => { });
   };
   useEffect(() => { load(); }, []);

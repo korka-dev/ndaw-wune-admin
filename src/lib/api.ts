@@ -71,7 +71,7 @@ export const authApi = {
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 export const sessionsApi = {
-  list:     ()            => api.get("/admin/sessions"),
+  list:     (params?: { skip?: number; limit?: number }) => api.get("/admin/sessions", { params }),
   create:   (d: unknown)  => api.post("/admin/sessions", d),
   update:   (id: string, d: unknown) => api.patch(`/admin/sessions/${id}`, d),
   delete:   (id: string)  => api.delete(`/admin/sessions/${id}`),
@@ -83,7 +83,7 @@ export const sessionsApi = {
 };
 
 export const teachersApi = {
-  list:         ()              => api.get("/admin/teachers"),
+  list:         (params?: { skip?: number; limit?: number }) => api.get("/admin/teachers", { params }),
   create:       (d: unknown)    => api.post("/admin/teachers", d),
   update:       (id: string, d: unknown) => api.patch(`/admin/teachers/${id}`, d),
   delete:       (id: string)    => api.delete(`/admin/teachers/${id}`),
@@ -101,7 +101,7 @@ export const teachersApi = {
 };
 
 export const schoolsApi = {
-  list:   ()              => api.get("/admin/schools"),
+  list:   (params?: { skip?: number; limit?: number }) => api.get("/admin/schools", { params }),
   create: (d: unknown)    => api.post("/admin/schools", d),
   update: (id: string, d: unknown) => api.patch(`/admin/schools/${id}`, d),
   delete: (id: string)    => api.delete(`/admin/schools/${id}`),
@@ -153,14 +153,14 @@ export const suiviSuperviseurApi = {
 };
 
 export const usersApi = {
-  list:   ()              => api.get("/admin/users"),
+  list:   (params?: { skip?: number; limit?: number }) => api.get("/admin/users", { params }),
   create: (d: unknown)    => api.post("/admin/users", d),
   update: (id: string, d: unknown) => api.patch(`/admin/users/${id}`, d),
   delete: (id: string)    => api.delete(`/admin/users/${id}`),
 };
 
 export const superviseursApi = {
-  list:           ()                              => api.get("/admin/superviseurs"),
+  list:           (params?: { skip?: number; limit?: number }) => api.get("/admin/superviseurs", { params }),
   create:         (d: unknown)                    => api.post("/admin/superviseurs", d),
   get:            (id: string)                    => api.get(`/admin/superviseurs/${id}`),
   update:         (id: string, d: unknown)        => api.patch(`/admin/superviseurs/${id}`, d),
@@ -170,7 +170,7 @@ export const superviseursApi = {
 };
 
 export const evaluateursApi = {
-  list:           ()                              => api.get("/admin/evaluateurs"),
+  list:           (params?: { skip?: number; limit?: number }) => api.get("/admin/evaluateurs", { params }),
   create:         (d: unknown)                    => api.post("/admin/evaluateurs", d),
   get:            (id: string)                    => api.get(`/admin/evaluateurs/${id}`),
   update:         (id: string, d: unknown)        => api.patch(`/admin/evaluateurs/${id}`, d),

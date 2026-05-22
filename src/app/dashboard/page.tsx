@@ -208,7 +208,7 @@ export default function DashboardHome() {
   useEffect(() => {
     Promise.allSettled([
       sessionsApi.list(),                    // 0
-      teachersApi.list({ limit: 10000 } as any), // 1 — tous les enseignants
+      teachersApi.list({ limit: 10000 }), // 1 — tous les enseignants
       schoolsApi.list(),                     // 2
       rapportsApi.list({ limit: 500 }),      // 3
       planningApi.list(),                    // 4
