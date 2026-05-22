@@ -56,8 +56,13 @@ export default function TeachersPage() {
   const [filterStatus, setFilterStatus] = useState("");
   const [exporting, setExporting] = useState(false);
   const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [importingXlsx, setImportingXlsx] = useState(false);
+  const [xlsxResult, setXlsxResult] = useState<{
+    imported: number; skipped: number; schools_created: number; errors: string[];
+  } | null>(null);
   const [page, setPage] = useState(1);
-  const importRef = useRef<HTMLInputElement>(null);
+  const importRef     = useRef<HTMLInputElement>(null);
+  const importXlsxRef = useRef<HTMLInputElement>(null);
 
   const load = () => {
     teachersApi.list().then(r => setTeachers(r.data.items ?? [])).catch(() => { });
@@ -97,6 +102,25 @@ export default function TeachersPage() {
       setImportMsg({ ok: false, text: err?.response?.data?.detail ?? "Erreur lors de l'import." });
     } finally {
       if (importRef.current) importRef.current.value = "";
+    }
+  };
+
+  const handleImportXlsx = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportingXlsx(true);
+    setXlsxResult(null);
+    setImportMsg(null);
+    try {
+      const res = await teachersApi.importXlsx(file);
+      setXlsxResult(res.data);
+      load();
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      setImportMsg({ ok: false, text: typeof detail === "string" ? detail : "Erreur lors de l'import Excel." });
+    } finally {
+      setImportingXlsx(false);
+      if (importXlsxRef.current) importXlsxRef.current.value = "";
     }
   };
 
@@ -210,6 +234,26 @@ export default function TeachersPage() {
             </button>
             <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
           </div>
+
+          {/* Importer Excel (liste élèves) */}
+          <button
+            onClick={() => importXlsxRef.current?.click()}
+            disabled={importingXlsx}
+            title="Importer depuis le fichier Excel liste élèves (colonnes IEF, SCHOOL, enseignant, NIVEAU, Classe…)"
+            className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-60"
+          >
+            {importingXlsx ? (
+              <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity=".3"/><path d="M12 2a10 10 0 0110 10"/></svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+            )}
+            {importingXlsx ? "Import…" : "Importer Excel"}
+          </button>
+          <input ref={importXlsxRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImportXlsx} />
           {/* Ajouter */}
           <button onClick={() => { setForm(EMPTY_T); setSaveError(null); setModal("create"); }}
             className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
@@ -806,6 +850,73 @@ export default function TeachersPage() {
                 {loading ? "Suppression…" : "Supprimer"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modale résultat import Excel ──────────────────────────────── */}
+      {xlsxResult && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4"
+          onClick={ev => { if (ev.target === ev.currentTarget) setXlsxResult(null); }}>
+          <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[80vh] flex flex-col">
+            {/* En-tête */}
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center flex-shrink-0">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-success">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-tx">Import Excel terminé</h2>
+                <p className="text-sm text-tx-muted">Résultats de l&apos;import des enseignants</p>
+              </div>
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-3 mb-5">
+              <div className="bg-success-soft rounded-xl p-3 text-center">
+                <div className="text-2xl font-bold text-success">{xlsxResult.imported}</div>
+                <div className="text-xs text-tx-muted mt-0.5">Importé{xlsxResult.imported > 1 ? "s" : ""}</div>
+              </div>
+              <div className="bg-surface-alt rounded-xl p-3 text-center">
+                <div className="text-2xl font-bold text-tx-muted">{xlsxResult.skipped}</div>
+                <div className="text-xs text-tx-muted mt-0.5">Ignoré{xlsxResult.skipped > 1 ? "s" : ""}</div>
+              </div>
+              <div className="bg-brand-soft rounded-xl p-3 text-center">
+                <div className="text-2xl font-bold text-brand">{xlsxResult.schools_created}</div>
+                <div className="text-xs text-tx-muted mt-0.5">École{xlsxResult.schools_created > 1 ? "s" : ""} créée{xlsxResult.schools_created > 1 ? "s" : ""}</div>
+              </div>
+            </div>
+
+            {/* Info mot de passe */}
+            <div className="flex items-start gap-2.5 px-3.5 py-3 rounded-xl bg-warn-soft border border-warn/20 mb-4">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-warn flex-shrink-0 mt-0.5">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              <p className="text-xs text-warn">
+                Mot de passe par défaut : <span className="font-mono font-bold">P@sser123</span> — Les enseignants devront le changer à leur première connexion.
+                Pensez à renseigner leur numéro de téléphone pour qu&apos;ils puissent se connecter.
+              </p>
+            </div>
+
+            {/* Erreurs */}
+            {xlsxResult.errors.length > 0 && (
+              <div className="flex-1 min-h-0 overflow-y-auto mb-4">
+                <p className="text-xs font-semibold text-danger mb-2">{xlsxResult.errors.length} erreur{xlsxResult.errors.length > 1 ? "s" : ""} :</p>
+                <div className="space-y-1">
+                  {xlsxResult.errors.map((err, i) => (
+                    <div key={i} className="text-xs text-danger bg-danger-soft rounded-lg px-3 py-1.5">{err}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={() => setXlsxResult(null)}
+              className="w-full py-2.5 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold transition-colors"
+            >
+              Fermer
+            </button>
           </div>
         </div>
       )}

@@ -93,6 +93,11 @@ export const teachersApi = {
     fd.append("file", file);
     return api.post("/admin/teachers/import/csv", fd, { headers: { "Content-Type": "multipart/form-data" } });
   },
+  importXlsx: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post("/admin/teachers/import/xlsx", fd, { headers: { "Content-Type": "multipart/form-data" } });
+  },
 };
 
 export const schoolsApi = {
