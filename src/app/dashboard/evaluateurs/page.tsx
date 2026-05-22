@@ -27,8 +27,8 @@ export default function EvaluateursPage() {
 
   const load = () => {
     evaluateursApi.list().then(r => setEvs(r.data.items ?? [])).catch(() => {});
-    schoolsApi.list().then(r => setSchools(r.data.items ?? [])).catch(() => {});
-    teachersApi.list().then(r => setTeachers(r.data.items ?? [])).catch(() => {});
+    schoolsApi.list({ limit: 10000 }).then(r => setSchools(r.data.items ?? [])).catch(() => {});
+    teachersApi.list({ limit: 10000 }).then(r => setTeachers(r.data.items ?? [])).catch(() => {});
   };
   useEffect(() => { load(); }, []);
 

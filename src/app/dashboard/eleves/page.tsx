@@ -174,7 +174,7 @@ export default function ElevesPage() {
   const load = () => {
     // limit=10000 pour charger tous les élèves (parcours liste complète)
     elevesApi.list({ limit: 10000 }).then(r => setEleves(r.data.items ?? [])).catch(() => {});
-    schoolsApi.list().then(r => setSchools(r.data.items ?? [])).catch(() => {});
+    schoolsApi.list({ limit: 10000 }).then(r => setSchools(r.data.items ?? [])).catch(() => {});
     sessionsApi.list().then(r => setSessions(r.data.items ?? [])).catch(() => {});
   };
   useEffect(() => { load(); }, []);

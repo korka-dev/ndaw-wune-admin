@@ -4,7 +4,7 @@ import { teachersApi, schoolsApi, exportApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 50;
 
 interface Teacher {
   id: string;
@@ -69,7 +69,7 @@ export default function TeachersPage() {
   const load = () => {
     // limit=10000 pour charger tous les enseignants sans pagination
     teachersApi.list({ limit: 10000 }).then(r => setTeachers(r.data.items ?? [])).catch(() => { });
-    schoolsApi.list().then(r => setSchools(r.data.items ?? [])).catch(() => { });
+    schoolsApi.list({ limit: 10000 }).then(r => setSchools(r.data.items ?? [])).catch(() => { });
   };
   useEffect(() => { load(); }, []);
   useEffect(() => { setPage(1); }, [search, filterSchool, filterIef, filterClasse, filterStatus]);

@@ -209,7 +209,7 @@ export default function DashboardHome() {
     Promise.allSettled([
       sessionsApi.list(),                    // 0
       teachersApi.list({ limit: 10000 }), // 1 — tous les enseignants
-      schoolsApi.list(),                     // 2
+      schoolsApi.list({ limit: 10000 }),     // 2 — toutes les écoles
       rapportsApi.list({ limit: 500 }),      // 3
       planningApi.list(),                    // 4
       suiviApi.list(),                       // 5 — présence enseignants

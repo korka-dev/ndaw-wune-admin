@@ -18,7 +18,7 @@ export default function RapportsPage() {
 
   useEffect(() => {
     sessionsApi.list().then(r=>setSessions(r.data.items??[])).catch(()=>{});
-    teachersApi.list().then(r=>setTeachers(r.data.items??[])).catch(()=>{});
+    teachersApi.list({ limit: 10000 }).then(r=>setTeachers(r.data.items??[])).catch(()=>{});
   }, []);
 
   useEffect(() => {

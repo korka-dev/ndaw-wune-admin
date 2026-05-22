@@ -15,7 +15,7 @@ interface School {
 }
 
 const EMPTY: Omit<School, "id"> = { name: "", region: "", city: "", director: "", director_phone: "" };
-const PAGE_SIZE = 9;
+const PAGE_SIZE = 25;
 
 const SchoolIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8B6F1F" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -43,7 +43,7 @@ export default function EcolesPage() {
   const importXlsxRef = useRef<HTMLInputElement>(null);
 
   const load = () =>
-    schoolsApi.list()
+    schoolsApi.list({ limit: 10000 })
       .then(r => setSchools(r.data.items ?? []))
       .catch(() => {});
 

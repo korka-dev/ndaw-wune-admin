@@ -64,8 +64,8 @@ export default function ClassesPage() {
   };
 
   const load = () => {
-    classesApi.list({ limit: 500 }).then(r => setClasses(r.data.items ?? [])).catch(() => {});
-    schoolsApi.list().then(r => setSchools(r.data.items ?? [])).catch(() => {});
+    classesApi.list({ limit: 10000 }).then(r => setClasses(r.data.items ?? [])).catch(() => {});
+    schoolsApi.list({ limit: 10000 }).then(r => setSchools(r.data.items ?? [])).catch(() => {});
   };
   useEffect(() => { load(); }, []);
   useEffect(() => { setPage(1); }, [search, filterSchool, filterNiveau]);
