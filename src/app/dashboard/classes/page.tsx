@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { classesApi, schoolsApi } from "@/lib/api";
 import Pagination from "@/components/Pagination";
 
@@ -40,6 +40,28 @@ export default function ClassesPage() {
   const [filterNiveau, setFilterNiveau] = useState("");
   const [search, setSearch]     = useState("");
   const [page, setPage]         = useState(1);
+  const [importingXlsx,  setImportingXlsx]  = useState(false);
+  const [xlsxResult,     setXlsxResult]     = useState<{ imported: number; skipped: number; schools_created: number; errors: string[] } | null>(null);
+  const [xlsxError,      setXlsxError]      = useState<string | null>(null);
+  const importXlsxRef = useRef<HTMLInputElement>(null);
+
+  const handleImportXlsx = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportingXlsx(true);
+    setXlsxResult(null);
+    setXlsxError(null);
+    try {
+      const res = await classesApi.importXlsx(file);
+      setXlsxResult(res.data);
+      load();
+    } catch (err: any) {
+      setXlsxError(err?.response?.data?.detail ?? "Erreur lors de l'import Excel.");
+    } finally {
+      setImportingXlsx(false);
+      if (importXlsxRef.current) importXlsxRef.current.value = "";
+    }
+  };
 
   const load = () => {
     classesApi.list({ limit: 500 }).then(r => setClasses(r.data.items ?? [])).catch(() => {});
@@ -118,13 +140,29 @@ export default function ClassesPage() {
               : `${classes.length} classe${classes.length !== 1 ? "s" : ""} au total · Page ${page}/${Math.ceil(filtered.length / PAGE_SIZE) || 1}`}
           </p>
         </div>
-        <button
-          onClick={() => { setForm(EMPTY_FORM); setSaveError(null); setModal("create"); }}
-          className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-          Ajouter une classe
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => importXlsxRef.current?.click()}
+            disabled={importingXlsx}
+            title="Importer les classes depuis un fichier Excel liste-élèves (colonnes SCHOOL, NIVEAU, Classe)"
+            className="flex items-center gap-2 bg-success-soft border border-success/30 hover:bg-success/10 text-success px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            {importingXlsx ? "Import…" : "Importer Excel"}
+          </button>
+          <input ref={importXlsxRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImportXlsx} />
+          <button
+            onClick={() => { setForm(EMPTY_FORM); setSaveError(null); setModal("create"); }}
+            className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+            Ajouter une classe
+          </button>
+        </div>
       </div>
 
       {/* ── Filtres ── */}
@@ -368,6 +406,43 @@ export default function ClassesPage() {
                 {loading ? "Suppression…" : "Supprimer"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modale résultat import Excel ── */}
+      {(xlsxResult || xlsxError) && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => { setXlsxResult(null); setXlsxError(null); }}>
+          <div className="bg-surface rounded-2xl shadow-xl p-7 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-tx mb-4">Import Excel — Résultat</h2>
+            {xlsxError ? (
+              <p className="text-danger text-sm mb-5">{xlsxError}</p>
+            ) : xlsxResult && (
+              <>
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  <div className="bg-success-soft rounded-xl p-3 text-center">
+                    <p className="text-2xl font-bold text-success">{xlsxResult.imported}</p>
+                    <p className="text-[11px] text-tx-muted mt-1">Classe(s) créée(s)</p>
+                  </div>
+                  <div className="bg-surface-alt rounded-xl p-3 text-center">
+                    <p className="text-2xl font-bold text-tx-muted">{xlsxResult.skipped}</p>
+                    <p className="text-[11px] text-tx-muted mt-1">Existante(s)</p>
+                  </div>
+                  <div className="bg-warn-soft rounded-xl p-3 text-center">
+                    <p className="text-2xl font-bold text-warn">{xlsxResult.schools_created}</p>
+                    <p className="text-[11px] text-tx-muted mt-1">École(s) créée(s)</p>
+                  </div>
+                </div>
+                {xlsxResult.errors?.length > 0 && (
+                  <div className="bg-danger-soft rounded-xl p-3 mb-4 text-xs text-danger max-h-28 overflow-y-auto">
+                    {xlsxResult.errors.map((e, i) => <p key={i}>{e}</p>)}
+                  </div>
+                )}
+              </>
+            )}
+            <button onClick={() => { setXlsxResult(null); setXlsxError(null); }} className="w-full bg-brand hover:bg-brand-dark text-white py-2.5 rounded-xl text-sm font-semibold transition-colors">
+              Fermer
+            </button>
           </div>
         </div>
       )}

@@ -53,6 +53,8 @@ export default function TeachersPage() {
   const [phoneError, setPhoneError] = useState("");
   const [search, setSearch] = useState("");
   const [filterSchool, setFilterSchool] = useState("");
+  const [filterIef,    setFilterIef]    = useState("");
+  const [filterClasse, setFilterClasse] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [exporting, setExporting] = useState(false);
   const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -65,19 +67,26 @@ export default function TeachersPage() {
   const importXlsxRef = useRef<HTMLInputElement>(null);
 
   const load = () => {
-    teachersApi.list().then(r => setTeachers(r.data.items ?? [])).catch(() => { });
+    // limit=10000 pour charger tous les enseignants sans pagination
+    teachersApi.list({ limit: 10000 } as any).then(r => setTeachers(r.data.items ?? [])).catch(() => { });
     schoolsApi.list().then(r => setSchools(r.data.items ?? [])).catch(() => { });
   };
   useEffect(() => { load(); }, []);
-  useEffect(() => { setPage(1); }, [search, filterSchool, filterStatus]);
+  useEffect(() => { setPage(1); }, [search, filterSchool, filterIef, filterClasse, filterStatus]);
 
-  const hasFilters = !!(search || filterSchool || filterStatus);
+  // Valeurs uniques pour les filtres IEF et Classe
+  const allIefs    = Array.from(new Set(teachers.map(t => t.school?.region).filter(Boolean))).sort() as string[];
+  const allClasses = Array.from(new Set(teachers.flatMap(t => t.classes ?? []))).sort();
+
+  const hasFilters = !!(search || filterSchool || filterIef || filterClasse || filterStatus);
   const filtered = teachers.filter(t => {
     const matchSearch = !search.trim() || t.name.toLowerCase().includes(search.toLowerCase()) ||
       t.email?.toLowerCase().includes(search.toLowerCase()) || t.phone?.includes(search);
-    const matchSchool = !filterSchool || t.school_id === filterSchool;
-    const matchStatus = !filterStatus || t.status === filterStatus;
-    return matchSearch && matchSchool && matchStatus;
+    const matchSchool  = !filterSchool  || t.school_id === filterSchool || t.school?.id === filterSchool;
+    const matchIef     = !filterIef     || t.school?.region === filterIef;
+    const matchClasse  = !filterClasse  || (t.classes ?? []).includes(filterClasse);
+    const matchStatus  = !filterStatus  || t.status === filterStatus;
+    return matchSearch && matchSchool && matchIef && matchClasse && matchStatus;
   });
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -193,8 +202,8 @@ export default function TeachersPage() {
           <h1 className="text-xl font-bold text-tx">Gestion Enseignants</h1>
           <p className="text-tx-muted text-sm mt-0.5">
             {hasFilters
-              ? `${filtered.length} résultat${filtered.length !== 1 ? "s" : ""} sur ${teachers.length} enseignant${teachers.length !== 1 ? "s" : ""} · Page ${page}/${Math.ceil(filtered.length / PAGE_SIZE) || 1}`
-              : `${teachers.length} enseignant${teachers.length !== 1 ? "s" : ""} au total · Page ${page}/${Math.ceil(filtered.length / PAGE_SIZE) || 1}`}
+              ? `${filtered.length} résultat${filtered.length !== 1 ? "s" : ""} sur ${teachers.length} enseignant${teachers.length !== 1 ? "s" : ""}`
+              : `${teachers.length} enseignant${teachers.length !== 1 ? "s" : ""} au total`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -264,9 +273,9 @@ export default function TeachersPage() {
       </div>
 
       {/* Barre de recherche + filtres */}
-      <div className="flex gap-3 mb-5">
+      <div className="flex gap-3 mb-5 flex-wrap">
         {/* Recherche */}
-        <div className="relative flex-1">
+        <div className="relative flex-1 min-w-[220px]">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
             className="absolute left-3.5 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
             <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.35-4.35" />
@@ -281,46 +290,54 @@ export default function TeachersPage() {
           )}
         </div>
 
+        {/* Filtre IEF */}
+        <div className="relative">
+          <select value={filterIef} onChange={e => setFilterIef(e.target.value)}
+            className={`pl-4 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[150px] ${filterIef ? "border-brand text-brand font-medium" : "border-border text-tx"}`}>
+            <option value="">Toutes les IEF</option>
+            {allIefs.map(ief => <option key={ief} value={ief}>{ief}</option>)}
+          </select>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none"><path d="M6 9l6 6 6-6" /></svg>
+        </div>
+
         {/* Filtre École */}
         <div className="relative">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <path d="M3 9l9-5 9 5-9 5-9-5z" /><path d="M5 10v6c0 2 3 4 7 4s7-2 7-4v-6" />
-          </svg>
           <select value={filterSchool} onChange={e => setFilterSchool(e.target.value)}
-            className={`pl-8 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[170px] ${filterSchool ? "border-brand text-brand font-medium" : "border-border text-tx"
-              }`}>
+            className={`pl-4 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[160px] ${filterSchool ? "border-brand text-brand font-medium" : "border-border text-tx"}`}>
             <option value="">Toutes les écoles</option>
             {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <path d="M6 9l6 6 6-6" />
-          </svg>
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none"><path d="M6 9l6 6 6-6" /></svg>
+        </div>
+
+        {/* Filtre Classe */}
+        <div className="relative">
+          <select value={filterClasse} onChange={e => setFilterClasse(e.target.value)}
+            className={`pl-4 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[130px] ${filterClasse ? "border-brand text-brand font-medium" : "border-border text-tx"}`}>
+            <option value="">Toutes les classes</option>
+            {allClasses.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none"><path d="M6 9l6 6 6-6" /></svg>
         </div>
 
         {/* Filtre Statut */}
         <div className="relative">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <circle cx="12" cy="12" r="10" /><path d="M12 8v4l3 3" />
-          </svg>
           <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-            className={`pl-8 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[140px] ${filterStatus ? "border-brand text-brand font-medium" : "border-border text-tx"
-              }`}>
+            className={`pl-4 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[130px] ${filterStatus ? "border-brand text-brand font-medium" : "border-border text-tx"}`}>
             <option value="">Tous les statuts</option>
             <option value="actif">Actif</option>
             <option value="inactif">Inactif</option>
           </select>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <path d="M6 9l6 6 6-6" />
-          </svg>
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none"><path d="M6 9l6 6 6-6" /></svg>
         </div>
 
         {/* Reset */}
         {hasFilters && (
-          <button onClick={() => { setSearch(""); setFilterSchool(""); setFilterStatus(""); }}
+          <button onClick={() => { setSearch(""); setFilterSchool(""); setFilterIef(""); setFilterClasse(""); setFilterStatus(""); }}
             className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-brand/30 bg-brand-soft text-brand text-sm font-medium hover:bg-brand hover:text-white transition-colors">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
             Réinitialiser

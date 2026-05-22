@@ -110,6 +110,11 @@ export const schoolsApi = {
     fd.append("file", file);
     return api.post("/admin/schools/import/csv", fd, { headers: { "Content-Type": "multipart/form-data" } });
   },
+  importXlsx: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post("/admin/schools/import/xlsx", fd, { headers: { "Content-Type": "multipart/form-data" } });
+  },
 };
 
 export const planningApi = {
@@ -223,6 +228,12 @@ export const elevesApi = {
     fd.append("file", file);
     return api.post("/admin/eleves/import/csv", fd, { headers: { "Content-Type": "multipart/form-data" } });
   },
+  // Import Excel avec liaison école (format liste-élèves ARED)
+  importXlsx: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post("/admin/eleves/import/xlsx", fd, { headers: { "Content-Type": "multipart/form-data" } });
+  },
 };
 
 export const classesApi = {
@@ -231,6 +242,11 @@ export const classesApi = {
   create: (d: unknown)    => api.post("/admin/classes", d),
   update: (id: string, d: unknown) => api.patch(`/admin/classes/${id}`, d),
   delete: (id: string)    => api.delete(`/admin/classes/${id}`),
+  importXlsx: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post("/admin/classes/import/xlsx", fd, { headers: { "Content-Type": "multipart/form-data" } });
+  },
 };
 
 export const ressourcesApi = {

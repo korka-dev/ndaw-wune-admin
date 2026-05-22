@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import {
   sessionsApi, teachersApi, schoolsApi, rapportsApi, planningApi,
-  suiviApi, suiviSuperviseurApi, superviseursApi,
+  suiviApi, suiviSuperviseurApi, superviseursApi, elevesApi,
 } from "@/lib/api";
 
 /* ── Types ── */
@@ -11,11 +11,12 @@ interface Stats {
   /* Entités */
   schools:        number;
   schoolRegions:  number;
-  teachers:       number;
+  teachers:       number;   // count réel (total depuis API)
   superviseurs:   number;
   sessionsTotal:  number;
   activeSession:  { name: string; dateDebut: string; dateFin: string } | null;
-  students:       number;
+  students:       number;   // count réel des élèves (total depuis API)
+  eleves:         number;   // alias clair
 
   /* Présence enseignants (suivi temps réel) */
   teachersEnCours: number;
@@ -206,15 +207,16 @@ export default function DashboardHome() {
 
   useEffect(() => {
     Promise.allSettled([
-      sessionsApi.list(),           // 0
-      teachersApi.list(),           // 1
-      schoolsApi.list(),            // 2
-      rapportsApi.list({ limit: 500 }), // 3
-      planningApi.list(),           // 4
-      suiviApi.list(),              // 5 — présence enseignants
-      suiviSuperviseurApi.list(),   // 6 — couverture superviseurs
-      superviseursApi.list(),       // 7 — liste superviseurs
-    ]).then(([sr, tr, scr, rr, pr, suiviR, supSuiviR, supervR]) => {
+      sessionsApi.list(),                    // 0
+      teachersApi.list({ limit: 10000 } as any), // 1 — tous les enseignants
+      schoolsApi.list(),                     // 2
+      rapportsApi.list({ limit: 500 }),      // 3
+      planningApi.list(),                    // 4
+      suiviApi.list(),                       // 5 — présence enseignants
+      suiviSuperviseurApi.list(),            // 6 — couverture superviseurs
+      superviseursApi.list(),                // 7 — liste superviseurs
+      elevesApi.list({ limit: 1 }),          // 8 — juste pour le total
+    ]).then(([sr, tr, scr, rr, pr, suiviR, supSuiviR, supervR, eleveR]) => {
       const sessions    = sr.status==="fulfilled"       ? (sr.value.data.items ?? sr.value.data ?? [])          : [];
       const teachers    = tr.status==="fulfilled"       ? (tr.value.data.items ?? tr.value.data ?? [])          : [];
       const schools     = scr.status==="fulfilled"      ? (scr.value.data.items ?? scr.value.data ?? [])        : [];
@@ -223,10 +225,12 @@ export default function DashboardHome() {
       const suiviItems  = suiviR.status==="fulfilled"   ? (suiviR.value.data.items ?? suiviR.value.data ?? [])  : [];
       const supSuivi    = supSuiviR.status==="fulfilled"? (supSuiviR.value.data.items ?? supSuiviR.value.data ?? []) : [];
       const superviseurs= supervR.status==="fulfilled"  ? (supervR.value.data.items ?? supervR.value.data ?? []) : [];
+      // Vrais totaux depuis le champ `total` de la réponse paginée
+      const elevesTotal   = eleveR.status==="fulfilled"  ? (eleveR.value.data.total   ?? 0) : 0;
+      const teachersTotal = tr.status==="fulfilled"      ? (tr.value.data.total       ?? teachers.length) : teachers.length;
 
       /* ── Entités de base ── */
       const active      = sessions.find((s:any) => s.status==="active");
-      const students    = schools.reduce((a:number,s:any) => a + (s.students ?? 0), 0);
       const regionSet   = new Set(schools.map((s:any) => s.region).filter(Boolean));
 
       /* ── Présence enseignants (depuis suiviApi) ── */
@@ -269,8 +273,8 @@ export default function DashboardHome() {
       /* ── Chart : enseignants par école ── */
       const schoolMap = new Map<string,number>();
       teachers.forEach((t:any) => {
-        const school = schools.find((s:any) => s.id === t.school_id);
-        const key = school?.name ?? "Sans école";
+        // Utiliser school.name directement (joint) ou fallback sur lookup
+        const key = t.school?.name ?? schools.find((s:any) => s.id === t.school_id)?.name ?? "Sans école";
         schoolMap.set(key, (schoolMap.get(key) ?? 0) + 1);
       });
       const teachersBySchool = Array.from(schoolMap)
@@ -303,11 +307,12 @@ export default function DashboardHome() {
 
       setStats({
         schools: schools.length, schoolRegions: regionSet.size,
-        teachers: teachers.filter((t:any) => t.status==="actif").length || teachers.length,
+        teachers: teachersTotal,
         superviseurs: superviseurs.length,
         sessionsTotal: sessions.length,
         activeSession: active ? { name:active.name, dateDebut:active.date_debut, dateFin:active.date_fin } : null,
-        students,
+        students:  elevesTotal,
+        eleves:    elevesTotal,
         teachersEnCours, teachersPresents, teachersAbsents,
         rapportsTotal, seancesTotal,
         seancesByMonth,
@@ -366,20 +371,27 @@ export default function DashboardHome() {
         {/* ══ Section 1 : Entités ══ */}
         <div>
           <SectionTitle>Structure du programme</SectionTitle>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
             <StatCard
-              label="Écoles"
-              value={loading?"—":s.schools}
-              sub={`${s.schoolRegions ?? "—"} région(s)`}
-              iconBg="bg-success-soft" iconColor="#2F7D4A"
-              icon='<path d="M3 9l9-5 9 5-9 5-9-5z"/><path d="M5 10v6c0 2 3 4 7 4s7-2 7-4v-6"/>'
+              label="Élèves"
+              value={loading?"—":(s.eleves??0).toLocaleString("fr-FR")}
+              sub="inscrits au programme"
+              iconBg="bg-warn-soft" iconColor="#C68B1A"
+              icon='<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>'
             />
             <StatCard
               label="Enseignants"
-              value={loading?"—":s.teachers}
-              sub="actifs"
+              value={loading?"—":(s.teachers??0).toLocaleString("fr-FR")}
+              sub="enregistrés"
               iconBg="bg-primary-soft" iconColor="#4A90C2"
               icon='<circle cx="9" cy="8" r="3.5"/><path d="M2 21c0-4 3.5-6 7-6s7 2 7 6"/><circle cx="17" cy="9" r="2.5"/><path d="M22 19c0-2.8-2-4.5-5-4.5"/>'
+            />
+            <StatCard
+              label="Écoles"
+              value={loading?"—":s.schools}
+              sub={`${s.schoolRegions??"—"} IEF`}
+              iconBg="bg-success-soft" iconColor="#2F7D4A"
+              icon='<path d="M3 9l9-5 9 5-9 5-9-5z"/><path d="M5 10v6c0 2 3 4 7 4s7-2 7-4v-6"/>'
             />
             <StatCard
               label="Superviseurs"
@@ -391,9 +403,16 @@ export default function DashboardHome() {
             <StatCard
               label="Sessions"
               value={loading?"—":s.sessionsTotal}
-              sub={s.activeSession ? `« ${s.activeSession.name} » active` : "Aucune session active"}
-              iconBg="bg-warn-soft" iconColor="#C68B1A"
+              sub={s.activeSession ? `« ${s.activeSession.name} »` : "Aucune active"}
+              iconBg="bg-brand-soft" iconColor="#4A90C2"
               icon='<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>'
+            />
+            <StatCard
+              label="Rapports"
+              value={loading?"—":s.rapportsTotal}
+              sub="soumis"
+              iconBg="bg-success-soft" iconColor="#2F7D4A"
+              icon='<path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>'
             />
           </div>
         </div>

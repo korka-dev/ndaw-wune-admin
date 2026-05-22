@@ -35,9 +35,12 @@ export default function EcolesPage() {
   const [filterRegion, setFilterRegion] = useState("");
   const [filterCity,   setFilterCity]   = useState("");
   const [page,         setPage]         = useState(1);
-  const [exporting,    setExporting]    = useState(false);
-  const [importMsg,    setImportMsg]    = useState<{ ok: boolean; text: string } | null>(null);
-  const importRef = useRef<HTMLInputElement>(null);
+  const [exporting,      setExporting]      = useState(false);
+  const [importMsg,      setImportMsg]      = useState<{ ok: boolean; text: string } | null>(null);
+  const [importingXlsx,  setImportingXlsx]  = useState(false);
+  const [xlsxResult,     setXlsxResult]     = useState<{ imported: number; skipped: number } | null>(null);
+  const importRef     = useRef<HTMLInputElement>(null);
+  const importXlsxRef = useRef<HTMLInputElement>(null);
 
   const load = () =>
     schoolsApi.list()
@@ -99,6 +102,23 @@ export default function EcolesPage() {
       setImportMsg({ ok: false, text: err?.response?.data?.detail ?? "Erreur lors de l'import." });
     } finally {
       if (importRef.current) importRef.current.value = "";
+    }
+  };
+
+  const handleImportXlsx = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportingXlsx(true);
+    setXlsxResult(null);
+    try {
+      const res = await schoolsApi.importXlsx(file);
+      setXlsxResult({ imported: res.data.imported ?? 0, skipped: res.data.skipped ?? 0 });
+      load();
+    } catch (err: any) {
+      setImportMsg({ ok: false, text: err?.response?.data?.detail ?? "Erreur lors de l'import Excel." });
+    } finally {
+      setImportingXlsx(false);
+      if (importXlsxRef.current) importXlsxRef.current.value = "";
     }
   };
 
@@ -171,6 +191,21 @@ export default function EcolesPage() {
             </svg>
             {exporting ? "Export…" : "Exporter CSV"}
           </button>
+          {/* Importer Excel */}
+          <button
+            onClick={() => importXlsxRef.current?.click()}
+            disabled={importingXlsx}
+            title="Importer les écoles depuis un fichier Excel liste-élèves (colonnes SCHOOL, IEF, COMMUNE)"
+            className="flex items-center gap-2 bg-success-soft border border-success/30 hover:bg-success/10 text-success px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            {importingXlsx ? "Import…" : "Importer Excel"}
+          </button>
+          <input ref={importXlsxRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImportXlsx} />
           {/* Importer CSV */}
           <div className="relative">
             <button
@@ -525,6 +560,28 @@ export default function EcolesPage() {
                 {loading ? "Enregistrement…" : "Enregistrer"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modale résultat import Excel ── */}
+      {xlsxResult && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setXlsxResult(null)}>
+          <div className="bg-surface rounded-2xl shadow-xl p-7 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-tx mb-4">Import Excel — Résultat</h2>
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              <div className="bg-success-soft rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-success">{xlsxResult.imported}</p>
+                <p className="text-xs text-tx-muted mt-1">École(s) créée(s)</p>
+              </div>
+              <div className="bg-surface-alt rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-tx-muted">{xlsxResult.skipped}</p>
+                <p className="text-xs text-tx-muted mt-1">Déjà existante(s)</p>
+              </div>
+            </div>
+            <button onClick={() => setXlsxResult(null)} className="w-full bg-brand hover:bg-brand-dark text-white py-2.5 rounded-xl text-sm font-semibold transition-colors">
+              Fermer
+            </button>
           </div>
         </div>
       )}

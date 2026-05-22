@@ -331,7 +331,9 @@ export default function ElevesPage() {
     setImportError(null);
     setImportResult(null);
     try {
-      const res = await elevesApi.import(file);
+      // Pour les fichiers Excel, utiliser l'endpoint avec liaison école (SCHOOL → school_id)
+      const isXlsx = /\.(xlsx|xls)$/i.test(file.name);
+      const res = isXlsx ? await elevesApi.importXlsx(file) : await elevesApi.import(file);
       setImportResult(res.data);
       load();
     } catch (err: any) {
