@@ -68,7 +68,7 @@ export default function RapportsPage() {
             {items.length===0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400">Aucun rapport</td></tr>}
           </tbody>
         </table>
-        <div className="px-5 pb-4">
+        <div className="border-t border-border px-5">
           <Pagination page={page} total={items.length} pageSize={PAGE_SIZE} onChange={setPage} />
         </div>
       </div>

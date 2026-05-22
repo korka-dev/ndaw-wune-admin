@@ -7,6 +7,9 @@ module.exports = {
   ],
   theme: {
     extend: {
+      spacing: {
+        '4.5': '1.125rem', // 18px — utilisé pour les checkboxes (w-4.5 h-4.5)
+      },
       colors: {
         bg:       "#FAF7F1",
         surface:  "#FFFFFF",

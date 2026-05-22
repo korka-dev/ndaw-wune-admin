@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from "react";
 import { elevesApi, schoolsApi, sessionsApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
-import ImportResultModal from "./ImportResultModal";
 
 const PAGE_SIZE = 50;
 
@@ -20,8 +19,8 @@ interface Eleve {
   school_name?: string;    // nom école (joint depuis le backend)
   school_region?: string;  // IEF / région (joint depuis le backend)
 }
-interface School   { id: string; name: string; }
-interface Session  { id: string; name: string; status: string; }
+interface School { id: string; name: string; }
+interface Session { id: string; name: string; status: string; }
 
 const ELEVE_CLASSES = ["CP", "CE1", "CE2", "CM1", "CM2"];
 
@@ -34,10 +33,22 @@ type FormType = typeof EMPTY_FORM;
 type ModalState =
   | null
   | "create"
-  | { kind: "view";        eleve: Eleve }
-  | { kind: "edit";        eleve: Eleve }
-  | { kind: "delete";      eleve: Eleve }
-  | { kind: "bulkDelete";  count: number };
+  | { kind: "view"; eleve: Eleve }
+  | { kind: "edit"; eleve: Eleve }
+  | { kind: "delete"; eleve: Eleve }
+  | { kind: "bulkDelete"; count: number };
+
+function cleanNamePart(text: string | undefined | null): string {
+  if (!text) return "";
+  // 1. Remove markers like N1, N2, N°1, NO1, N•2, N*2, etc. (case insensitive)
+  let cleaned = text.replace(/\b(N[oO°•*]?\s*\d+|NUMERO|\d+)\b/gi, "");
+  // 2. Clean trailing digits inside words (e.g., NGOM2 -> NGOM, SOW1 -> SOW)
+  cleaned = cleaned.replace(/([A-Za-zÀ-ÿ]+)\d+/gi, "$1");
+  // 3. Clean trailing letters like N, N* (case insensitive) if they are leftovers
+  cleaned = cleaned.replace(/\b(N[*•°]?)\b/gi, "");
+  // 4. Remove multiple spaces and trim
+  return cleaned.replace(/\s+/g, " ").trim();
+}
 
 // ── FormFields défini EN DEHORS du composant pour éviter le bug de curseur ──
 function EleveFormFields({
@@ -144,40 +155,45 @@ function EleveFormFields({
 }
 
 export default function ElevesPage() {
-  const [eleves,   setEleves]   = useState<Eleve[]>([]);
-  const [schools,  setSchools]  = useState<School[]>([]);
+  const [eleves, setEleves] = useState<Eleve[]>([]);
+  const [schools, setSchools] = useState<School[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [modal,    setModal]    = useState<ModalState>(null);
-  const [form,     setForm]     = useState<FormType>(EMPTY_FORM);
-  const [loading,   setLoading]   = useState(false);
+  const [modal, setModal] = useState<ModalState>(null);
+  const [form, setForm] = useState<FormType>(EMPTY_FORM);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [exporting, setExporting]   = useState(false);
-  const [exportingXlsx, setExportingXlsx] = useState(false);
-  const [importing, setImporting]   = useState(false);
-  const [showImportMenu, setShowImportMenu] = useState(false);
-  const [importResult, setImportResult] = useState<{
-    format: string; imported: number; skipped: number; errors: string[];
-  } | null>(null);
-  const [importError, setImportError] = useState<string | null>(null);
-  const [search,        setSearch]        = useState("");
-  const [filterSchool,  setFilterSchool]  = useState("");
-  const [filterClasse,  setFilterClasse]  = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [search, setSearch] = useState("");
+  const [filterSchool, setFilterSchool] = useState("");
+  const [filterClasse, setFilterClasse] = useState("");
   const [filterSession, setFilterSession] = useState("");
-  const [filterSexe,    setFilterSexe]    = useState("");
+  const [filterSexe, setFilterSexe] = useState("");
   const [page, setPage] = useState(1);
-  const importRef = useRef<HTMLInputElement>(null);
 
   // ── Sélection multiple ────────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [selectAll,   setSelectAll]   = useState(false); // "tout filtré" sélectionné
+  const [selectAll, setSelectAll] = useState(false); // "tout filtré" sélectionné
 
-  const load = () => {
-    // limit=10000 pour charger tous les élèves (parcours liste complète)
-    elevesApi.list({ limit: 10000 }).then(r => setEleves(r.data.items ?? [])).catch(() => {});
-    schoolsApi.list({ limit: 10000 }).then(r => setSchools(r.data.items ?? [])).catch(() => {});
-    sessionsApi.list().then(r => setSessions(r.data.items ?? [])).catch(() => {});
+  const load = (isFirstLoad = false) => {
+    if (isFirstLoad) { setDataLoading(true); setDataError(null); }
+    Promise.all([
+      elevesApi.list({ limit: 10000 }),
+      schoolsApi.list({ limit: 10000 }),
+      sessionsApi.list(),
+    ]).then(([er, sr, sesr]) => {
+      setEleves(er.data.items ?? []);
+      setSchools(sr.data.items ?? []);
+      setSessions(sesr.data.items ?? []);
+      setDataError(null);
+    }).catch(() => {
+      setDataError("Impossible de charger les données. Vérifiez votre connexion.");
+    }).finally(() => {
+      if (isFirstLoad) setDataLoading(false);
+    });
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(true); }, []);
   useEffect(() => { setPage(1); }, [search, filterSchool, filterClasse, filterSession, filterSexe]);
   // Réinitialiser la sélection quand les filtres changent
   useEffect(() => { setSelectedIds(new Set()); setSelectAll(false); }, [search, filterSchool, filterClasse, filterSession, filterSexe]);
@@ -185,21 +201,23 @@ export default function ElevesPage() {
   const hasFilters = !!(search || filterSchool || filterClasse || filterSession || filterSexe);
 
   const filtered = eleves.filter(e => {
-    const fullName = `${e.nom} ${e.prenom ?? ""}`.toLowerCase();
-    const matchSearch  = !search.trim() || fullName.includes(search.toLowerCase());
-    const matchSchool  = !filterSchool  || e.school_id === filterSchool;
-    const matchClasse  = !filterClasse  || e.classe === filterClasse;
+    const cleanNom = cleanNamePart(e.nom);
+    const cleanPrenom = cleanNamePart(e.prenom);
+    const fName = `${cleanNom} ${cleanPrenom}`.toLowerCase();
+    const matchSearch = !search.trim() || fName.includes(search.toLowerCase());
+    const matchSchool = !filterSchool || e.school_id === filterSchool;
+    const matchClasse = !filterClasse || e.classe === filterClasse;
     const matchSession = !filterSession || e.session_id === filterSession;
-    const matchSexe    = !filterSexe    || e.genre === filterSexe;
+    const matchSexe = !filterSexe || e.genre === filterSexe;
     return matchSearch && matchSchool && matchClasse && matchSession && matchSexe;
   });
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   // ── Helpers de sélection ──────────────────────────────────────────────────
-  const pageIds      = paginated.map(e => e.id);
-  const allPageSel   = pageIds.length > 0 && pageIds.every(id => selectedIds.has(id));
-  const somePageSel  = pageIds.some(id => selectedIds.has(id));
-  const selCount     = selectAll ? filtered.length : selectedIds.size;
+  const pageIds = paginated.map(e => e.id);
+  const allPageSel = pageIds.length > 0 && pageIds.every(id => selectedIds.has(id));
+  const somePageSel = pageIds.some(id => selectedIds.has(id));
+  const selCount = selectAll ? filtered.length : selectedIds.size;
 
   const toggleOne = (id: string) => {
     setSelectAll(false);
@@ -241,15 +259,15 @@ export default function ElevesPage() {
 
   // ── CRUD ──────────────────────────────────────────────────────────────────
   const openCreate = () => { setForm(EMPTY_FORM); setSaveError(null); setModal("create"); };
-  const openEdit   = (eleve: Eleve) => {
+  const openEdit = (eleve: Eleve) => {
     setForm({
-      nom:            eleve.nom ?? "",
-      prenom:         eleve.prenom ?? "",
-      genre:          eleve.genre ?? "",
+      nom: cleanNamePart(eleve.nom) || (eleve.nom ?? ""),
+      prenom: cleanNamePart(eleve.prenom) || (eleve.prenom ?? ""),
+      genre: eleve.genre ?? "",
       date_naissance: eleve.date_naissance ?? "",
-      classe:         eleve.classe ?? "",
-      school_id:      eleve.school_id ?? "",
-      session_id:     eleve.session_id ?? "",
+      classe: eleve.classe ?? "",
+      school_id: eleve.school_id ?? "",
+      session_id: eleve.session_id ?? "",
     });
     setSaveError(null);
     setModal({ kind: "edit", eleve });
@@ -257,7 +275,7 @@ export default function ElevesPage() {
 
   const save = async () => {
     if (!form.nom.trim()) { setSaveError("Le nom est requis."); return; }
-    if (!form.classe)     { setSaveError("La classe est requise."); return; }
+    if (!form.classe) { setSaveError("La classe est requise."); return; }
     setSaveError(null);
     setLoading(true);
     try {
@@ -266,7 +284,7 @@ export default function ElevesPage() {
       } else if (modal && typeof modal === "object" && modal.kind === "edit") {
         await elevesApi.update(modal.eleve.id, form);
       }
-      load();
+      load(false);
       setModal(null);
     } catch (err: any) {
       const detail = err?.response?.data?.detail;
@@ -282,7 +300,7 @@ export default function ElevesPage() {
 
   const doDelete = async (eleve: Eleve) => {
     setLoading(true);
-    try { await elevesApi.delete(eleve.id); load(); setModal(null); }
+    try { await elevesApi.delete(eleve.id); load(false); setModal(null); }
     finally { setLoading(false); }
   };
 
@@ -292,64 +310,35 @@ export default function ElevesPage() {
       const ids = selectAll ? filtered.map(e => e.id) : Array.from(selectedIds);
       await elevesApi.bulkDelete(ids);
       clearSelection();
-      load();
+      load(false);
       setModal(null);
     } catch { /* silencieux */ }
     finally { setLoading(false); }
   };
 
-  // ── Export / Import ───────────────────────────────────────────────────────
-  const handleExportCsv = async () => {
-    setExporting(true);
-    try {
-      const res = await elevesApi.exportCsv();
-      downloadBlob(res.data, "eleves.csv");
-    } catch { /* silencieux */ }
-    finally { setExporting(false); }
-  };
-
+  // ── Export ─────────────────────────────────────────────────────────────────
   const handleExportXlsx = async () => {
-    setExportingXlsx(true);
+    setExporting(true);
     try {
       const res = await elevesApi.exportXlsx();
       downloadBlob(res.data, "eleves.xlsx");
     } catch { /* silencieux */ }
-    finally { setExportingXlsx(false); }
+    finally { setExporting(false); }
   };
 
-  const handleDownloadTemplate = async (fmt: "csv" | "xlsx") => {
-    try {
-      const res = fmt === "csv" ? await elevesApi.templateCsv() : await elevesApi.templateXlsx();
-      downloadBlob(res.data, `modele_eleves.${fmt}`);
-    } catch { /* silencieux */ }
-  };
-
-  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImporting(true);
-    setImportError(null);
-    setImportResult(null);
-    try {
-      // Pour les fichiers Excel, utiliser l'endpoint avec liaison école (SCHOOL → school_id)
-      const isXlsx = /\.(xlsx|xls)$/i.test(file.name);
-      const res = isXlsx ? await elevesApi.importXlsx(file) : await elevesApi.import(file);
-      setImportResult(res.data);
-      load();
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail;
-      setImportError(typeof detail === "string" ? detail : "Erreur lors de l'import.");
-    } finally {
-      setImporting(false);
-      if (importRef.current) importRef.current.value = "";
-    }
-  };
-
-  const schoolName  = (id?: string) => schools.find(s => s.id === id)?.name ?? "—";
+  const schoolName = (id?: string) => schools.find(s => s.id === id)?.name ?? "—";
   const sessionName = (id?: string) => sessions.find(s => s.id === id)?.name ?? "—";
-  const sexeIcon    = (g?: string)  => g === "Garçon" ? "G" : g === "Fille" ? "F" : "—";
-  const fullName    = (e: Eleve)    => [e.nom, e.prenom].filter(Boolean).join(" ");
-  const initials    = (e: Eleve)    => [e.nom?.[0], e.prenom?.[0]].filter(Boolean).join("").toUpperCase() || "?";
+  const sexeIcon = (g?: string) => g === "Garçon" ? "G" : g === "Fille" ? "F" : "—";
+  const fullName = (e: Eleve) => {
+    const cNom = cleanNamePart(e.nom);
+    const cPrenom = cleanNamePart(e.prenom);
+    return [cNom, cPrenom].filter(Boolean).join(" ");
+  };
+  const initials = (e: Eleve) => {
+    const cNom = cleanNamePart(e.nom);
+    const cPrenom = cleanNamePart(e.prenom);
+    return [cNom?.[0], cPrenom?.[0]].filter(Boolean).join("").toUpperCase() || "?";
+  };
 
   return (
     <div className="flex flex-col h-full px-7 pb-7">
@@ -364,102 +353,15 @@ export default function ElevesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Input fichier caché — tous formats */}
-          <input
-            ref={importRef}
-            type="file"
-            accept=".csv,.xlsx,.xls,.pdf"
-            className="hidden"
-            onChange={handleImport}
-          />
-
-          {/* ── Import dropdown ── */}
-          <div className="relative">
-            <button
-              onClick={() => setShowImportMenu(v => !v)}
-              disabled={importing}
-              className="flex items-center gap-2 border border-border bg-surface text-tx px-3.5 py-2.5 rounded-xl text-sm font-medium hover:bg-surface-alt transition-colors disabled:opacity-60"
-            >
-              {importing ? (
-                <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity=".3"/><path d="M12 2a10 10 0 0110 10"/></svg>
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              )}
-              {importing ? "Import…" : "Importer"}
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 9l6 6 6-6"/></svg>
-            </button>
-
-            {showImportMenu && (
-              <div
-                className="absolute right-0 mt-1.5 w-64 bg-surface border border-border rounded-xl shadow-lg z-20 py-1.5 text-sm"
-                onMouseLeave={() => setShowImportMenu(false)}
-              >
-                <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-tx-muted/60">Importer depuis</div>
-                {[
-                  { label: "Fichier CSV",          ext: ".csv",        icon: "📄" },
-                  { label: "Fichier Excel (.xlsx)", ext: ".xlsx,.xls",  icon: "📊" },
-                  { label: "Fichier PDF",           ext: ".pdf",        icon: "📋" },
-                ].map(f => (
-                  <button
-                    key={f.ext}
-                    onClick={() => {
-                      setShowImportMenu(false);
-                      if (importRef.current) {
-                        importRef.current.accept = f.ext;
-                        importRef.current.click();
-                      }
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-surface-alt transition-colors text-left"
-                  >
-                    <span>{f.icon}</span>
-                    <span className="text-tx">{f.label}</span>
-                  </button>
-                ))}
-                <div className="my-1.5 border-t border-border" />
-                <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-tx-muted/60">Télécharger un modèle</div>
-                <button
-                  onClick={() => { setShowImportMenu(false); handleDownloadTemplate("csv"); }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-surface-alt transition-colors text-left"
-                >
-                  <span>📄</span><span className="text-tx">Modèle CSV</span>
-                </button>
-                <button
-                  onClick={() => { setShowImportMenu(false); handleDownloadTemplate("xlsx"); }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-surface-alt transition-colors text-left"
-                >
-                  <span>📊</span><span className="text-tx">Modèle Excel</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* ── Export dropdown ── */}
-          <div className="relative group">
-            <button
-              disabled={exporting || exportingXlsx}
-              className="flex items-center gap-2 border border-border bg-surface text-tx px-3.5 py-2.5 rounded-xl text-sm font-medium hover:bg-surface-alt transition-colors disabled:opacity-60"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              {exporting || exportingXlsx ? "Export…" : "Exporter"}
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 9l6 6 6-6"/></svg>
-            </button>
-            <div className="hidden group-hover:block absolute right-0 mt-0 w-48 bg-surface border border-border rounded-xl shadow-lg z-20 py-1.5 text-sm">
-              <button
-                onClick={handleExportCsv}
-                disabled={exporting}
-                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-surface-alt transition-colors text-left"
-              >
-                <span>📄</span><span className="text-tx">Exporter en CSV</span>
-              </button>
-              <button
-                onClick={handleExportXlsx}
-                disabled={exportingXlsx}
-                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-surface-alt transition-colors text-left"
-              >
-                <span>📊</span><span className="text-tx">Exporter en Excel</span>
-              </button>
-            </div>
-          </div>
+          {/* Exporter Excel */}
+          <button
+            onClick={handleExportXlsx}
+            disabled={exporting}
+            className="flex items-center gap-2 border border-border bg-surface text-tx px-3.5 py-2.5 rounded-xl text-sm font-semibold hover:bg-surface-alt transition-colors disabled:opacity-60"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+            {exporting ? "Export…" : "Exporter Excel"}
+          </button>
 
           {/* Ajouter */}
           <button
@@ -572,8 +474,8 @@ export default function ElevesPage() {
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-danger text-white text-xs font-semibold hover:bg-danger/90 transition-colors"
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
-              <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
+              <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+              <path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
             </svg>
             Supprimer la sélection
           </button>
@@ -581,42 +483,53 @@ export default function ElevesPage() {
             onClick={clearSelection}
             className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-brand/10 text-brand/60 hover:text-brand transition-colors"
           >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
           </button>
+        </div>
+      )}
+
+      {/* ── Erreur chargement ── */}
+      {dataError && (
+        <div className="mb-4 flex items-center gap-3 px-4 py-3 bg-danger-soft border border-danger/20 rounded-xl text-sm text-danger">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+          <span>{dataError}</span>
+          <button onClick={() => load(true)} className="ml-auto text-xs underline font-medium">Réessayer</button>
         </div>
       )}
 
       {/* ── Tableau ── */}
       <div className="bg-surface rounded-2xl border border-border flex-1 min-h-0 flex flex-col overflow-hidden">
 
-        <div className="overflow-y-auto flex-1">
-          <table className="w-full text-sm table-fixed">
-            <colgroup>
-              <col className="w-[44px]" />  {/* Checkbox */}
-              <col className="w-[22%]" />   {/* Élève */}
-              <col className="w-[8%]" />    {/* Classe */}
-              <col className="w-[22%]" />   {/* École */}
-              <col className="w-[18%]" />   {/* IEF */}
-              <col className="w-[10%]" />   {/* Statut */}
-              <col className="w-[14%]" />   {/* Actions */}
-            </colgroup>
-            <thead className="sticky top-0 z-10">
+        {/* Spinner chargement initial */}
+        {dataLoading && (
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 py-20">
+            <svg className="animate-spin" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" strokeOpacity=".2" />
+              <path d="M12 2a10 10 0 0110 10" stroke="currentColor" />
+            </svg>
+            <span className="text-sm text-tx-muted">Chargement des élèves…</span>
+          </div>
+        )}
+
+        <div className={`overflow-x-auto overflow-y-auto flex-1 ${dataLoading ? "hidden" : ""}`}>
+          <table className="w-full text-sm table-fixed min-w-[1050px]">
+            <colgroup><col className="w-[44px]" /><col className="w-[20%]" /><col className="w-[8%]" /><col className="w-[20%]" /><col className="w-[16%]" /><col className="w-[10%]" /><col className="w-[20%]" /></colgroup>
+            <thead className="sticky top-0 z-10 bg-surface-alt shadow-sm">
               <tr className="border-b border-border bg-surface-alt">
                 {/* Checkbox "tout sélectionner la page" */}
-                <th className="px-3 py-3 text-center">
+                <th className="px-3 py-3 text-center bg-surface-alt sticky top-0 z-10">
                   <button
                     onClick={togglePage}
-                    className={`w-4.5 h-4.5 rounded border-2 flex items-center justify-center mx-auto transition-colors ${
-                      allPageSel
+                    className={`w-4.5 h-4.5 rounded border-2 flex items-center justify-center mx-auto transition-colors ${allPageSel
                         ? "bg-brand border-brand"
                         : somePageSel
                           ? "bg-brand/30 border-brand"
                           : "border-border hover:border-brand/50"
-                    }`}
+                      }`}
                     title={allPageSel ? "Tout désélectionner" : "Sélectionner la page"}
                   >
                     {allPageSel && (
-                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
                     )}
                     {somePageSel && !allPageSel && (
                       <span className="w-2 h-0.5 bg-brand rounded-full block" />
@@ -624,7 +537,7 @@ export default function ElevesPage() {
                   </button>
                 </th>
                 {["Nom / Prénom", "Classe", "École", "IEF", "Statut", "Actions"].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide first:text-center">{h}</th>
+                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide first:text-center bg-surface-alt sticky top-0 z-10">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -632,7 +545,7 @@ export default function ElevesPage() {
               {paginated.map(e => {
                 const isSel = selectedIds.has(e.id);
                 const ecole = e.school_name ?? schoolName(e.school_id);
-                const ief   = e.school_region ?? "—";
+                const ief = e.school_region ?? "—";
                 return (
                   <tr
                     key={e.id}
@@ -642,24 +555,24 @@ export default function ElevesPage() {
                     <td className="px-3 py-3.5 text-center" onClick={ev => ev.stopPropagation()}>
                       <button
                         onClick={() => toggleOne(e.id)}
-                        className={`w-4.5 h-4.5 rounded border-2 flex items-center justify-center mx-auto transition-colors ${
-                          isSel ? "bg-brand border-brand" : "border-border hover:border-brand/50"
-                        }`}
+                        className={`w-4.5 h-4.5 rounded border-2 flex items-center justify-center mx-auto transition-colors ${isSel ? "bg-brand border-brand" : "border-border hover:border-brand/50"
+                          }`}
                       >
                         {isSel && (
-                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
                         )}
                       </button>
                     </td>
 
                     {/* Nom / Prénom */}
                     <td className="px-4 py-3.5 cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-primary-soft text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">{initials(e)}</div>
-                        <div className="min-w-0">
-                          <div className="font-semibold text-tx truncate">{e.nom}</div>
-                          {e.prenom && <div className="text-xs text-tx-muted truncate">{e.prenom}</div>}
+                      <div className="min-w-0">
+                        <div className="font-semibold text-tx truncate">
+                          {cleanNamePart(e.nom) || cleanNamePart(e.prenom) || "—"}
                         </div>
+                        {cleanNamePart(e.nom) && cleanNamePart(e.prenom) && (
+                          <div className="text-xs text-tx-muted truncate">{cleanNamePart(e.prenom)}</div>
+                        )}
                       </div>
                     </td>
 
@@ -679,9 +592,9 @@ export default function ElevesPage() {
                     <td className="px-4 py-3.5 cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>
                       {ief !== "—"
                         ? <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-warn-soft text-warn">
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 9l9-5 9 5-9 5-9-5z"/><path d="M5 10v6c0 2 3 4 7 4s7-2 7-4v-6"/></svg>
-                            {ief}
-                          </span>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 9l9-5 9 5-9 5-9-5z" /><path d="M5 10v6c0 2 3 4 7 4s7-2 7-4v-6" /></svg>
+                          {ief}
+                        </span>
                         : <span className="text-tx-muted text-xs">—</span>}
                     </td>
 
@@ -710,12 +623,14 @@ export default function ElevesPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </div>{/* fin overflow-y-auto */}
 
         {/* Pagination */}
-        <div className="border-t border-border px-5 py-3 flex-shrink-0">
-          <Pagination page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
-        </div>
+        {!dataLoading && (
+          <div className="px-5 flex-shrink-0">
+            <Pagination page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
+          </div>
+        )}
       </div>
 
       {/* ── Modal Vue détail ── */}
@@ -738,11 +653,11 @@ export default function ElevesPage() {
               </div>
               <div className="px-6 py-4 space-y-3">
                 {[
-                  { label: "Sexe",              value: e.genre ?? "—" },
+                  { label: "Sexe", value: e.genre ?? "—" },
                   { label: "Date de naissance", value: e.date_naissance ? new Date(e.date_naissance).toLocaleDateString("fr-FR") : "—" },
-                  { label: "École",             value: e.school_name ?? schoolName(e.school_id) },
-                  { label: "IEF",               value: e.school_region ?? "—" },
-                  { label: "Session",           value: sessionName(e.session_id) },
+                  { label: "École", value: e.school_name ?? schoolName(e.school_id) },
+                  { label: "IEF", value: e.school_region ?? "—" },
+                  { label: "Session", value: sessionName(e.session_id) },
                 ].map(({ label, value }) => (
                   <div key={label} className="flex justify-between text-sm">
                     <span className="text-tx-muted">{label}</span>
@@ -782,14 +697,7 @@ export default function ElevesPage() {
         </div>
       )}
 
-      {/* ── Modale résultat import ── */}
-      {(importResult || importError) && (
-        <ImportResultModal
-          result={importResult}
-          error={importError}
-          onClose={() => { setImportResult(null); setImportError(null); }}
-        />
-      )}
+
 
       {/* ── Modal Suppression unitaire ── */}
       {modal && typeof modal === "object" && modal.kind === "delete" && (

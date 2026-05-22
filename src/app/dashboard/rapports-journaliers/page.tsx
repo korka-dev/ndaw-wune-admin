@@ -49,16 +49,16 @@ function parseDifficultes(d: string | string[]): string[] {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function RapportsJournaliersPage() {
-  const [rapports,    setRapports]    = useState<RapportJournalier[]>([]);
-  const [total,       setTotal]       = useState(0);
-  const [loading,     setLoading]     = useState(true);
-  const [exporting,   setExporting]   = useState(false);
-  const [page,        setPage]        = useState(1);
+  const [rapports, setRapports] = useState<RapportJournalier[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [page, setPage] = useState(1);
 
   // Filtres
-  const [search,    setSearch]    = useState("");
-  const [dateFrom,  setDateFrom]  = useState("");
-  const [dateTo,    setDateTo]    = useState("");
+  const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   // Modal détail
   const [detail, setDetail] = useState<RapportJournalier | null>(null);
@@ -67,12 +67,12 @@ export default function RapportsJournaliersPage() {
     setLoading(true);
     try {
       const params: Record<string, unknown> = {
-        skip:  (p - 1) * PAGE_SIZE,
+        skip: (p - 1) * PAGE_SIZE,
         limit: PAGE_SIZE,
       };
-      if (search.trim())  params.search    = search.trim();
-      if (dateFrom)       params.date_from = dateFrom;
-      if (dateTo)         params.date_to   = dateTo;
+      if (search.trim()) params.search = search.trim();
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo) params.date_to = dateTo;
 
       const res = await rapportJournalierAdminApi.list(params);
       setRapports(res.data.items ?? []);
@@ -95,9 +95,9 @@ export default function RapportsJournaliersPage() {
     setExporting(true);
     try {
       const params: Record<string, unknown> = {};
-      if (search.trim())  params.search    = search.trim();
-      if (dateFrom)       params.date_from = dateFrom;
-      if (dateTo)         params.date_to   = dateTo;
+      if (search.trim()) params.search = search.trim();
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo) params.date_to = dateTo;
       const res = await rapportJournalierAdminApi.exportCsv(params);
       downloadBlob(res.data, "rapports-journaliers.csv");
     } catch { /* silencieux */ }
@@ -122,13 +122,13 @@ export default function RapportsJournaliersPage() {
         >
           {exporting ? (
             <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+              <path d="M21 12a9 9 0 1 1-6.219-8.56" />
             </svg>
           ) : (
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
           )}
           {exporting ? "Export…" : "Exporter CSV"}
@@ -141,7 +141,7 @@ export default function RapportsJournaliersPage() {
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
             className="absolute left-3.5 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/>
+            <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.35-4.35" />
           </svg>
           <input
             type="text" value={search} onChange={e => setSearch(e.target.value)}
@@ -151,7 +151,7 @@ export default function RapportsJournaliersPage() {
           {search && (
             <button onClick={() => setSearch("")} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-tx-muted hover:text-tx">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M18 6L6 18M6 6l12 12"/>
+                <path d="M18 6L6 18M6 6l12 12" />
               </svg>
             </button>
           )}
@@ -183,15 +183,7 @@ export default function RapportsJournaliersPage() {
       {/* ── Tableau rapports ─────────────────────────────────────────────────── */}
       <div className="bg-surface rounded-2xl border border-border overflow-hidden flex-1">
         <table className="w-full text-sm table-fixed">
-          <colgroup>
-            <col className="w-[12%]"/>
-            <col className="w-[18%]"/>
-            <col className="w-[22%]"/>
-            <col className="w-[14%]"/>
-            <col className="w-[12%]"/>
-            <col className="w-[16%]"/>
-            <col className="w-[6%]"/>
-          </colgroup>
+          <colgroup><col className="w-[12%]" /><col className="w-[18%]" /><col className="w-[22%]" /><col className="w-[14%]" /><col className="w-[12%]" /><col className="w-[16%]" /><col className="w-[6%]" /></colgroup>
           <thead>
             <tr className="border-b border-border bg-surface-alt">
               {["Date", "Tuteur", "École / IEF", "Commune", "S · J", "Difficultés", ""].map((h, i) => (
@@ -261,7 +253,7 @@ export default function RapportsJournaliersPage() {
                   <td className="px-4 py-3.5 text-right">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
                       className="text-tx-muted inline-block">
-                      <path d="M9 18l6-6-6-6"/>
+                      <path d="M9 18l6-6-6-6" />
                     </svg>
                   </td>
                 </tr>
@@ -270,7 +262,7 @@ export default function RapportsJournaliersPage() {
           </tbody>
         </table>
         {!loading && total > 0 && (
-          <div className="px-5 pb-4">
+          <div className="border-t border-border px-5">
             <Pagination page={page} total={total} pageSize={PAGE_SIZE} onChange={setPage} />
           </div>
         )}
@@ -300,7 +292,7 @@ export default function RapportsJournaliersPage() {
                 className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-alt text-tx-muted transition-colors flex-shrink-0"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                  <path d="M18 6 6 18M6 6l12 12"/>
+                  <path d="M18 6 6 18M6 6l12 12" />
                 </svg>
               </button>
             </div>
@@ -322,9 +314,9 @@ export default function RapportsJournaliersPage() {
               <Section title="Informations générales">
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { label: "École",       value: detail.ecole       },
-                    { label: "IEF",         value: detail.ief         },
-                    { label: "Commune",     value: detail.commune     },
+                    { label: "École", value: detail.ecole },
+                    { label: "IEF", value: detail.ief },
+                    { label: "Commune", value: detail.commune },
                     { label: "Superviseur", value: detail.superviseur },
                   ].map(({ label, value }) => (
                     <div key={label} className="bg-surface-alt rounded-xl px-4 py-3">
@@ -390,14 +382,14 @@ export default function RapportsJournaliersPage() {
                   <div className="bg-surface-alt rounded-xl px-4 py-3">
                     <div className="text-[11px] text-tx-muted mb-1">Directeur venu</div>
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${detail.directeur_venu ? "bg-success-soft text-success" : "bg-surface border border-border text-tx-muted"}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${detail.directeur_venu ? "bg-success" : "bg-tx-muted/40"}`}/>
+                      <span className={`w-1.5 h-1.5 rounded-full ${detail.directeur_venu ? "bg-success" : "bg-tx-muted/40"}`} />
                       {detail.directeur_venu ? "Oui" : "Non"}
                     </span>
                   </div>
                   <div className="bg-surface-alt rounded-xl px-4 py-3">
                     <div className="text-[11px] text-tx-muted mb-1">Besoin d&apos;appui</div>
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${detail.besoin_appui ? "bg-warn-soft text-warn" : "bg-surface border border-border text-tx-muted"}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${detail.besoin_appui ? "bg-warn" : "bg-tx-muted/40"}`}/>
+                      <span className={`w-1.5 h-1.5 rounded-full ${detail.besoin_appui ? "bg-warn" : "bg-tx-muted/40"}`} />
                       {detail.besoin_appui ? "Oui" : "Non"}
                     </span>
                   </div>

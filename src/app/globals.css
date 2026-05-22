@@ -99,7 +99,10 @@ input, button, select, textarea { font-family: inherit; }
 
 /* ── Focus rings ── */
 .focus\:ring-brand\/40:focus  { --tw-ring-color: rgba(139,111,31,0.4) !important; }
+.focus\:ring-brand\/30:focus  { --tw-ring-color: rgba(139,111,31,0.3) !important; }
 .focus\:ring-primary\/40:focus{ --tw-ring-color: rgba(74,144,194,0.4) !important; }
+.focus\:ring-primary\/30:focus{ --tw-ring-color: rgba(74,144,194,0.3) !important; }
+.focus\:border-brand\/40:focus{ border-color: rgba(139,111,31,0.4) !important; }
 .focus\:border-brand\/30:focus{ border-color: rgba(139,111,31,0.3) !important; }
 
 /* ── Placeholder ── */

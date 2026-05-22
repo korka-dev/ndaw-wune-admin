@@ -31,9 +31,17 @@ export default function ComptesPage() {
   const [form,    setForm]    = useState<typeof EMPTY>(EMPTY);
   const [loading, setLoading] = useState(false);
   const [page,    setPage]    = useState(1);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [dataError,   setDataError]   = useState<string | null>(null);
 
-  const load = () => usersApi.list().then(r => setItems(r.data.items ?? [])).catch(() => {});
-  useEffect(() => { load(); }, []);
+  const load = (isFirstLoad = false) => {
+    if (isFirstLoad) { setDataLoading(true); setDataError(null); }
+    Promise.all([usersApi.list()])
+      .then(([r]) => { setItems(r.data.items ?? []); setDataError(null); })
+      .catch(() => { setDataError("Impossible de charger les données."); })
+      .finally(() => { if (isFirstLoad) setDataLoading(false); });
+  };
+  useEffect(() => { load(true); }, []);
 
   const save = async () => {
     setLoading(true);
@@ -42,13 +50,13 @@ export default function ComptesPage() {
       const payload = { ...form, role: toApiRole(form.role) };
       if (modal === "create") await usersApi.create(payload);
       else await usersApi.update((modal as Compte).id, payload);
-      load(); setModal(null);
+      load(false); setModal(null);
     } finally { setLoading(false); }
   };
 
   const del = async (id: string) => {
     if (!confirm("Supprimer ce compte ?")) return;
-    await usersApi.delete(id); load();
+    await usersApi.delete(id); load(false);
   };
 
   const isAdmin = me?.role === "admin";
@@ -83,7 +91,23 @@ export default function ComptesPage() {
             </tr>
           </thead>
           <tbody>
-            {paginated.map(u => (
+            {dataLoading && (
+              <tr><td colSpan={4} className="px-5 py-16 text-center">
+                <div className="flex flex-col items-center gap-3">
+                  <svg className="animate-spin" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" strokeOpacity=".2"/><path d="M12 2a10 10 0 0110 10"/>
+                  </svg>
+                  <span className="text-sm text-tx-muted">Chargement…</span>
+                </div>
+              </td></tr>
+            )}
+            {!dataLoading && dataError && (
+              <tr><td colSpan={4} className="px-5 py-12 text-center">
+                <p className="text-sm text-danger">{dataError}</p>
+                <button onClick={() => load(true)} className="mt-2 text-xs text-brand underline">Réessayer</button>
+              </td></tr>
+            )}
+            {!dataLoading && !dataError && paginated.map(u => (
               <tr key={u.id} className="border-t border-border hover:bg-surface-alt transition-colors">
                 <td className="px-5 py-3.5">
                   <div className="flex items-center gap-2.5">
@@ -137,12 +161,12 @@ export default function ComptesPage() {
                 </td>
               </tr>
             ))}
-            {items.length === 0 && (
+            {!dataLoading && !dataError && items.length === 0 && (
               <tr><td colSpan={4} className="px-5 py-10 text-center text-tx-muted text-sm">Aucun compte pour l'instant</td></tr>
             )}
           </tbody>
         </table>
-        <div className="px-5 pb-4">
+        <div className="border-t border-border px-5">
           <Pagination page={page} total={items.length} pageSize={PAGE_SIZE} onChange={setPage} />
         </div>
       </div>

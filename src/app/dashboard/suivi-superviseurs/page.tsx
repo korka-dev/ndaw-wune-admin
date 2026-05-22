@@ -488,7 +488,7 @@ export default function SuiviSuperviseurPage() {
           </div>
         )}
 
-        <div className="px-5 pb-4">
+        <div className="border-t border-border px-5">
           <Pagination page={page} total={superviseurs.length} pageSize={PAGE_SIZE} onChange={setPage} />
         </div>
       </div>

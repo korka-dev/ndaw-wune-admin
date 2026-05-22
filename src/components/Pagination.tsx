@@ -59,7 +59,7 @@ export default function Pagination({ page, total, pageSize, onChange }: Paginati
   );
 
   return (
-    <div className="flex items-center justify-between pt-4 mt-2 border-t border-border">
+    <div className="flex items-center justify-between py-3">
       {/* Compteur */}
       <span className="text-xs text-tx-muted select-none">
         {from}–{to} sur <span className="font-semibold text-tx">{total}</span>

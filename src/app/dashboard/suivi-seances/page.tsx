@@ -923,20 +923,7 @@ export default function SuiviSeancesPage() {
       </div>
 
       {/* ── Tableau ── */}
-      <div className="bg-surface border border-border rounded-2xl overflow-hidden flex-1">
-
-        {/* Header colonnes */}
-        <div className="flex items-center justify-between px-5 py-3 bg-surface-alt border-b border-border">
-          <div className="grid grid-cols-[2fr_1.5fr_1.5fr_1fr_1fr_90px_90px] gap-x-4 flex-1 text-xs font-semibold text-tx-muted uppercase tracking-wide">
-            <span>Enseignant</span>
-            <span>Dernière activité</span>
-            <span>Heure de lancement</span>
-            <span>Statut</span>
-            <span>Séances</span>
-            <span>Score</span>
-            <span className="text-center">Détail</span>
-          </div>
-        </div>
+      <div className="bg-surface border border-border rounded-2xl overflow-hidden flex-1 flex flex-col">
 
         {loading ? (
           <div className="flex items-center justify-center py-20 gap-3">
@@ -957,94 +944,111 @@ export default function SuiviSeancesPage() {
             )}
           </div>
         ) : (
-          <div className="divide-y divide-border">
-            {paginated.map(t => (
-              <div
-                key={t.teacher_id}
-                className="grid grid-cols-[2fr_1.5fr_1.5fr_1fr_1fr_90px_90px] gap-x-4 px-5 py-4 items-center hover:bg-surface-alt/60 transition-colors"
-              >
-                {/* Identité */}
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-full bg-brand/10 flex items-center justify-center flex-shrink-0 text-sm font-bold text-brand">
-                    {initials(t.name)}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-tx truncate">{t.name ?? "—"}</p>
-                    <p className="text-xs text-tx-muted truncate">
-                      {[t.title, t.school_name].filter(Boolean).join(" · ")}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Dernière activité */}
-                <div className="min-w-0">
-                  {t.derniere_matiere || t.derniere_classe ? (
-                    <>
-                      <p className="text-sm font-medium text-tx truncate">{t.derniere_matiere ?? t.derniere_classe}</p>
-                      <p className="text-xs text-tx-muted">{fmtDate(t.derniere_activite)}</p>
-                    </>
-                  ) : <span className="text-sm text-tx-muted italic">Aucune activité</span>}
-                </div>
-
-                {/* Heure de lancement */}
-                <div>
-                  {t.derniere_activite ? (
-                    <>
-                      <p className="text-sm font-mono font-semibold text-tx">{fmtTime(t.derniere_activite)}</p>
-                      <p className="text-xs text-tx-muted">
-                        {new Date(t.derniere_activite).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })}
-                      </p>
-                    </>
-                  ) : <span className="text-sm text-tx-muted">—</span>}
-                </div>
-
-                {/* Statut */}
-                <div><StatusBadge status={t.dernier_status} /></div>
-
-                {/* Compteur + mini-activité */}
-                <div>
-                  <p className="text-base font-bold text-tx">{t.total_seances}</p>
-                  <p className="text-xs text-tx-muted">{t.seances_terminees} terminée{t.seances_terminees !== 1 ? "s" : ""}</p>
-                  {/* Mini-indicateurs d'activité */}
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
-                      t.seances_7j > 0 ? "bg-success-soft text-success" : "bg-surface-alt text-tx-muted"
-                    }`}>
-                      7j:{t.seances_7j}
-                    </span>
-                    {t.taux_rapport != null && (
-                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
-                        t.taux_rapport >= 75 ? "bg-success-soft text-success" :
-                        t.taux_rapport >= 50 ? "bg-warn-soft text-warn" :
-                        "bg-danger-soft text-danger"
-                      }`}>
-                        R:{Math.round(t.taux_rapport)}%
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Score */}
-                <div>
-                  <ScoreBadge score={t.score_engagement} />
-                </div>
-
-                {/* Bouton détail */}
-                <div className="flex justify-center">
-                  <button
-                    onClick={() => openModal(t)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand/10 hover:bg-brand hover:text-white text-brand text-xs font-semibold transition-colors"
+          <div className="overflow-x-auto overflow-y-auto flex-1 min-h-[400px]">
+            <table className="w-full text-sm min-w-[950px] border-collapse">
+              <thead className="sticky top-0 z-10 bg-surface-alt shadow-sm">
+                <tr>
+                  <th className="sticky top-0 z-10 bg-surface-alt px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">Enseignant</th>
+                  <th className="sticky top-0 z-10 bg-surface-alt px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">Dernière activité</th>
+                  <th className="sticky top-0 z-10 bg-surface-alt px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">Heure de lancement</th>
+                  <th className="sticky top-0 z-10 bg-surface-alt px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">Statut</th>
+                  <th className="sticky top-0 z-10 bg-surface-alt px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">Séances</th>
+                  <th className="sticky top-0 z-10 bg-surface-alt px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">Score</th>
+                  <th className="sticky top-0 z-10 bg-surface-alt px-5 py-3 text-center text-xs font-semibold text-tx-muted uppercase tracking-wide w-[90px]">Détail</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {paginated.map(t => (
+                  <tr
+                    key={t.teacher_id}
+                    className="hover:bg-surface-alt/60 transition-colors"
                   >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
-                    Voir
-                  </button>
-                </div>
-              </div>
-            ))}
+                    {/* Identité */}
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-full bg-brand/10 flex items-center justify-center flex-shrink-0 text-sm font-bold text-brand">
+                          {initials(t.name)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-tx truncate">{t.name ?? "—"}</p>
+                          <p className="text-xs text-tx-muted truncate">
+                            {[t.title, t.school_name].filter(Boolean).join(" · ")}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Dernière activité */}
+                    <td className="px-5 py-4 min-w-0">
+                      {t.derniere_matiere || t.derniere_classe ? (
+                        <>
+                          <p className="text-sm font-medium text-tx truncate">{t.derniere_matiere ?? t.derniere_classe}</p>
+                          <p className="text-xs text-tx-muted">{fmtDate(t.derniere_activite)}</p>
+                        </>
+                      ) : <span className="text-sm text-tx-muted italic">Aucune activité</span>}
+                    </td>
+
+                    {/* Heure de lancement */}
+                    <td className="px-5 py-4">
+                      {t.derniere_activite ? (
+                        <>
+                          <p className="text-sm font-mono font-semibold text-tx">{fmtTime(t.derniere_activite)}</p>
+                          <p className="text-xs text-tx-muted">
+                            {new Date(t.derniere_activite).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })}
+                          </p>
+                        </>
+                      ) : <span className="text-sm text-tx-muted">—</span>}
+                    </td>
+
+                    {/* Statut */}
+                    <td className="px-5 py-4"><StatusBadge status={t.dernier_status} /></td>
+
+                    {/* Compteur + mini-activité */}
+                    <td className="px-5 py-4">
+                      <p className="text-base font-bold text-tx leading-none">{t.total_seances}</p>
+                      <p className="text-xs text-tx-muted mt-1">{t.seances_terminees} terminée{t.seances_terminees !== 1 ? "s" : ""}</p>
+                      {/* Mini-indicateurs d'activité */}
+                      <div className="flex items-center gap-1.5 mt-1.5">
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                          t.seances_7j > 0 ? "bg-success-soft text-success" : "bg-surface-alt text-tx-muted"
+                        }`}>
+                          7j:{t.seances_7j}
+                        </span>
+                        {t.taux_rapport != null && (
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                            t.taux_rapport >= 75 ? "bg-success-soft text-success" :
+                            t.taux_rapport >= 50 ? "bg-warn-soft text-warn" :
+                            "bg-danger-soft text-danger"
+                          }`}>
+                            R:{Math.round(t.taux_rapport)}%
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Score */}
+                    <td className="px-5 py-4">
+                      <ScoreBadge score={t.score_engagement} />
+                    </td>
+
+                    {/* Bouton détail */}
+                    <td className="px-5 py-4 text-center">
+                      <button
+                        onClick={() => openModal(t)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand/10 hover:bg-brand hover:text-white text-brand text-xs font-semibold transition-colors"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
+                        Voir
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
 
-        <div className="px-5 pb-4">
+        <div className="border-t border-border px-5">
           <Pagination page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
         </div>
       </div>

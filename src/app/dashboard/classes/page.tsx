@@ -1,6 +1,7 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { classesApi, schoolsApi } from "@/lib/api";
+import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 
 const PAGE_SIZE = 25;
@@ -21,7 +22,7 @@ const EMPTY_FORM = { name: "", niveau: "CP", school_id: "", effectif: "" };
 type ModalState =
   | null
   | "create"
-  | { kind: "edit";   classe: SchoolClasse }
+  | { kind: "edit"; classe: SchoolClasse }
   | { kind: "delete"; classe: SchoolClasse };
 
 // Génère les classes disponibles pour un niveau : CP A, CP B, CP C
@@ -30,44 +31,44 @@ function classesForNiveau(niv: string): string[] {
 }
 
 export default function ClassesPage() {
-  const [classes, setClasses]   = useState<SchoolClasse[]>([]);
-  const [schools, setSchools]   = useState<School[]>([]);
-  const [modal, setModal]       = useState<ModalState>(null);
-  const [form, setForm]         = useState<typeof EMPTY_FORM>(EMPTY_FORM);
-  const [loading, setLoading]   = useState(false);
+  const [classes, setClasses] = useState<SchoolClasse[]>([]);
+  const [schools, setSchools] = useState<School[]>([]);
+  const [modal, setModal] = useState<ModalState>(null);
+  const [form, setForm] = useState<typeof EMPTY_FORM>(EMPTY_FORM);
+  const [loading, setLoading] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [dataError, setDataError] = useState<string | null>(null);
   const [filterSchool, setFilterSchool] = useState("");
   const [filterNiveau, setFilterNiveau] = useState("");
-  const [search, setSearch]     = useState("");
-  const [page, setPage]         = useState(1);
-  const [importingXlsx,  setImportingXlsx]  = useState(false);
-  const [xlsxResult,     setXlsxResult]     = useState<{ imported: number; skipped: number; schools_created: number; errors: string[] } | null>(null);
-  const [xlsxError,      setXlsxError]      = useState<string | null>(null);
-  const importXlsxRef = useRef<HTMLInputElement>(null);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
 
-  const handleImportXlsx = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImportingXlsx(true);
-    setXlsxResult(null);
-    setXlsxError(null);
+  const handleExport = async () => {
+    setExporting(true);
     try {
-      const res = await classesApi.importXlsx(file);
-      setXlsxResult(res.data);
-      load();
-    } catch (err: any) {
-      setXlsxError(err?.response?.data?.detail ?? "Erreur lors de l'import Excel.");
-    } finally {
-      setImportingXlsx(false);
-      if (importXlsxRef.current) importXlsxRef.current.value = "";
-    }
+      const res = await classesApi.exportXlsx();
+      downloadBlob(res.data, "classes.xlsx");
+    } catch { /* silencieux */ }
+    finally { setExporting(false); }
   };
 
-  const load = () => {
-    classesApi.list({ limit: 10000 }).then(r => setClasses(r.data.items ?? [])).catch(() => {});
-    schoolsApi.list({ limit: 10000 }).then(r => setSchools(r.data.items ?? [])).catch(() => {});
+  const load = (isFirstLoad = false) => {
+    if (isFirstLoad) { setDataLoading(true); setDataError(null); }
+    Promise.all([
+      classesApi.list({ limit: 10000 }),
+      schoolsApi.list({ limit: 10000 }),
+    ])
+      .then(([rClasses, rSchools]) => {
+        setClasses(rClasses.data.items ?? []);
+        setSchools(rSchools.data.items ?? []);
+        setDataError(null);
+      })
+      .catch(() => { setDataError("Impossible de charger les données."); })
+      .finally(() => { if (isFirstLoad) setDataLoading(false); });
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(true); }, []);
   useEffect(() => { setPage(1); }, [search, filterSchool, filterNiveau]);
 
   const hasFilters = !!(search || filterSchool || filterNiveau);
@@ -87,21 +88,21 @@ export default function ClassesPage() {
   const save = async () => {
     setSaveError(null);
     if (!form.name.trim()) { setSaveError("Le nom de la classe est requis."); return; }
-    if (!form.school_id)   { setSaveError("Veuillez sélectionner une école."); return; }
+    if (!form.school_id) { setSaveError("Veuillez sélectionner une école."); return; }
     setLoading(true);
     try {
       const payload = {
-        name:      form.name.trim(),
-        niveau:    form.niveau,
+        name: form.name.trim(),
+        niveau: form.niveau,
         school_id: form.school_id,
-        effectif:  form.effectif ? parseInt(form.effectif) : undefined,
+        effectif: form.effectif ? parseInt(form.effectif) : undefined,
       };
       if (modal === "create") {
         await classesApi.create(payload);
       } else if (modal && typeof modal === "object" && modal.kind === "edit") {
         await classesApi.update(modal.classe.id, { name: payload.name, niveau: payload.niveau, effectif: payload.effectif });
       }
-      load();
+      load(false);
       setModal(null);
     } catch (err: any) {
       const detail = err?.response?.data?.detail;
@@ -111,7 +112,7 @@ export default function ClassesPage() {
 
   const doDelete = async (c: SchoolClasse) => {
     setLoading(true);
-    try { await classesApi.delete(c.id); load(); setModal(null); }
+    try { await classesApi.delete(c.id); load(false); setModal(null); }
     catch (err: any) { setSaveError(err?.response?.data?.detail ?? "Erreur lors de la suppression."); }
     finally { setLoading(false); }
   };
@@ -119,7 +120,7 @@ export default function ClassesPage() {
   // Niveau badge color
   const niveauColor = (niv: string) => {
     const map: Record<string, string> = {
-      CP:  "bg-purple-100 text-purple-700",
+      CP: "bg-purple-100 text-purple-700",
       CE1: "bg-blue-100 text-blue-700",
       CE2: "bg-cyan-100 text-cyan-700",
       CM1: "bg-orange-100 text-orange-700",
@@ -141,20 +142,19 @@ export default function ClassesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Exporter Excel */}
           <button
-            onClick={() => importXlsxRef.current?.click()}
-            disabled={importingXlsx}
-            title="Importer les classes depuis un fichier Excel liste-élèves (colonnes SCHOOL, NIVEAU, Classe)"
-            className="flex items-center gap-2 bg-success-soft border border-success/30 hover:bg-success/10 text-success px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
+            onClick={handleExport}
+            disabled={exporting}
+            className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="17 8 12 3 7 8"/>
-              <line x1="12" y1="3" x2="12" y2="15"/>
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
-            {importingXlsx ? "Import…" : "Importer Excel"}
+            {exporting ? "Export…" : "Exporter Excel"}
           </button>
-          <input ref={importXlsxRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImportXlsx} />
           <button
             onClick={() => { setForm(EMPTY_FORM); setSaveError(null); setModal("create"); }}
             className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
@@ -211,66 +211,82 @@ export default function ClassesPage() {
         )}
       </div>
 
+      {/* ── Erreur chargement ── */}
+      {dataError && !dataLoading && (
+        <div className="mb-4 flex items-center gap-3 px-4 py-3 bg-danger-soft border border-danger/20 rounded-xl text-sm text-danger">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+          <span>{dataError}</span>
+          <button onClick={() => load(true)} className="ml-auto text-xs underline font-medium">Réessayer</button>
+        </div>
+      )}
+
       {/* ── Tableau ── */}
-      <div className="bg-surface rounded-2xl border border-border overflow-hidden flex-1">
-        <table className="w-full text-sm table-fixed">
-          <colgroup>
-            <col className="w-[20%]" />
-            <col className="w-[14%]" />
-            <col className="w-[35%]" />
-            <col className="w-[16%]" />
-            <col className="w-[15%]" />
-          </colgroup>
-          <thead>
-            <tr className="border-b border-border bg-surface-alt">
-              {["Classe", "Niveau", "École", "Effectif", "Actions"].map(h => (
-                <th key={h} className="px-5 py-3 text-center text-xs font-semibold text-tx-muted uppercase tracking-wide">{h}</th>
+      <div className="bg-surface rounded-2xl border border-border flex-1 min-h-0 flex flex-col overflow-hidden">
+
+        {dataLoading && (
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 py-20">
+            <svg className="animate-spin" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" strokeOpacity=".2" />
+              <path d="M12 2a10 10 0 0110 10" stroke="currentColor" />
+            </svg>
+            <span className="text-sm text-tx-muted">Chargement…</span>
+          </div>
+        )}
+
+        <div className={`overflow-y-auto flex-1 ${dataLoading ? "hidden" : ""}`}>
+          <table className="w-full text-sm table-fixed">
+            <colgroup><col className="w-[20%]" /><col className="w-[14%]" /><col className="w-[35%]" /><col className="w-[16%]" /><col className="w-[15%]" /></colgroup>
+            <thead className="sticky top-0 z-10">
+              <tr className="border-b border-border bg-surface-alt">
+                {["Classe", "Niveau", "École", "Effectif", "Actions"].map(h => (
+                  <th key={h} className="px-5 py-3 text-center text-xs font-semibold text-tx-muted uppercase tracking-wide">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {!dataLoading && !dataError && paginated.map(c => (
+                <tr key={c.id} className="border-t border-border hover:bg-surface-alt transition-colors">
+                  <td className="px-5 py-3.5 text-center">
+                    <span className="font-semibold text-tx">{c.name}</span>
+                  </td>
+                  <td className="px-5 py-3.5 text-center">
+                    <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${niveauColor(c.niveau)}`}>{c.niveau}</span>
+                  </td>
+                  <td className="px-5 py-3.5 text-tx-muted text-center">{c.school?.name ?? schoolMap[c.school_id] ?? "—"}</td>
+                  <td className="px-5 py-3.5 text-center text-tx-muted">
+                    {c.effectif != null ? (
+                      <span className="font-medium text-tx">{c.effectif}</span>
+                    ) : "—"}
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center justify-center gap-2">
+                      <button
+                        onClick={() => { setForm({ name: c.name, niveau: c.niveau, school_id: c.school_id, effectif: c.effectif?.toString() ?? "" }); setSaveError(null); setModal({ kind: "edit", classe: c }); }}
+                        className="text-xs bg-primary-soft text-primary px-3 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors"
+                      >
+                        Modifier
+                      </button>
+                      <button
+                        onClick={() => setModal({ kind: "delete", classe: c })}
+                        className="text-xs bg-danger-soft text-danger px-3 py-1 rounded-lg font-medium hover:bg-danger hover:text-white transition-colors"
+                      >
+                        Suppr.
+                      </button>
+                    </div>
+                  </td>
+                </tr>
               ))}
-            </tr>
-          </thead>
-          <tbody>
-            {paginated.map(c => (
-              <tr key={c.id} className="border-t border-border hover:bg-surface-alt transition-colors">
-                <td className="px-5 py-3.5 text-center">
-                  <span className="font-semibold text-tx">{c.name}</span>
-                </td>
-                <td className="px-5 py-3.5 text-center">
-                  <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${niveauColor(c.niveau)}`}>{c.niveau}</span>
-                </td>
-                <td className="px-5 py-3.5 text-tx-muted text-center">{c.school?.name ?? schoolMap[c.school_id] ?? "—"}</td>
-                <td className="px-5 py-3.5 text-center text-tx-muted">
-                  {c.effectif != null ? (
-                    <span className="font-medium text-tx">{c.effectif}</span>
-                  ) : "—"}
-                </td>
-                <td className="px-5 py-3.5">
-                  <div className="flex items-center justify-center gap-2">
-                    <button
-                      onClick={() => { setForm({ name: c.name, niveau: c.niveau, school_id: c.school_id, effectif: c.effectif?.toString() ?? "" }); setSaveError(null); setModal({ kind: "edit", classe: c }); }}
-                      className="text-xs bg-primary-soft text-primary px-3 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors"
-                    >
-                      Modifier
-                    </button>
-                    <button
-                      onClick={() => setModal({ kind: "delete", classe: c })}
-                      className="text-xs bg-danger-soft text-danger px-3 py-1 rounded-lg font-medium hover:bg-danger hover:text-white transition-colors"
-                    >
-                      Suppr.
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-5 py-16 text-center text-tx-muted text-sm">
-                  {hasFilters ? "Aucune classe ne correspond aux filtres." : "Aucune classe pour l'instant. Commencez par en ajouter une."}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-        <div className="pb-4 px-5">
+              {!dataLoading && !dataError && filtered.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-5 py-16 text-center text-tx-muted text-sm">
+                    {hasFilters ? "Aucune classe ne correspond aux filtres." : "Aucune classe pour l'instant. Commencez par en ajouter une."}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="border-t border-border px-5">
           <Pagination page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
         </div>
       </div>
@@ -286,7 +302,7 @@ export default function ClassesPage() {
 
             {saveError && (
               <div className="mb-4 flex items-start gap-2.5 px-4 py-3 rounded-xl bg-danger-soft border border-danger/20 text-danger text-sm">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="flex-shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="flex-shrink-0 mt-0.5"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
                 <span>{saveError}</span>
               </div>
             )}
@@ -410,42 +426,7 @@ export default function ClassesPage() {
         </div>
       )}
 
-      {/* ── Modale résultat import Excel ── */}
-      {(xlsxResult || xlsxError) && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => { setXlsxResult(null); setXlsxError(null); }}>
-          <div className="bg-surface rounded-2xl shadow-xl p-7 w-full max-w-sm" onClick={e => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-tx mb-4">Import Excel — Résultat</h2>
-            {xlsxError ? (
-              <p className="text-danger text-sm mb-5">{xlsxError}</p>
-            ) : xlsxResult && (
-              <>
-                <div className="grid grid-cols-3 gap-3 mb-4">
-                  <div className="bg-success-soft rounded-xl p-3 text-center">
-                    <p className="text-2xl font-bold text-success">{xlsxResult.imported}</p>
-                    <p className="text-[11px] text-tx-muted mt-1">Classe(s) créée(s)</p>
-                  </div>
-                  <div className="bg-surface-alt rounded-xl p-3 text-center">
-                    <p className="text-2xl font-bold text-tx-muted">{xlsxResult.skipped}</p>
-                    <p className="text-[11px] text-tx-muted mt-1">Existante(s)</p>
-                  </div>
-                  <div className="bg-warn-soft rounded-xl p-3 text-center">
-                    <p className="text-2xl font-bold text-warn">{xlsxResult.schools_created}</p>
-                    <p className="text-[11px] text-tx-muted mt-1">École(s) créée(s)</p>
-                  </div>
-                </div>
-                {xlsxResult.errors?.length > 0 && (
-                  <div className="bg-danger-soft rounded-xl p-3 mb-4 text-xs text-danger max-h-28 overflow-y-auto">
-                    {xlsxResult.errors.map((e, i) => <p key={i}>{e}</p>)}
-                  </div>
-                )}
-              </>
-            )}
-            <button onClick={() => { setXlsxResult(null); setXlsxError(null); }} className="w-full bg-brand hover:bg-brand-dark text-white py-2.5 rounded-xl text-sm font-semibold transition-colors">
-              Fermer
-            </button>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 }

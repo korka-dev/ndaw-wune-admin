@@ -6,11 +6,11 @@ import Pagination from "@/components/Pagination";
 import { SENEGAL_REGIONS, getCommunesByRegion } from "@/lib/senegal-geo";
 
 interface School {
-  id:             string;
-  name:           string;
-  region:         string | null;
-  city:           string | null;
-  director:       string | null;
+  id: string;
+  name: string;
+  region: string | null;
+  city: string | null;
+  director: string | null;
   director_phone: string | null;
 }
 
@@ -19,35 +19,36 @@ const PAGE_SIZE = 25;
 
 const SchoolIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8B6F1F" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 9l9-5 9 5-9 5-9-5z"/><path d="M5 10v6c0 2 3 4 7 4s7-2 7-4v-6"/>
+    <path d="M3 9l9-5 9 5-9 5-9-5z" /><path d="M5 10v6c0 2 3 4 7 4s7-2 7-4v-6" />
   </svg>
 );
 
 export default function EcolesPage() {
-  const [schools,  setSchools]  = useState<School[]>([]);
-  const [modal,    setModal]    = useState<null | "create" | "view" | School>(null);
+  const [schools, setSchools] = useState<School[]>([]);
+  const [modal, setModal] = useState<null | "create" | "view" | School>(null);
   const [viewData, setViewData] = useState<School | null>(null);
-  const [form,     setForm]     = useState<typeof EMPTY>(EMPTY);
-  const [loading,    setLoading]    = useState(false);
-  const [error,      setError]      = useState("");
+  const [form, setForm] = useState<typeof EMPTY>(EMPTY);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [phoneError, setPhoneError] = useState("");
-  const [search,       setSearch]       = useState("");
+  const [search, setSearch] = useState("");
   const [filterRegion, setFilterRegion] = useState("");
-  const [filterCity,   setFilterCity]   = useState("");
-  const [page,         setPage]         = useState(1);
-  const [exporting,      setExporting]      = useState(false);
-  const [importMsg,      setImportMsg]      = useState<{ ok: boolean; text: string } | null>(null);
-  const [importingXlsx,  setImportingXlsx]  = useState(false);
-  const [xlsxResult,     setXlsxResult]     = useState<{ imported: number; skipped: number } | null>(null);
-  const importRef     = useRef<HTMLInputElement>(null);
-  const importXlsxRef = useRef<HTMLInputElement>(null);
+  const [filterCity, setFilterCity] = useState("");
+  const [page, setPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
 
-  const load = () =>
+
+  const load = (isFirstLoad = false) => {
+    if (isFirstLoad) { setDataLoading(true); setDataError(null); }
     schoolsApi.list({ limit: 10000 })
-      .then(r => setSchools(r.data.items ?? []))
-      .catch(() => {});
+      .then(r => { setSchools(r.data.items ?? []); setDataError(null); })
+      .catch(() => setDataError("Impossible de charger les écoles."))
+      .finally(() => { if (isFirstLoad) setDataLoading(false); });
+  };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(true); }, []);
   useEffect(() => { setPage(1); }, [search, filterRegion, filterCity]);
 
   const regions = Array.from(
@@ -63,10 +64,10 @@ export default function EcolesPage() {
       v?.toLowerCase().includes(search.toLowerCase())
     );
     const matchRegion = !filterRegion || s.region === filterRegion;
-    const matchCity   = !filterCity   || s.city   === filterCity;
+    const matchCity = !filterCity || s.city === filterCity;
     return matchSearch && matchRegion && matchCity;
   });
-  const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const checkPhone = (phone: string, excludeId?: string) => {
     const trimmed = phone.trim();
@@ -84,46 +85,14 @@ export default function EcolesPage() {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const res = await exportApi.schools();
-      downloadBlob(res.data, "ecoles.csv");
+      const res = await exportApi.schoolsXlsx();
+      downloadBlob(res.data, "ecoles.xlsx");
     } catch { /* silencieux */ }
     finally { setExporting(false); }
   };
 
-  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const res = await schoolsApi.importCsv(file);
-      const count = res.data?.imported ?? res.data?.count ?? "?";
-      setImportMsg({ ok: true, text: `${count} école${count !== 1 ? "s" : ""} importée${count !== 1 ? "s" : ""} avec succès.` });
-      load();
-    } catch (err: any) {
-      setImportMsg({ ok: false, text: err?.response?.data?.detail ?? "Erreur lors de l'import." });
-    } finally {
-      if (importRef.current) importRef.current.value = "";
-    }
-  };
-
-  const handleImportXlsx = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImportingXlsx(true);
-    setXlsxResult(null);
-    try {
-      const res = await schoolsApi.importXlsx(file);
-      setXlsxResult({ imported: res.data.imported ?? 0, skipped: res.data.skipped ?? 0 });
-      load();
-    } catch (err: any) {
-      setImportMsg({ ok: false, text: err?.response?.data?.detail ?? "Erreur lors de l'import Excel." });
-    } finally {
-      setImportingXlsx(false);
-      if (importXlsxRef.current) importXlsxRef.current.value = "";
-    }
-  };
-
   const openCreate = () => { setForm(EMPTY); setError(""); setPhoneError(""); setModal("create"); };
-  const openEdit   = (s: School) => {
+  const openEdit = (s: School) => {
     setForm({ name: s.name, region: s.region ?? "", city: s.city ?? "", director: s.director ?? "", director_phone: s.director_phone ?? "" });
     setError(""); setPhoneError("");
     setModal(s);
@@ -136,10 +105,10 @@ export default function EcolesPage() {
     setLoading(true); setError("");
     try {
       const payload = {
-        name:           form.name.trim(),
-        region:         form.region?.trim()         || null,
-        city:           form.city?.trim()           || null,
-        director:       form.director?.trim()       || null,
+        name: form.name.trim(),
+        region: form.region?.trim() || null,
+        city: form.city?.trim() || null,
+        director: form.director?.trim() || null,
         director_phone: form.director_phone?.trim() || null,
       };
       if (modal === "create") await schoolsApi.create(payload);
@@ -171,61 +140,23 @@ export default function EcolesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Message import */}
-          {importMsg && (
-            <span className={`text-xs font-medium px-3 py-1.5 rounded-xl ${importMsg.ok ? "bg-success-soft text-success" : "bg-danger-soft text-danger"}`}>
-              {importMsg.text}
-              <button onClick={() => setImportMsg(null)} className="ml-2 opacity-60 hover:opacity-100">✕</button>
-            </span>
-          )}
-          {/* Exporter CSV */}
+          {/* Exporter Excel */}
           <button
             onClick={handleExport}
             disabled={exporting}
             className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
-            {exporting ? "Export…" : "Exporter CSV"}
+            {exporting ? "Export…" : "Exporter Excel"}
           </button>
-          {/* Importer Excel */}
-          <button
-            onClick={() => importXlsxRef.current?.click()}
-            disabled={importingXlsx}
-            title="Importer les écoles depuis un fichier Excel liste-élèves (colonnes SCHOOL, IEF, COMMUNE)"
-            className="flex items-center gap-2 bg-success-soft border border-success/30 hover:bg-success/10 text-success px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="17 8 12 3 7 8"/>
-              <line x1="12" y1="3" x2="12" y2="15"/>
-            </svg>
-            {importingXlsx ? "Import…" : "Importer Excel"}
-          </button>
-          <input ref={importXlsxRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImportXlsx} />
-          {/* Importer CSV */}
-          <div className="relative">
-            <button
-              onClick={() => importRef.current?.click()}
-              title={`Format attendu : name,region,city,director,director_phone`}
-              className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-              Importer CSV
-            </button>
-            <input ref={importRef} type="file" accept=".csv" className="hidden" onChange={handleImport} />
-          </div>
           {/* Nouvelle école */}
           <button onClick={openCreate}
             className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
             Nouvelle école
           </button>
         </div>
@@ -236,7 +167,7 @@ export default function EcolesPage() {
         {/* Recherche */}
         <div className="relative flex-1">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-tx-muted">
-            <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/>
+            <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.35-4.35" />
           </svg>
           <input
             type="text"
@@ -247,7 +178,7 @@ export default function EcolesPage() {
           />
           {search && (
             <button onClick={() => setSearch("")} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-tx-muted hover:text-tx">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
             </button>
           )}
         </div>
@@ -256,21 +187,20 @@ export default function EcolesPage() {
         <div className="relative">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
             className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/>
+            <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 1118 0z" /><circle cx="12" cy="10" r="3" />
           </svg>
           <select
             value={filterRegion}
             onChange={e => setFilterRegion(e.target.value)}
-            className={`pl-8 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[160px] ${
-              filterRegion ? "border-brand text-brand font-medium" : "border-border text-tx"
-            }`}
+            className={`pl-8 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[160px] ${filterRegion ? "border-brand text-brand font-medium" : "border-border text-tx"
+              }`}
           >
             <option value="">Toutes les régions</option>
             {regions.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
             className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <path d="M6 9l6 6 6-6"/>
+            <path d="M6 9l6 6 6-6" />
           </svg>
         </div>
 
@@ -278,21 +208,20 @@ export default function EcolesPage() {
         <div className="relative">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
             className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
           </svg>
           <select
             value={filterCity}
             onChange={e => { setFilterCity(e.target.value); setPage(1); }}
-            className={`pl-8 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[140px] ${
-              filterCity ? "border-brand text-brand font-medium" : "border-border text-tx"
-            }`}
+            className={`pl-8 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[140px] ${filterCity ? "border-brand text-brand font-medium" : "border-border text-tx"
+              }`}
           >
             <option value="">Toutes les villes</option>
             {cities.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
             className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <path d="M6 9l6 6 6-6"/>
+            <path d="M6 9l6 6 6-6" />
           </svg>
         </div>
 
@@ -302,29 +231,24 @@ export default function EcolesPage() {
             onClick={() => { setFilterRegion(""); setFilterCity(""); setPage(1); }}
             className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-brand/30 bg-brand-soft text-brand text-sm font-medium hover:bg-brand hover:text-white transition-colors"
           >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
             Réinitialiser
           </button>
         )}
       </div>
 
       {/* ── Liste ── */}
-      <div className="bg-surface rounded-2xl border border-border overflow-hidden flex-1">
-        <table className="w-full text-sm table-fixed">
-          <colgroup>
-            <col className="w-[28%]" />
-            <col className="w-[18%]" />
-            <col className="w-[18%]" />
-            <col className="w-[20%]" />
-            <col className="w-[16%]" />
-          </colgroup>
-          <thead>
-            <tr className="border-b border-border bg-surface-alt">
-              {["École", "Région", "Commune", "Directeur(trice)", "Actions"].map(h => (
-                <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">{h}</th>
-              ))}
-            </tr>
-          </thead>
+      <div className="bg-surface rounded-2xl border border-border overflow-hidden flex-1 flex flex-col">
+        <div className="overflow-x-auto overflow-y-auto flex-1">
+          <table className="w-full text-sm table-fixed min-w-[950px]">
+            <colgroup><col className="w-[28%]" /><col className="w-[18%]" /><col className="w-[18%]" /><col className="w-[20%]" /><col className="w-[16%]" /></colgroup>
+            <thead className="sticky top-0 z-10 bg-surface-alt shadow-sm">
+              <tr className="border-b border-border bg-surface-alt">
+                {["École", "Région", "Commune", "Directeur(trice)", "Actions"].map(h => (
+                  <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide bg-surface-alt sticky top-0 z-10">{h}</th>
+                ))}
+              </tr>
+            </thead>
           <tbody>
             {paginated.map(s => (
               <tr key={s.id} onClick={() => openView(s)}
@@ -363,7 +287,23 @@ export default function EcolesPage() {
                 </td>
               </tr>
             ))}
-            {paginated.length === 0 && (
+            {dataLoading && (
+              <tr><td colSpan={5} className="px-5 py-16 text-center">
+                <div className="flex flex-col items-center gap-3">
+                  <svg className="animate-spin" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" strokeOpacity=".2" /><path d="M12 2a10 10 0 0110 10" />
+                  </svg>
+                  <span className="text-sm text-tx-muted">Chargement des écoles…</span>
+                </div>
+              </td></tr>
+            )}
+            {!dataLoading && dataError && (
+              <tr><td colSpan={5} className="px-5 py-12 text-center">
+                <p className="text-sm text-danger">{dataError}</p>
+                <button onClick={() => load(true)} className="mt-2 text-xs text-brand underline">Réessayer</button>
+              </td></tr>
+            )}
+            {!dataLoading && !dataError && paginated.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-5 py-16 text-center text-tx-muted text-sm">
                   {(search || filterRegion || filterCity)
@@ -375,7 +315,8 @@ export default function EcolesPage() {
             )}
           </tbody>
         </table>
-        <div className="px-5 pb-4">
+        </div>
+        <div className="border-t border-border px-5 py-2">
           <Pagination page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
         </div>
       </div>
@@ -398,8 +339,8 @@ export default function EcolesPage() {
 
             <div className="space-y-3 bg-surface-alt rounded-xl p-4">
               {[
-                { label: "Région",    value: viewData.region },
-                { label: "Ville",     value: viewData.city },
+                { label: "Région", value: viewData.region },
+                { label: "Ville", value: viewData.city },
                 { label: "Directeur(trice)", value: viewData.director },
                 { label: "N° Directeur(trice)", value: viewData.director_phone },
               ].map(({ label, value }) => value ? (
@@ -460,7 +401,7 @@ export default function EcolesPage() {
                 <div className="relative">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
                     className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-                    <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>
+                    <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z" /><circle cx="12" cy="10" r="3" />
                   </svg>
                   <select
                     value={form.region ?? ""}
@@ -474,7 +415,7 @@ export default function EcolesPage() {
                   </select>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-                    <path d="M6 9l6 6 6-6"/>
+                    <path d="M6 9l6 6 6-6" />
                   </svg>
                 </div>
               </div>
@@ -485,7 +426,7 @@ export default function EcolesPage() {
                 <div className="relative">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
                     className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
                   </svg>
                   <select
                     value={form.city ?? ""}
@@ -502,7 +443,7 @@ export default function EcolesPage() {
                   </select>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-                    <path d="M6 9l6 6 6-6"/>
+                    <path d="M6 9l6 6 6-6" />
                   </svg>
                 </div>
                 {!form.region && (
@@ -535,15 +476,14 @@ export default function EcolesPage() {
                     checkPhone(val, excludeId);
                   }}
                   placeholder="77 000 00 00"
-                  className={`w-full bg-surface-alt border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 transition ${
-                    phoneError
+                  className={`w-full bg-surface-alt border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 transition ${phoneError
                       ? "border-danger focus:ring-danger/30 focus:border-danger/40"
                       : "border-border focus:ring-brand/30 focus:border-brand/40"
-                  }`}
+                    }`}
                 />
                 {phoneError && (
                   <p className="mt-1.5 text-xs text-danger flex items-center gap-1">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
                     {phoneError}
                   </p>
                 )}
@@ -564,27 +504,7 @@ export default function EcolesPage() {
         </div>
       )}
 
-      {/* ── Modale résultat import Excel ── */}
-      {xlsxResult && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setXlsxResult(null)}>
-          <div className="bg-surface rounded-2xl shadow-xl p-7 w-full max-w-sm" onClick={e => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-tx mb-4">Import Excel — Résultat</h2>
-            <div className="grid grid-cols-2 gap-3 mb-5">
-              <div className="bg-success-soft rounded-xl p-4 text-center">
-                <p className="text-2xl font-bold text-success">{xlsxResult.imported}</p>
-                <p className="text-xs text-tx-muted mt-1">École(s) créée(s)</p>
-              </div>
-              <div className="bg-surface-alt rounded-xl p-4 text-center">
-                <p className="text-2xl font-bold text-tx-muted">{xlsxResult.skipped}</p>
-                <p className="text-xs text-tx-muted mt-1">Déjà existante(s)</p>
-              </div>
-            </div>
-            <button onClick={() => setXlsxResult(null)} className="w-full bg-brand hover:bg-brand-dark text-white py-2.5 rounded-xl text-sm font-semibold transition-colors">
-              Fermer
-            </button>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 }
