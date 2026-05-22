@@ -6,7 +6,18 @@ import Pagination from "@/components/Pagination";
 
 const PAGE_SIZE = 20;
 
-interface Teacher { id: string; name: string; phone?: string; email?: string; title?: string; status: string; school_id?: string; niveau?: string[]; classes?: string[]; }
+interface Teacher {
+  id: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  title?: string;
+  status: string;
+  school_id?: string;
+  school?: { id: string; name: string; region?: string };  // objet joint depuis l'API
+  niveau?: string[];
+  classes?: string[];
+}
 interface School { id: string; name: string; }
 const EMPTY_T = { name: "", phone: "", title: "", school_id: "", niveau: [] as string[], classes: [] as string[] };
 const NIVEAUX  = ["CP", "CE1", "CE2", "CM1", "CM2"] as const;
@@ -276,77 +287,103 @@ export default function TeachersPage() {
       <div className="bg-surface rounded-2xl border border-border overflow-hidden flex-1">
         <table className="w-full text-sm table-fixed">
           <colgroup>
-            <col className="w-[20%]" />
-            <col className="w-[16%]" />
-            <col className="w-[18%]" />
-            <col className="w-[12%]" />
-            <col className="w-[15%]" />
-            <col className="w-[10%]" />
-            <col className="w-[9%]" />
+            <col className="w-[20%]" />   {/* Enseignant */}
+            <col className="w-[13%]" />   {/* Contact */}
+            <col className="w-[16%]" />   {/* École */}
+            <col className="w-[14%]" />   {/* IEF */}
+            <col className="w-[10%]" />   {/* Niveau */}
+            <col className="w-[14%]" />   {/* Classes */}
+            <col className="w-[8%]" />    {/* Statut */}
+            <col className="w-[5%]" />    {/* Actions */}
           </colgroup>
           <thead>
             <tr className="border-b border-border bg-surface-alt">
-              {["Enseignant", "Contact", "École", "Niveau", "Classes", "Statut", "Actions"].map(h => (
-                <th key={h} className="px-5 py-3 text-center text-xs font-semibold text-tx-muted uppercase tracking-wide">{h}</th>
+              {["Enseignant", "Contact", "École", "IEF", "Niveau", "Classes", "Statut", "Actions"].map(h => (
+                <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {paginated.map(t => {
-              const school = schools.find(s => s.id === t.school_id);
+              const schoolName = t.school?.name ?? schools.find(s => s.id === t.school_id)?.name ?? "—";
+              const schoolIef  = t.school?.region ?? "—";
               return (
                 <tr key={t.id} onClick={() => setModal({ kind: "view", teacher: t })}
                   className="border-t border-border hover:bg-surface-alt transition-colors cursor-pointer">
-                  <td className="px-5 py-3.5 text-center">
-                    <div className="flex items-center justify-center gap-2.5">
+
+                  {/* Enseignant */}
+                  <td className="px-4 py-3.5">
+                    <div className="flex items-center gap-2.5">
                       <div className="w-8 h-8 rounded-full bg-primary-soft text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">
                         {initials(t.name)}
                       </div>
-                      <div className="text-left">
-                        <div className="font-medium text-tx">{t.name}</div>
-                        {t.title && <div className="text-xs text-tx-muted">{t.title}</div>}
+                      <div className="min-w-0">
+                        <div className="font-semibold text-tx truncate">{t.name}</div>
+                        {t.title && <div className="text-xs text-tx-muted truncate">{t.title}</div>}
                       </div>
                     </div>
                   </td>
-                  <td className="px-5 py-3.5 text-tx-muted text-center">{t.phone ?? "—"}</td>
-                  <td className="px-5 py-3.5 text-tx-muted text-center">{school?.name ?? "—"}</td>
-                  <td className="px-5 py-3.5 text-center">
-                    <div className="flex gap-1 flex-wrap justify-center">
+
+                  {/* Contact */}
+                  <td className="px-4 py-3.5 text-tx-muted text-sm">{t.phone ?? "—"}</td>
+
+                  {/* École */}
+                  <td className="px-4 py-3.5">
+                    <span className="text-sm text-tx truncate block" title={schoolName}>{schoolName}</span>
+                  </td>
+
+                  {/* IEF */}
+                  <td className="px-4 py-3.5">
+                    {schoolIef !== "—"
+                      ? <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-warn-soft text-warn">
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 9l9-5 9 5-9 5-9-5z"/><path d="M5 10v6c0 2 3 4 7 4s7-2 7-4v-6"/></svg>
+                          {schoolIef}
+                        </span>
+                      : <span className="text-tx-muted text-xs">—</span>}
+                  </td>
+
+                  {/* Niveau */}
+                  <td className="px-4 py-3.5">
+                    <div className="flex gap-1 flex-wrap">
                       {(t.niveau && t.niveau.length > 0)
                         ? t.niveau.map(n => (
                           <span key={n} className="bg-warn-soft text-warn text-[11px] font-bold px-2 py-0.5 rounded-md">{n}</span>
                         ))
-                        : "—"}
+                        : <span className="text-tx-muted text-xs">—</span>}
                     </div>
                   </td>
-                  <td className="px-5 py-3.5 text-center">
-                    <div className="flex gap-1 flex-wrap justify-center">
+
+                  {/* Classes */}
+                  <td className="px-4 py-3.5">
+                    <div className="flex gap-1 flex-wrap">
                       {(t.classes && t.classes.length > 0)
                         ? t.classes.map(c => (
                           <span key={c} className="bg-primary-soft text-primary text-[11px] font-bold px-2 py-0.5 rounded-md">{c}</span>
                         ))
-                        : "—"}
+                        : <span className="text-tx-muted text-xs">—</span>}
                     </div>
                   </td>
-                  <td className="px-5 py-3.5 text-center">
+
+                  {/* Statut */}
+                  <td className="px-4 py-3.5">
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${t.status === "actif" ? "bg-success-soft text-success" : "bg-danger-soft text-danger"}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${t.status === "actif" ? "bg-success" : "bg-danger"}`} />
                       {t.status}
                     </span>
                   </td>
-                  <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
-                    <div className="flex justify-center">
-                      <button onClick={() => setModal({ kind: "manage", teacher: t })}
-                        className="text-xs bg-primary-soft text-primary px-3 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors">
-                        Gérer
-                      </button>
-                    </div>
+
+                  {/* Actions */}
+                  <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
+                    <button onClick={() => setModal({ kind: "manage", teacher: t })}
+                      className="text-xs bg-primary-soft text-primary px-3 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors">
+                      Gérer
+                    </button>
                   </td>
                 </tr>
               );
             })}
             {filtered.length === 0 && (
-              <tr><td colSpan={6} className="px-5 py-16 text-center text-tx-muted text-sm">
+              <tr><td colSpan={8} className="px-5 py-16 text-center text-tx-muted text-sm">
                 {hasFilters ? "Aucun enseignant ne correspond aux filtres." : "Aucun enseignant pour l'instant"}
               </td></tr>
             )}
@@ -379,7 +416,8 @@ export default function TeachersPage() {
             <div className="px-6 py-4 space-y-3">
               {[
                 { icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.12 1.22 2 2 0 012.11 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 14.92z" /></svg>, label: "Téléphone", value: modal.teacher.phone ?? "—" },
-                { icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 9l9-5 9 5-9 5-9-5z" /><path d="M5 10v6c0 2 3 4 7 4s7-2 7-4v-6" /></svg>, label: "École", value: schools.find(s => s.id === modal.teacher.school_id)?.name ?? "—" },
+                { icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 9l9-5 9 5-9 5-9-5z" /><path d="M5 10v6c0 2 3 4 7 4s7-2 7-4v-6" /></svg>, label: "École", value: modal.teacher.school?.name ?? schools.find(s => s.id === modal.teacher.school_id)?.name ?? "—" },
+                { icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>, label: "IEF", value: modal.teacher.school?.region ?? "—" },
               ].map(({ icon, label, value }) => (
                 <div key={label} className="flex items-center gap-3">
                   <div className="w-7 h-7 rounded-lg bg-surface-alt flex items-center justify-center text-tx-muted flex-shrink-0">{icon}</div>

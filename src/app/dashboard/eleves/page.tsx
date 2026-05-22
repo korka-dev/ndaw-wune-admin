@@ -17,6 +17,8 @@ interface Eleve {
   school_id?: string;
   session_id?: string;
   statut: string;
+  school_name?: string;    // nom école (joint depuis le backend)
+  school_region?: string;  // IEF / région (joint depuis le backend)
 }
 interface School   { id: string; name: string; }
 interface Session  { id: string; name: string; status: string; }
@@ -170,7 +172,8 @@ export default function ElevesPage() {
   const [selectAll,   setSelectAll]   = useState(false); // "tout filtré" sélectionné
 
   const load = () => {
-    elevesApi.list().then(r => setEleves(r.data.items ?? [])).catch(() => {});
+    // limit=10000 pour charger tous les élèves (parcours liste complète)
+    elevesApi.list({ limit: 10000 }).then(r => setEleves(r.data.items ?? [])).catch(() => {});
     schoolsApi.list().then(r => setSchools(r.data.items ?? [])).catch(() => {});
     sessionsApi.list().then(r => setSessions(r.data.items ?? [])).catch(() => {});
   };
@@ -588,13 +591,12 @@ export default function ElevesPage() {
           <table className="w-full text-sm table-fixed">
             <colgroup>
               <col className="w-[44px]" />  {/* Checkbox */}
-              <col className="w-[20%]" />
-              <col className="w-[7%]" />
-              <col className="w-[9%]" />
-              <col className="w-[17%]" />
-              <col className="w-[15%]" />
-              <col className="w-[11%]" />
-              <col className="w-[13%]" />
+              <col className="w-[22%]" />   {/* Élève */}
+              <col className="w-[8%]" />    {/* Classe */}
+              <col className="w-[22%]" />   {/* École */}
+              <col className="w-[18%]" />   {/* IEF */}
+              <col className="w-[10%]" />   {/* Statut */}
+              <col className="w-[14%]" />   {/* Actions */}
             </colgroup>
             <thead className="sticky top-0 z-10">
               <tr className="border-b border-border bg-surface-alt">
@@ -619,14 +621,16 @@ export default function ElevesPage() {
                     )}
                   </button>
                 </th>
-                {["Élève", "Sexe", "Classe", "École", "Session", "Statut", "Actions"].map(h => (
-                  <th key={h} className="px-5 py-3 text-center text-xs font-semibold text-tx-muted uppercase tracking-wide">{h}</th>
+                {["Nom / Prénom", "Classe", "École", "IEF", "Statut", "Actions"].map(h => (
+                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide first:text-center">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {paginated.map(e => {
                 const isSel = selectedIds.has(e.id);
+                const ecole = e.school_name ?? schoolName(e.school_id);
+                const ief   = e.school_region ?? "—";
                 return (
                   <tr
                     key={e.id}
@@ -645,40 +649,51 @@ export default function ElevesPage() {
                         )}
                       </button>
                     </td>
-                    {/* Élève */}
-                    <td className="px-5 py-3.5 text-center cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>
-                      <div className="flex items-center justify-center gap-2.5">
+
+                    {/* Nom / Prénom */}
+                    <td className="px-4 py-3.5 cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>
+                      <div className="flex items-center gap-2.5">
                         <div className="w-8 h-8 rounded-full bg-primary-soft text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">{initials(e)}</div>
-                        <div className="text-left">
-                          <div className="font-medium text-tx">{e.nom}</div>
-                          {e.prenom && <div className="text-xs text-tx-muted">{e.prenom}</div>}
+                        <div className="min-w-0">
+                          <div className="font-semibold text-tx truncate">{e.nom}</div>
+                          {e.prenom && <div className="text-xs text-tx-muted truncate">{e.prenom}</div>}
                         </div>
                       </div>
                     </td>
-                    {/* Sexe */}
-                    <td className="px-5 py-3.5 text-center cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>
-                      {e.genre ? (
-                        <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${e.genre === "Garçon" ? "bg-blue-100 text-blue-600" : "bg-pink-100 text-pink-600"}`}>
-                          {sexeIcon(e.genre)}
-                        </span>
-                      ) : <span className="text-tx-muted">—</span>}
-                    </td>
+
                     {/* Classe */}
-                    <td className="px-5 py-3.5 text-center cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>
-                      {e.classe ? <span className="bg-primary-soft text-primary text-xs font-bold px-2 py-0.5 rounded-md">{e.classe}</span> : <span className="text-tx-muted">—</span>}
+                    <td className="px-4 py-3.5 cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>
+                      {e.classe
+                        ? <span className="bg-primary-soft text-primary text-xs font-bold px-2 py-0.5 rounded-md">{e.classe}</span>
+                        : <span className="text-tx-muted">—</span>}
                     </td>
-                    <td className="px-5 py-3.5 text-tx-muted text-center truncate cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>{schoolName(e.school_id)}</td>
-                    <td className="px-5 py-3.5 text-tx-muted text-center truncate cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>{sessionName(e.session_id)}</td>
+
+                    {/* École */}
+                    <td className="px-4 py-3.5 cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>
+                      <span className="text-sm text-tx truncate block" title={ecole}>{ecole}</span>
+                    </td>
+
+                    {/* IEF */}
+                    <td className="px-4 py-3.5 cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>
+                      {ief !== "—"
+                        ? <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-warn-soft text-warn">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 9l9-5 9 5-9 5-9-5z"/><path d="M5 10v6c0 2 3 4 7 4s7-2 7-4v-6"/></svg>
+                            {ief}
+                          </span>
+                        : <span className="text-tx-muted text-xs">—</span>}
+                    </td>
+
                     {/* Statut */}
-                    <td className="px-5 py-3.5 text-center cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>
+                    <td className="px-4 py-3.5 cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${e.statut === "actif" ? "bg-success-soft text-success" : "bg-danger-soft text-danger"}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${e.statut === "actif" ? "bg-success" : "bg-danger"}`} />
                         {e.statut}
                       </span>
                     </td>
+
                     {/* Actions */}
-                    <td className="px-5 py-3.5" onClick={ev => ev.stopPropagation()}>
-                      <div className="flex justify-center gap-2">
+                    <td className="px-4 py-3.5" onClick={ev => ev.stopPropagation()}>
+                      <div className="flex gap-2">
                         <button onClick={() => openEdit(e)} className="text-xs bg-primary-soft text-primary px-3 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors">Modifier</button>
                         <button onClick={() => setModal({ kind: "delete", eleve: e })} className="text-xs bg-danger-soft text-danger px-3 py-1 rounded-lg font-medium hover:bg-danger hover:text-white transition-colors">Supprimer</button>
                       </div>
@@ -687,7 +702,7 @@ export default function ElevesPage() {
                 );
               })}
               {filtered.length === 0 && (
-                <tr><td colSpan={8} className="px-5 py-16 text-center text-tx-muted text-sm">
+                <tr><td colSpan={7} className="px-5 py-16 text-center text-tx-muted text-sm">
                   {hasFilters ? "Aucun élève ne correspond aux filtres." : "Aucun élève pour l'instant."}
                 </td></tr>
               )}
@@ -721,10 +736,11 @@ export default function ElevesPage() {
               </div>
               <div className="px-6 py-4 space-y-3">
                 {[
-                  { label: "Sexe", value: e.genre ?? "—" },
+                  { label: "Sexe",              value: e.genre ?? "—" },
                   { label: "Date de naissance", value: e.date_naissance ? new Date(e.date_naissance).toLocaleDateString("fr-FR") : "—" },
-                  { label: "École", value: schoolName(e.school_id) },
-                  { label: "Session", value: sessionName(e.session_id) },
+                  { label: "École",             value: e.school_name ?? schoolName(e.school_id) },
+                  { label: "IEF",               value: e.school_region ?? "—" },
+                  { label: "Session",           value: sessionName(e.session_id) },
                 ].map(({ label, value }) => (
                   <div key={label} className="flex justify-between text-sm">
                     <span className="text-tx-muted">{label}</span>
