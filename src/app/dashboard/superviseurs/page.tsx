@@ -7,12 +7,12 @@ const PAGE_SIZE = 20;
 
 interface Superviseur {
   id: string; name: string; phone?: string; title?: string;
-  status: string; school_id?: string; assigned_teacher_ids?: string[];
+  status: string; school_id?: string; classes?: string[];
 }
 interface School { id: string; name: string; }
 interface Teacher { id: string; name: string; phone?: string; school_id?: string; classes?: string[]; }
 
-const EMPTY = { name: "", phone: "", title: "", school_id: "", assigned_teacher_ids: [] as string[] };
+const EMPTY = { name: "", phone: "", title: "", school_id: "", classes: [] as string[] };
 type ModalState = null | "create"
   | { kind: "view"; sup: Superviseur }
   | { kind: "manage"; sup: Superviseur }
@@ -105,9 +105,9 @@ export default function SuperviseursPage() {
   const toggleTeacher = (id: string) =>
     setForm(f => ({
       ...f,
-      assigned_teacher_ids: f.assigned_teacher_ids.includes(id)
-        ? f.assigned_teacher_ids.filter(x => x !== id)
-        : [...f.assigned_teacher_ids, id],
+      classes: f.classes.includes(id)
+        ? f.classes.filter(x => x !== id)
+        : [...f.classes, id],
     }));
 
   /* Naviguer au champ suivant avec Entrée */
@@ -142,13 +142,13 @@ export default function SuperviseursPage() {
   const openEdit = (sup: Superviseur) => {
     setForm({
       name: sup.name, phone: sup.phone ?? "", title: sup.title ?? "",
-      school_id: sup.school_id ?? "", assigned_teacher_ids: sup.assigned_teacher_ids ?? []
+      school_id: sup.school_id ?? "", classes: sup.classes ?? []
     });
     setPhoneError("");
     setModal({ kind: "edit", sup });
   };
   const openAssign = (sup: Superviseur) => {
-    setAssignIds(sup.assigned_teacher_ids ?? []);
+    setAssignIds(sup.classes ?? []);
     setAssignSearch("");
     setModal({ kind: "assign", sup });
   };
@@ -273,7 +273,7 @@ export default function SuperviseursPage() {
               </td></tr>
             )}
             {!dataLoading && !dataError && paginated.map(sup => {
-              const assigned = assignedTeachers(sup.assigned_teacher_ids);
+              const assigned = assignedTeachers(sup.classes);
               return (
                 <tr key={sup.id} onClick={() => setModal({ kind: "view", sup })}
                   className="border-t border-border hover:bg-surface-alt transition-colors cursor-pointer">
@@ -356,9 +356,9 @@ export default function SuperviseursPage() {
                   <path d="M19 8v6M16 11h6" />
                 </svg>
                 Assigner des enseignants
-                {(modal.sup.assigned_teacher_ids ?? []).length > 0 && (
+                {(modal.sup.classes ?? []).length > 0 && (
                   <span className="ml-auto text-xs bg-brand text-white font-bold px-2 py-0.5 rounded-full">
-                    {(modal.sup.assigned_teacher_ids ?? []).length}
+                    {(modal.sup.classes ?? []).length}
                   </span>
                 )}
               </button>
@@ -473,7 +473,7 @@ export default function SuperviseursPage() {
                 <select
                   id="sv-school"
                   value={form.school_id}
-                  onChange={e => setForm(f => ({ ...f, school_id: e.target.value, assigned_teacher_ids: [] }))}
+                  onChange={e => setForm(f => ({ ...f, school_id: e.target.value, classes: [] }))}
                   onKeyDown={e => onEnter(e as any)}
                   className={cls}
                 >
@@ -488,14 +488,14 @@ export default function SuperviseursPage() {
                   <label className="text-xs font-semibold text-tx-muted mb-2 block">
                     Enseignants à superviser{" "}
                     <span className="text-brand font-bold">
-                      ({form.assigned_teacher_ids.length} sélectionné{form.assigned_teacher_ids.length !== 1 ? "s" : ""})
+                      ({form.classes.length} sélectionné{form.classes.length !== 1 ? "s" : ""})
                     </span>
                   </label>
                   <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
                     {schoolTeachers(form.school_id).length === 0 ? (
                       <p className="text-sm text-tx-muted italic py-2 text-center">Aucun enseignant dans cette école</p>
                     ) : schoolTeachers(form.school_id).map(t => {
-                      const sel = form.assigned_teacher_ids.includes(t.id);
+                      const sel = form.classes.includes(t.id);
                       return (
                         <button key={t.id} type="button" onClick={() => toggleTeacher(t.id)}
                           className={`flex items-center gap-3 p-2.5 rounded-xl border-2 text-left transition-all ${sel ? "border-brand bg-brand-soft" : "border-border bg-bg hover:border-brand/40"}`}>
@@ -590,13 +590,13 @@ export default function SuperviseursPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-[10px] font-semibold text-tx-muted uppercase tracking-wide mb-1.5">
-                    Enseignants supervisés ({(modal.sup.assigned_teacher_ids ?? []).length})
+                    Enseignants supervisés ({(modal.sup.classes ?? []).length})
                   </div>
-                  {assignedTeachers(modal.sup.assigned_teacher_ids).length === 0 ? (
+                  {assignedTeachers(modal.sup.classes).length === 0 ? (
                     <p className="text-sm text-tx-muted italic">Aucun enseignant assigné</p>
                   ) : (
                     <div className="flex flex-wrap gap-1.5">
-                      {assignedTeachers(modal.sup.assigned_teacher_ids).map(t => (
+                      {assignedTeachers(modal.sup.classes).map(t => (
                         <span key={t.id} className="inline-flex items-center gap-1 bg-primary-soft text-primary text-xs font-medium px-2 py-0.5 rounded-full">
                           <span className="w-4 h-4 rounded-full bg-primary text-white text-[9px] flex items-center justify-center font-bold flex-shrink-0">{initials(t.name)}</span>
                           {t.name}
