@@ -90,6 +90,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [showLogout, setShowLogout] = useState(false);
   const [activeSession, setActiveSession] = useState<{ id: string; name: string } | null | "loading">("loading");
 
+  const loadActiveSession = () => {
+    sessionsApi.list().then(({ data }) => {
+      const active = (data.items ?? []).find((s: any) => s.status === "active") ?? null;
+      setActiveSession(active);
+    }).catch(() => {
+      setActiveSession(null);
+    });
+  };
+
   useEffect(() => {
     fetchMe().then(() => {
       const state = useAuth.getState();
@@ -98,13 +107,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         router.replace("/change-password");
       }
     });
-    // Charger la session active
-    sessionsApi.list().then(({ data }) => {
-      const active = (data.items ?? []).find((s: any) => s.status === "active") ?? null;
-      setActiveSession(active);
-    }).catch(() => {
-      setActiveSession(null);
-    });
+
+    loadActiveSession();
+
+    // Réagir aux changements de session depuis les sous-pages sans rechargement lourd
+    const handleSessionChange = () => {
+      loadActiveSession();
+    };
+    window.addEventListener("session-change", handleSessionChange);
+
+    return () => {
+      window.removeEventListener("session-change", handleSessionChange);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

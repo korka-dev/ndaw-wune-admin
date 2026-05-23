@@ -102,8 +102,11 @@ export default function PlanningPage() {
     if (!f) return;
     setImportFile(f); setImportResult(null); setImportPreview([]); setImportErrors([]);
 
-    const isPdf = f.name.toLowerCase().endsWith(".pdf") || f.type === "application/pdf";
-    if (isPdf) return; // PDF → preview impossible côté client, le serveur s'en charge
+    const name = f.name.toLowerCase();
+    const isPdf = name.endsWith(".pdf") || f.type === "application/pdf";
+    const isExcel = name.endsWith(".xlsx") || name.endsWith(".xls") || f.type.includes("excel") || f.type.includes("officedocument.spreadsheetml");
+    
+    if (isPdf || isExcel) return; // PDF/Excel → preview impossible côté client, le serveur s'en charge
 
     const reader = new FileReader();
     reader.onload = ev => {
@@ -114,14 +117,29 @@ export default function PlanningPage() {
   };
 
   const handleImport = async () => {
-    if (!importFile || !sessId) return;
+    if (!importFile) return;
+    if (!sessId) {
+      setImportErrors(["Aucune session active trouvée. Créez ou activez une session de programme avant d'importer un planning."]);
+      return;
+    }
     setImporting(true);
     try {
       const res = await planningApi.import(sessId, importFile);
       setImportResult(res.data);
       if (res.data.imported > 0) loadSegs();
     } catch (e: any) {
-      setImportErrors([e?.response?.data?.detail ?? "Erreur lors de l'import."]);
+      const detail = e?.response?.data?.detail;
+      let msg: string;
+      if (!e?.response) {
+        msg = "Impossible de joindre le serveur. Vérifiez votre connexion et que le serveur est démarré.";
+      } else if (Array.isArray(detail)) {
+        msg = detail.map((d: any) => d.msg ?? JSON.stringify(d)).join(" · ");
+      } else if (detail) {
+        msg = String(detail);
+      } else {
+        msg = `Erreur ${e.response.status} lors de l'import.`;
+      }
+      setImportErrors([msg]);
     } finally {
       setImporting(false);
     }
@@ -526,10 +544,10 @@ export default function PlanningPage() {
                     <span className="text-sm text-tx-muted text-center px-2">
                       {importFile
                         ? <span className="text-brand font-semibold">{importFile.name}</span>
-                        : <><span className="font-medium text-tx">Cliquez pour choisir un fichier</span><br /><span className="text-xs">PDF emploi du temps · ou fichier CSV<br />Le PDF sera lu automatiquement</span></>
+                        : <><span className="font-medium text-tx">Cliquez pour choisir un fichier</span><br /><span className="text-xs">Fichier Excel (.xlsx, .xls), CSV ou PDF<br />Le fichier sera traité automatiquement</span></>
                       }
                     </span>
-                    <input ref={fileInputRef} type="file" accept=".pdf,.csv,text/csv,text/plain,application/pdf"
+                    <input ref={fileInputRef} type="file" accept=".pdf,.csv,.xlsx,.xls,text/csv,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                       className="hidden" onChange={handleFileChange} />
                   </label>
 

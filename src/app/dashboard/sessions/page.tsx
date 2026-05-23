@@ -40,6 +40,7 @@ export default function SessionsPage() {
       if (modal === "create") await sessionsApi.create(form);
       else await sessionsApi.update((modal as Session).id, form);
       load(false); setModal(null);
+      window.dispatchEvent(new Event("session-change"));
     } finally { setLoading(false); }
   };
 
@@ -93,13 +94,13 @@ export default function SessionsPage() {
                 <td className="px-5 py-3.5">
                   <div className="flex gap-2 justify-center">
                     {s.status !== "active" && (
-                      <button onClick={() => { sessionsApi.activate(s.id).then(() => load(false)); }}
+                      <button onClick={() => { sessionsApi.activate(s.id).then(() => { load(false); window.dispatchEvent(new Event("session-change")); }); }}
                         className="text-xs bg-success-soft text-success px-2.5 py-1 rounded-lg font-medium hover:bg-success hover:text-white transition-colors">
                         Activer
                       </button>
                     )}
                     {s.status === "active" && (
-                      <button onClick={() => { if (!confirm("Archiver cette session ? Elle passera en statut Inactive et ne pourra plus recevoir de nouvelles séances.")) return; sessionsApi.deactivate(s.id).then(() => load(false)); }}
+                      <button onClick={() => { if (!confirm("Archiver cette session ? Elle passera en statut Inactive et ne pourra plus recevoir de nouvelles séances.")) return; sessionsApi.deactivate(s.id).then(() => { load(false); window.dispatchEvent(new Event("session-change")); }); }}
                         className="text-xs bg-warn-soft text-warn px-2.5 py-1 rounded-lg font-medium hover:bg-warn hover:text-white transition-colors">
                         Archiver
                       </button>
@@ -108,7 +109,7 @@ export default function SessionsPage() {
                       className="text-xs bg-primary-soft text-primary px-2.5 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors">
                       Modifier
                     </button>
-                    <button onClick={() => { if (!confirm("Supprimer cette session ?")) return; sessionsApi.delete(s.id).then(() => load(false)); }}
+                    <button onClick={() => { if (!confirm("Supprimer cette session ?")) return; sessionsApi.delete(s.id).then(() => { load(false); window.dispatchEvent(new Event("session-change")); }); }}
                       className="text-xs bg-danger-soft text-danger px-2.5 py-1 rounded-lg font-medium hover:bg-danger hover:text-white transition-colors">
                       Supprimer
                     </button>
