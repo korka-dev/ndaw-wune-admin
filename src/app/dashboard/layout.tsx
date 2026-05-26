@@ -40,8 +40,8 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: "Pédagogie",
     items: [
-      { href: "/dashboard/planning",           label: "Gestion Planning",      icon: "clock"      },
-      { href: "/dashboard/suivi-seances",      label: "Suivi des séances",     icon: "activity"   },
+      { href: "/dashboard/planning",             label: "Gestion Planning",      icon: "clock"      },
+      { href: "/dashboard/suivi-seances",        label: "Suivi des séances",     icon: "activity"   },
       { href: "/dashboard/suivi-superviseurs",   label: "Suivi superviseurs",    icon: "eye"        },
       { href: "/dashboard/rapports-journaliers", label: "Rapports Journaliers",  icon: "file-text"  },
     ],
@@ -60,7 +60,7 @@ const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
-type IconName = "calendar"|"home"|"school"|"users"|"users-sm"|"activity"|"clock"|"book"|"check"|"shield"|"doc"|"lock"|"supervisor"|"eye"|"file-text";
+type IconName = "calendar"|"home"|"school"|"users"|"users-sm"|"activity"|"clock"|"book"|"check"|"check-sq"|"shield"|"doc"|"lock"|"supervisor"|"eye"|"file-text";
 
 function NavIcon({ name }: { name: IconName }) {
   const p = { width:17, height:17, viewBox:"0 0 24 24", fill:"none", stroke:"currentColor", strokeWidth:2, strokeLinecap:"round" as const, strokeLinejoin:"round" as const };
@@ -80,6 +80,7 @@ function NavIcon({ name }: { name: IconName }) {
     case "supervisor": return <svg {...p}><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/><circle cx="20" cy="8" r="1" fill="currentColor"/><path d="M18 6l4 4-4 4"/></svg>;
     case "eye":        return <svg {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>;
     case "file-text":  return <svg {...p}><path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9l-6-6z"/><path d="M14 3v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="12" y2="17"/></svg>;
+    case "check-sq":   return <svg {...p}><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>;
   }
 }
 

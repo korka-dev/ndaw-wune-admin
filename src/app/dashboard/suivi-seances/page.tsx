@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { suiviApi, sessionsApi } from "@/lib/api";
 import Pagination from "@/components/Pagination";
 
@@ -17,7 +17,8 @@ interface TeacherSuivi {
   total_seances:      number;
   seances_terminees:  number;
   seances_en_cours:   number;
-  derniere_activite?: string;
+  derniere_activite?: string;   // started_at de la dernière séance
+  derniere_fin?:      string;   // finished_at de la dernière séance
   derniere_matiere?:  string;
   derniere_classe?:   string;
   dernier_status?:    string;
@@ -693,10 +694,12 @@ function TeacherModal({
 export default function SuiviSeancesPage() {
   const [teachers,     setTeachers]     = useState<TeacherSuivi[]>([]);
   const [sessId,       setSessId]       = useState("");
+  const [sessionsReady, setSessionsReady] = useState(false); // sessions chargées ?
   const [sessions,     setSessions]     = useState<any[]>([]);
   const [search,       setSearch]       = useState("");
   const [filters,      setFilters]      = useState<FilterState>(FILTER_EMPTY);
-  const [loading,      setLoading]      = useState(false);
+  const [loading,      setLoading]      = useState(true);  // true dès le départ
+  const [error,        setError]        = useState<string | null>(null);
   const [page,         setPage]         = useState(1);
   const [showFilters,  setShowFilters]  = useState(false);
   const [quickStatus,  setQuickStatus]  = useState<FilterStatus>("all");
@@ -706,26 +709,55 @@ export default function SuiviSeancesPage() {
   const [modalDetail,  setModalDetail]  = useState<TeacherDetail | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
 
-  /* ── Sessions ── */
+  const abortRef = useRef<AbortController | null>(null);
+
+  /* ── Sessions : charger d'abord, PUIS déclencher la requête principale ── */
   useEffect(() => {
-    sessionsApi.list().then(r => {
-      const list = r.data.items ?? [];
-      setSessions(list);
-      const active = list.find((s: any) => s.status === "active");
-      if (active) setSessId(active.id);
-    }).catch(() => {});
+    sessionsApi.list()
+      .then(r => {
+        const list = r.data.items ?? [];
+        setSessions(list);
+        const active = list.find((s: any) => s.status === "active");
+        if (active) setSessId(active.id);
+      })
+      .catch(() => {})
+      .finally(() => setSessionsReady(true)); // sessions prêtes dans tous les cas
   }, []);
 
-  /* ── Chargement ── */
+  /* ── Chargement principal — ne démarre QUE quand les sessions sont prêtes ── */
   const load = useCallback(() => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setLoading(true);
-    suiviApi.list({ session_id: sessId || undefined, search: search || undefined })
-      .then(r => setTeachers(r.data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    setError(null);
+
+    suiviApi
+      .list({ session_id: sessId || undefined, search: search || undefined })
+      .then(r => {
+        if (!controller.signal.aborted) setTeachers(r.data);
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        const msg =
+          err?.response?.status === 401 ? "Session expirée, veuillez vous reconnecter." :
+          err?.response?.status === 403 ? "Accès non autorisé." :
+          err?.response?.data?.detail   ? err.response.data.detail :
+          "Impossible de charger les données. Vérifiez votre connexion.";
+        setError(msg);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
   }, [sessId, search]);
 
-  useEffect(() => { load(); }, [load]);
+  // Attend que les sessions soient prêtes avant le premier chargement
+  useEffect(() => {
+    if (!sessionsReady) return;
+    load();
+    return () => abortRef.current?.abort();
+  }, [load, sessionsReady]);
 
   /* ── Options dérivées des données ── */
   const availableSchools = Array.from(
@@ -930,6 +962,28 @@ export default function SuiviSeancesPage() {
             <svg className="animate-spin w-5 h-5 text-brand" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
             <span className="text-sm text-tx-muted">Chargement…</span>
           </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <div className="w-12 h-12 rounded-full bg-danger/10 flex items-center justify-center">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-danger">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-semibold text-tx">{error}</p>
+              <p className="text-xs text-tx-muted mt-1">Vérifiez votre connexion ou rechargez la page.</p>
+            </div>
+            <button
+              onClick={() => load()}
+              className="flex items-center gap-2 px-4 py-2 bg-brand text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+              </svg>
+              Réessayer
+            </button>
+          </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-2">
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-tx-muted/30">
@@ -950,7 +1004,8 @@ export default function SuiviSeancesPage() {
                 <tr>
                   <th className="sticky top-0 z-10 bg-surface-alt px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">Enseignant</th>
                   <th className="sticky top-0 z-10 bg-surface-alt px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">Dernière activité</th>
-                  <th className="sticky top-0 z-10 bg-surface-alt px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">Heure de lancement</th>
+                  <th className="sticky top-0 z-10 bg-surface-alt px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">Heure début</th>
+                  <th className="sticky top-0 z-10 bg-surface-alt px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">Heure fin</th>
                   <th className="sticky top-0 z-10 bg-surface-alt px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">Statut</th>
                   <th className="sticky top-0 z-10 bg-surface-alt px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">Séances</th>
                   <th className="sticky top-0 z-10 bg-surface-alt px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">Score</th>
@@ -988,8 +1043,8 @@ export default function SuiviSeancesPage() {
                       ) : <span className="text-sm text-tx-muted italic">Aucune activité</span>}
                     </td>
 
-                    {/* Heure de lancement */}
-                    <td className="px-5 py-4">
+                    {/* Heure début */}
+                    <td className="px-5 py-4 whitespace-nowrap">
                       {t.derniere_activite ? (
                         <>
                           <p className="text-sm font-mono font-semibold text-tx">{fmtTime(t.derniere_activite)}</p>
@@ -998,6 +1053,20 @@ export default function SuiviSeancesPage() {
                           </p>
                         </>
                       ) : <span className="text-sm text-tx-muted">—</span>}
+                    </td>
+
+                    {/* Heure fin */}
+                    <td className="px-5 py-4 whitespace-nowrap">
+                      {t.derniere_fin ? (
+                        <>
+                          <p className="text-sm font-mono font-semibold text-tx">{fmtTime(t.derniere_fin)}</p>
+                          <p className="text-xs text-tx-muted">
+                            {new Date(t.derniere_fin).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })}
+                          </p>
+                        </>
+                      ) : t.dernier_status === "en_cours"
+                          ? <span className="inline-flex items-center gap-1 text-xs text-brand font-medium"><span className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse"/>En cours</span>
+                          : <span className="text-sm text-tx-muted">—</span>}
                     </td>
 
                     {/* Statut */}
