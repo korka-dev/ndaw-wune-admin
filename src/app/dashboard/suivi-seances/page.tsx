@@ -17,6 +17,7 @@ interface TeacherSuivi {
   total_seances:      number;
   seances_terminees:  number;
   seances_en_cours:   number;
+  seances_manquees:   number;
   derniere_activite?: string;   // started_at de la dernière séance
   derniere_fin?:      string;   // finished_at de la dernière séance
   derniere_matiere?:  string;
@@ -124,9 +125,10 @@ function scoreBadge(score: number): { label: string; cls: string } {
 function StatusBadge({ status }: { status?: string }) {
   if (!status) return <span className="text-xs text-tx-muted italic">—</span>;
   const cfg: Record<string, { label: string; cls: string; dot?: boolean }> = {
-    en_cours: { label: "En cours",  cls: "bg-brand/10 text-brand border border-brand/20",       dot: true },
+    en_cours: { label: "En cours",  cls: "bg-brand/10 text-brand border border-brand/20",         dot: true },
     terminee: { label: "Terminée",  cls: "bg-success-soft text-success border border-success/20" },
-    annulee:  { label: "Annulée",   cls: "bg-danger-soft text-danger border border-danger/20"   },
+    annulee:  { label: "Annulée",   cls: "bg-danger-soft text-danger border border-danger/20"    },
+    manquee:  { label: "Manquée",   cls: "bg-warn-soft text-warn border border-warn/20"           },
   };
   const { label, cls, dot } = cfg[status] ?? { label: status, cls: "bg-surface-alt text-tx-muted border border-border" };
   return (
@@ -539,6 +541,7 @@ function TeacherModal({
               { v: teacher.total_seances,     l: "Total",     c: "text-tx" },
               { v: teacher.seances_terminees, l: "Terminées", c: "text-success" },
               { v: teacher.seances_en_cours,  l: "En cours",  c: "text-brand" },
+              { v: teacher.seances_manquees,  l: "Manquées",  c: teacher.seances_manquees > 0 ? "text-warn" : "text-tx-muted" },
             ].map(s => (
               <div key={s.l} className="text-center px-3 py-2 bg-surface-alt rounded-xl min-w-[56px]">
                 <p className={`text-xl font-bold ${s.c}`}>{s.v}</p>
@@ -817,6 +820,7 @@ export default function SuiviSeancesPage() {
   const totalActive   = teachers.filter(t => t.seances_en_cours > 0).length;
   const totalDone     = teachers.reduce((a, t) => a + t.seances_terminees, 0);
   const totalNoSeance = teachers.filter(t => t.total_seances === 0).length;
+  const totalMissed   = teachers.reduce((a, t) => a + (t.seances_manquees ?? 0), 0);
 
   const activeFilterCount = countActiveFilters(filters);
 
@@ -927,11 +931,12 @@ export default function SuiviSeancesPage() {
       </div>
 
       {/* ── Cartes stats ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         {[
-          { label: "Enseignants",    value: teachers.length, icon: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z", color: "text-brand",    bg: "bg-brand/10",    fStatus: "all"      as FilterStatus },
-          { label: "En cours",       value: totalActive,     icon: "M5 3l14 9-14 9V3z",                                                                    color: "text-warn",     bg: "bg-warn/10",     fStatus: "en_cours" as FilterStatus },
-          { label: "Séances faites", value: totalDone,       icon: "M20 6 9 17l-5-5",                                                                       color: "text-success",  bg: "bg-success/10",  fStatus: "terminee" as FilterStatus },
+          { label: "Enseignants",    value: teachers.length, icon: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",       color: "text-brand",    bg: "bg-brand/10",    fStatus: "all"      as FilterStatus },
+          { label: "En cours",       value: totalActive,     icon: "M5 3l14 9-14 9V3z",                                                                        color: "text-warn",     bg: "bg-warn/10",     fStatus: "en_cours" as FilterStatus },
+          { label: "Séances faites", value: totalDone,       icon: "M20 6 9 17l-5-5",                                                                          color: "text-success",  bg: "bg-success/10",  fStatus: "terminee" as FilterStatus },
+          { label: "Manquées",       value: totalMissed,     icon: "M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4m0 4h.01", color: totalMissed > 0 ? "text-warn" : "text-tx-muted", bg: totalMissed > 0 ? "bg-warn/10" : "bg-surface-alt", fStatus: "all" as FilterStatus },
           { label: "Sans activité",  value: totalNoSeance,   icon: "M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z", color: "text-tx-muted", bg: "bg-surface-alt", fStatus: "aucune"   as FilterStatus },
         ].map(stat => (
           <button
@@ -1076,6 +1081,11 @@ export default function SuiviSeancesPage() {
                     <td className="px-5 py-4">
                       <p className="text-base font-bold text-tx leading-none">{t.total_seances}</p>
                       <p className="text-xs text-tx-muted mt-1">{t.seances_terminees} terminée{t.seances_terminees !== 1 ? "s" : ""}</p>
+                      {t.seances_manquees > 0 && (
+                        <p className="text-xs text-warn font-semibold mt-0.5">
+                          {t.seances_manquees} manquée{t.seances_manquees !== 1 ? "s" : ""}
+                        </p>
+                      )}
                       {/* Mini-indicateurs d'activité */}
                       <div className="flex items-center gap-1.5 mt-1.5">
                         <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
