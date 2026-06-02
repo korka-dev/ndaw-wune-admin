@@ -22,7 +22,20 @@ interface Eleve {
 interface School { id: string; name: string; }
 interface Session { id: string; name: string; status: string; }
 
-const ELEVE_CLASSES = ["CP", "CE1", "CE2", "CM1", "CM2"];
+const NIVEAU_CLASSES: Record<string, string[]> = {
+  "CP":  ["CP A", "CP B", "CP C"],
+  "CE":  ["CE1 A", "CE1 B", "CE1 C", "CE1 D", "CE2 A", "CE2 B", "CE2 C", "CE2 D"],
+  "CM":  ["CM1 A", "CM1 B", "CM1 C", "CM1 D", "CM2 A", "CM2 B", "CM2 C", "CM2 D"],
+};
+const NIVEAUX = Object.keys(NIVEAU_CLASSES);
+const ELEVE_CLASSES = Object.values(NIVEAU_CLASSES).flat();
+
+function getInitialNiveau(classe: string): string {
+  for (const [niv, classes] of Object.entries(NIVEAU_CLASSES)) {
+    if (classes.includes(classe)) return niv;
+  }
+  return "";
+}
 
 const EMPTY_FORM = {
   nom: "", prenom: "", genre: "", date_naissance: "", classe: "", school_id: "", session_id: "",
@@ -59,6 +72,17 @@ function EleveFormFields({
   schools: School[];
   sessions: Session[];
 }) {
+  const [niveau, setNiveau] = useState<string>(() => getInitialNiveau(form.classe));
+
+  const classesForNiveau = niveau ? (NIVEAU_CLASSES[niveau] ?? []) : [];
+
+  const handleNiveauChange = (n: string) => {
+    setNiveau(n);
+    const valid = NIVEAU_CLASSES[n] ?? [];
+    // Auto-sélectionner si un seul choix (ex: CP), sinon reset
+    setForm(f => ({ ...f, classe: valid.length === 1 ? valid[0] : "" }));
+  };
+
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3">
@@ -105,25 +129,49 @@ function EleveFormFields({
         </div>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-tx mb-1">Classe <span className="text-danger">*</span></label>
-        <div className="relative">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <path d="M4 19.5A2.5 2.5 0 016.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
-          </svg>
-          <select
-            value={form.classe}
-            onChange={e => setForm(f => ({ ...f, classe: e.target.value }))}
-            className="w-full bg-surface-alt border border-border rounded-xl pl-9 pr-9 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none cursor-pointer"
-          >
-            <option value="">— Sélectionner une classe —</option>
-            {ELEVE_CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
-            <path d="M6 9l6 6 6-6" />
-          </svg>
+      {/* ── Cascade Niveau → Classe ── */}
+      <div className="grid grid-cols-2 gap-3">
+        {/* Niveau */}
+        <div>
+          <label className="block text-sm font-medium text-tx mb-1">Niveau <span className="text-danger">*</span></label>
+          <div className="relative">
+            <select
+              value={niveau}
+              onChange={e => handleNiveauChange(e.target.value)}
+              className="w-full bg-surface-alt border border-border rounded-xl px-3.5 pr-9 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none cursor-pointer"
+            >
+              <option value="">— Niveau —</option>
+              {NIVEAUX.map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </div>
+        </div>
+
+        {/* Classe — désactivée tant que niveau non choisi */}
+        <div>
+          <label className="block text-sm font-medium text-tx mb-1">Classe <span className="text-danger">*</span></label>
+          <div className="relative">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
+              <path d="M4 19.5A2.5 2.5 0 016.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" />
+            </svg>
+            <select
+              value={form.classe}
+              onChange={e => setForm(f => ({ ...f, classe: e.target.value }))}
+              disabled={!niveau}
+              className="w-full bg-surface-alt border border-border rounded-xl pl-9 pr-9 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <option value="">{niveau ? "— Classe —" : "— Choisir un niveau d'abord —"}</option>
+              {classesForNiveau.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </div>
         </div>
       </div>
 
