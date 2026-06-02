@@ -16,16 +16,16 @@ interface Eleve {
   school_id?: string;
   session_id?: string;
   statut: string;
-  school_name?: string;    // nom école (joint depuis le backend)
-  school_region?: string;  // IEF / région (joint depuis le backend)
+  school_name?: string;
+  school_region?: string;
 }
 interface School { id: string; name: string; }
 interface Session { id: string; name: string; status: string; }
 
 const NIVEAU_CLASSES: Record<string, string[]> = {
-  "CP":  ["CP A", "CP B", "CP C"],
-  "CE":  ["CE1 A", "CE1 B", "CE1 C", "CE1 D", "CE2 A", "CE2 B", "CE2 C", "CE2 D"],
-  "CM":  ["CM1 A", "CM1 B", "CM1 C", "CM1 D", "CM2 A", "CM2 B", "CM2 C", "CM2 D"],
+  "CP": ["CP A", "CP B", "CP C"],
+  "CE": ["CE1 A", "CE1 B", "CE1 C", "CE1 D", "CE2 A", "CE2 B", "CE2 C", "CE2 D"],
+  "CM": ["CM1 A", "CM1 B", "CM1 C", "CM1 D", "CM2 A", "CM2 B", "CM2 C", "CM2 D"],
 };
 const NIVEAUX = Object.keys(NIVEAU_CLASSES);
 const ELEVE_CLASSES = Object.values(NIVEAU_CLASSES).flat();
@@ -53,13 +53,9 @@ type ModalState =
 
 function cleanNamePart(text: string | undefined | null): string {
   if (!text) return "";
-  // 1. Remove markers like N1, N2, N°1, NO1, N•2, N*2, etc. (case insensitive)
   let cleaned = text.replace(/\b(N[oO°•*]?\s*\d+|NUMERO|\d+)\b/gi, "");
-  // 2. Clean trailing digits inside words (e.g., NGOM2 -> NGOM, SOW1 -> SOW)
   cleaned = cleaned.replace(/([A-Za-zÀ-ÿ]+)\d+/gi, "$1");
-  // 3. Clean trailing letters like N, N* (case insensitive) if they are leftovers
   cleaned = cleaned.replace(/\b(N[*•°]?)\b/gi, "");
-  // 4. Remove multiple spaces and trim
   return cleaned.replace(/\s+/g, " ").trim();
 }
 
@@ -78,9 +74,7 @@ function EleveFormFields({
 
   const handleNiveauChange = (n: string) => {
     setNiveau(n);
-    const valid = NIVEAU_CLASSES[n] ?? [];
-    // Auto-sélectionner si un seul choix (ex: CP), sinon reset
-    setForm(f => ({ ...f, classe: valid.length === 1 ? valid[0] : "" }));
+    setForm(f => ({ ...f, classe: "" }));
   };
 
   return (
@@ -222,7 +216,7 @@ export default function ElevesPage() {
 
   // ── Sélection multiple ────────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [selectAll, setSelectAll] = useState(false); // "tout filtré" sélectionné
+  const [selectAll, setSelectAll] = useState(false);
 
   const load = (isFirstLoad = false) => {
     if (isFirstLoad) { setDataLoading(true); setDataError(null); }
@@ -243,7 +237,6 @@ export default function ElevesPage() {
   };
   useEffect(() => { load(true); }, []);
   useEffect(() => { setPage(1); }, [search, filterSchool, filterClasse, filterSession, filterSexe]);
-  // Réinitialiser la sélection quand les filtres changent
   useEffect(() => { setSelectedIds(new Set()); setSelectAll(false); }, [search, filterSchool, filterClasse, filterSession, filterSexe]);
 
   const hasFilters = !!(search || filterSchool || filterClasse || filterSession || filterSexe);
@@ -279,14 +272,12 @@ export default function ElevesPage() {
   const togglePage = () => {
     setSelectAll(false);
     if (allPageSel) {
-      // Décocher toute la page
       setSelectedIds(prev => {
         const next = new Set(prev);
         pageIds.forEach(id => next.delete(id));
         return next;
       });
     } else {
-      // Cocher toute la page
       setSelectedIds(prev => {
         const next = new Set(prev);
         pageIds.forEach(id => next.add(id));
@@ -376,7 +367,6 @@ export default function ElevesPage() {
 
   const schoolName = (id?: string) => schools.find(s => s.id === id)?.name ?? "—";
   const sessionName = (id?: string) => sessions.find(s => s.id === id)?.name ?? "—";
-  const sexeIcon = (g?: string) => g === "Garçon" ? "G" : g === "Fille" ? "F" : "—";
   const fullName = (e: Eleve) => {
     const cNom = cleanNamePart(e.nom);
     const cPrenom = cleanNamePart(e.prenom);
@@ -401,7 +391,6 @@ export default function ElevesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Exporter Excel */}
           <button
             onClick={handleExportXlsx}
             disabled={exporting}
@@ -410,8 +399,6 @@ export default function ElevesPage() {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
             {exporting ? "Export…" : "Exporter Excel"}
           </button>
-
-          {/* Ajouter */}
           <button
             onClick={openCreate}
             className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
@@ -424,7 +411,6 @@ export default function ElevesPage() {
 
       {/* ── Filtres ── */}
       <div className="flex gap-3 mb-5 flex-wrap">
-        {/* Recherche */}
         <div className="relative flex-1 min-w-[200px]">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
             className="absolute left-3.5 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
@@ -442,7 +428,6 @@ export default function ElevesPage() {
           )}
         </div>
 
-        {/* Filtre École */}
         <div className="relative">
           <select value={filterSchool} onChange={e => setFilterSchool(e.target.value)}
             className={`pl-4 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 transition appearance-none min-w-[160px] ${filterSchool ? "border-brand text-brand font-medium" : "border-border text-tx"}`}>
@@ -452,7 +437,6 @@ export default function ElevesPage() {
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none"><path d="M6 9l6 6 6-6" /></svg>
         </div>
 
-        {/* Filtre Classe */}
         <div className="relative">
           <select value={filterClasse} onChange={e => setFilterClasse(e.target.value)}
             className={`pl-4 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 transition appearance-none min-w-[130px] ${filterClasse ? "border-brand text-brand font-medium" : "border-border text-tx"}`}>
@@ -462,7 +446,6 @@ export default function ElevesPage() {
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none"><path d="M6 9l6 6 6-6" /></svg>
         </div>
 
-        {/* Filtre Session */}
         <div className="relative">
           <select value={filterSession} onChange={e => setFilterSession(e.target.value)}
             className={`pl-4 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 transition appearance-none min-w-[150px] ${filterSession ? "border-brand text-brand font-medium" : "border-border text-tx"}`}>
@@ -472,7 +455,6 @@ export default function ElevesPage() {
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none"><path d="M6 9l6 6 6-6" /></svg>
         </div>
 
-        {/* Filtre Sexe */}
         <div className="relative">
           <select value={filterSexe} onChange={e => setFilterSexe(e.target.value)}
             className={`pl-4 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 transition appearance-none min-w-[120px] ${filterSexe ? "border-brand text-brand font-medium" : "border-border text-tx"}`}>
@@ -483,7 +465,6 @@ export default function ElevesPage() {
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none"><path d="M6 9l6 6 6-6" /></svg>
         </div>
 
-        {/* Reset */}
         {hasFilters && (
           <button
             onClick={() => { setSearch(""); setFilterSchool(""); setFilterClasse(""); setFilterSession(""); setFilterSexe(""); }}
@@ -498,7 +479,6 @@ export default function ElevesPage() {
       {/* ── Barre de sélection multiple ── */}
       {selCount > 0 && (
         <div className="mb-3 flex items-center gap-3 px-4 py-2.5 bg-brand/8 border border-brand/20 rounded-xl">
-          {/* Icône + compteur */}
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <span className="min-w-[22px] h-[22px] flex items-center justify-center rounded-full bg-brand text-white text-[11px] font-bold">
               {selCount}
@@ -506,17 +486,12 @@ export default function ElevesPage() {
             <span className="text-sm font-medium text-brand">
               {selCount} élève{selCount > 1 ? "s" : ""} sélectionné{selCount > 1 ? "s" : ""}
             </span>
-            {/* Proposer de tout sélectionner si on n'a pas encore tout filtré */}
             {!selectAll && selCount < filtered.length && (
-              <button
-                onClick={selectAllFiltered}
-                className="text-xs text-brand/70 hover:text-brand underline transition-colors ml-1"
-              >
+              <button onClick={selectAllFiltered} className="text-xs text-brand/70 hover:text-brand underline transition-colors ml-1">
                 Sélectionner les {filtered.length} résultats
               </button>
             )}
           </div>
-          {/* Actions */}
           <button
             onClick={() => setModal({ kind: "bulkDelete", count: selCount })}
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-danger text-white text-xs font-semibold hover:bg-danger/90 transition-colors"
@@ -527,10 +502,7 @@ export default function ElevesPage() {
             </svg>
             Supprimer la sélection
           </button>
-          <button
-            onClick={clearSelection}
-            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-brand/10 text-brand/60 hover:text-brand transition-colors"
-          >
+          <button onClick={clearSelection} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-brand/10 text-brand/60 hover:text-brand transition-colors">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
           </button>
         </div>
@@ -547,8 +519,6 @@ export default function ElevesPage() {
 
       {/* ── Tableau ── */}
       <div className="bg-surface rounded-2xl border border-border flex-1 min-h-0 flex flex-col overflow-hidden">
-
-        {/* Spinner chargement initial */}
         {dataLoading && (
           <div className="flex-1 flex flex-col items-center justify-center gap-3 py-20">
             <svg className="animate-spin" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -564,24 +534,14 @@ export default function ElevesPage() {
             <colgroup><col className="w-[44px]" /><col className="w-[20%]" /><col className="w-[8%]" /><col className="w-[20%]" /><col className="w-[16%]" /><col className="w-[10%]" /><col className="w-[20%]" /></colgroup>
             <thead className="sticky top-0 z-10 bg-surface-alt shadow-sm">
               <tr className="border-b border-border bg-surface-alt">
-                {/* Checkbox "tout sélectionner la page" */}
                 <th className="px-3 py-3 text-center bg-surface-alt sticky top-0 z-10">
                   <button
                     onClick={togglePage}
-                    className={`w-4.5 h-4.5 rounded border-2 flex items-center justify-center mx-auto transition-colors ${allPageSel
-                        ? "bg-brand border-brand"
-                        : somePageSel
-                          ? "bg-brand/30 border-brand"
-                          : "border-border hover:border-brand/50"
-                      }`}
+                    className={`w-4.5 h-4.5 rounded border-2 flex items-center justify-center mx-auto transition-colors ${allPageSel ? "bg-brand border-brand" : somePageSel ? "bg-brand/30 border-brand" : "border-border hover:border-brand/50"}`}
                     title={allPageSel ? "Tout désélectionner" : "Sélectionner la page"}
                   >
-                    {allPageSel && (
-                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-                    )}
-                    {somePageSel && !allPageSel && (
-                      <span className="w-2 h-0.5 bg-brand rounded-full block" />
-                    )}
+                    {allPageSel && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}
+                    {somePageSel && !allPageSel && <span className="w-2 h-0.5 bg-brand rounded-full block" />}
                   </button>
                 </th>
                 {["Nom / Prénom", "Classe", "École", "IEF", "Statut", "Actions"].map(h => (
@@ -595,66 +555,43 @@ export default function ElevesPage() {
                 const ecole = e.school_name ?? schoolName(e.school_id);
                 const ief = e.school_region ?? "—";
                 return (
-                  <tr
-                    key={e.id}
-                    className={`border-t border-border transition-colors ${isSel ? "bg-brand/5" : "hover:bg-surface-alt"}`}
-                  >
-                    {/* Checkbox individuelle */}
+                  <tr key={e.id} className={`border-t border-border transition-colors ${isSel ? "bg-brand/5" : "hover:bg-surface-alt"}`}>
                     <td className="px-3 py-3.5 text-center" onClick={ev => ev.stopPropagation()}>
                       <button
                         onClick={() => toggleOne(e.id)}
-                        className={`w-4.5 h-4.5 rounded border-2 flex items-center justify-center mx-auto transition-colors ${isSel ? "bg-brand border-brand" : "border-border hover:border-brand/50"
-                          }`}
+                        className={`w-4.5 h-4.5 rounded border-2 flex items-center justify-center mx-auto transition-colors ${isSel ? "bg-brand border-brand" : "border-border hover:border-brand/50"}`}
                       >
-                        {isSel && (
-                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-                        )}
+                        {isSel && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}
                       </button>
                     </td>
-
-                    {/* Nom / Prénom */}
                     <td className="px-4 py-3.5 cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>
                       <div className="min-w-0">
-                        <div className="font-semibold text-tx truncate">
-                          {cleanNamePart(e.nom) || cleanNamePart(e.prenom) || "—"}
-                        </div>
+                        <div className="font-semibold text-tx truncate">{cleanNamePart(e.nom) || cleanNamePart(e.prenom) || "—"}</div>
                         {cleanNamePart(e.nom) && cleanNamePart(e.prenom) && (
                           <div className="text-xs text-tx-muted truncate">{cleanNamePart(e.prenom)}</div>
                         )}
                       </div>
                     </td>
-
-                    {/* Classe */}
                     <td className="px-4 py-3.5 cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>
-                      {e.classe
-                        ? <span className="bg-primary-soft text-primary text-xs font-bold px-2 py-0.5 rounded-md">{e.classe}</span>
-                        : <span className="text-tx-muted">—</span>}
+                      {e.classe ? <span className="bg-primary-soft text-primary text-xs font-bold px-2 py-0.5 rounded-md">{e.classe}</span> : <span className="text-tx-muted">—</span>}
                     </td>
-
-                    {/* École */}
                     <td className="px-4 py-3.5 cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>
                       <span className="text-sm text-tx truncate block" title={ecole}>{ecole}</span>
                     </td>
-
-                    {/* IEF */}
                     <td className="px-4 py-3.5 cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>
                       {ief !== "—"
                         ? <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-warn-soft text-warn">
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 9l9-5 9 5-9 5-9-5z" /><path d="M5 10v6c0 2 3 4 7 4s7-2 7-4v-6" /></svg>
-                          {ief}
-                        </span>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 9l9-5 9 5-9 5-9-5z" /><path d="M5 10v6c0 2 3 4 7 4s7-2 7-4v-6" /></svg>
+                            {ief}
+                          </span>
                         : <span className="text-tx-muted text-xs">—</span>}
                     </td>
-
-                    {/* Statut */}
                     <td className="px-4 py-3.5 cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${e.statut === "actif" ? "bg-success-soft text-success" : "bg-danger-soft text-danger"}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${e.statut === "actif" ? "bg-success" : "bg-danger"}`} />
                         {e.statut}
                       </span>
                     </td>
-
-                    {/* Actions */}
                     <td className="px-4 py-3.5" onClick={ev => ev.stopPropagation()}>
                       <div className="flex gap-2">
                         <button onClick={() => openEdit(e)} className="text-xs bg-primary-soft text-primary px-3 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors">Modifier</button>
@@ -671,9 +608,8 @@ export default function ElevesPage() {
               )}
             </tbody>
           </table>
-        </div>{/* fin overflow-y-auto */}
+        </div>
 
-        {/* Pagination */}
         {!dataLoading && (
           <div className="px-5 flex-shrink-0">
             <Pagination page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
@@ -744,8 +680,6 @@ export default function ElevesPage() {
           </div>
         </div>
       )}
-
-
 
       {/* ── Modal Suppression unitaire ── */}
       {modal && typeof modal === "object" && modal.kind === "delete" && (
