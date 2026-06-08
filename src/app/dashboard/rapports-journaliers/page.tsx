@@ -59,6 +59,7 @@ export default function RapportsJournaliersPage() {
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [roleFilter, setRoleFilter] = useState<"" | "enseignant" | "superviseur">("");
 
   // Modal détail
   const [detail, setDetail] = useState<RapportJournalier | null>(null);
@@ -73,6 +74,7 @@ export default function RapportsJournaliersPage() {
       if (search.trim()) params.search = search.trim();
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo) params.date_to = dateTo;
+      if (roleFilter) params.role = roleFilter;
 
       const res = await rapportJournalierAdminApi.list(params);
       setRapports(res.data.items ?? []);
@@ -83,13 +85,13 @@ export default function RapportsJournaliersPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, dateFrom, dateTo]);
+  }, [search, dateFrom, dateTo, roleFilter]);
 
   // Re-fetch when filters or page changes
   useEffect(() => { fetchRapports(page); }, [fetchRapports, page]);
 
   // Reset to page 1 when filters change
-  useEffect(() => { setPage(1); }, [search, dateFrom, dateTo]);
+  useEffect(() => { setPage(1); }, [search, dateFrom, dateTo, roleFilter]);
 
   const handleExport = async () => {
     setExporting(true);
@@ -98,6 +100,7 @@ export default function RapportsJournaliersPage() {
       if (search.trim()) params.search = search.trim();
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo) params.date_to = dateTo;
+      if (roleFilter) params.role = roleFilter;
       const res = await rapportJournalierAdminApi.exportCsv(params);
       downloadBlob(res.data, "rapports-journaliers.csv");
     } catch { /* silencieux */ }
@@ -137,6 +140,27 @@ export default function RapportsJournaliersPage() {
 
       {/* ── Filtres ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-3 mb-5">
+        {/* Filtre par rôle de l'auteur (enseignant / superviseur) */}
+        <div className="flex items-center gap-1 bg-surface border border-border rounded-xl p-1">
+          {([
+            { key: "", label: "Tous" },
+            { key: "enseignant", label: "Enseignants" },
+            { key: "superviseur", label: "Superviseurs" },
+          ] as const).map(opt => (
+            <button
+              key={opt.key || "all"}
+              onClick={() => setRoleFilter(opt.key)}
+              className={`px-3.5 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                roleFilter === opt.key
+                  ? "bg-brand text-white"
+                  : "text-tx-muted hover:bg-surface-alt hover:text-tx"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
         {/* Recherche texte */}
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
@@ -170,9 +194,9 @@ export default function RapportsJournaliersPage() {
         />
 
         {/* Clear filters */}
-        {(search || dateFrom || dateTo) && (
+        {(search || dateFrom || dateTo || roleFilter) && (
           <button
-            onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); }}
+            onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setRoleFilter(""); }}
             className="px-4 py-2.5 rounded-xl text-sm text-tx-muted border border-border hover:bg-surface-alt transition-colors"
           >
             Effacer filtres
@@ -196,7 +220,7 @@ export default function RapportsJournaliersPage() {
               <tr><td colSpan={7} className="px-5 py-16 text-center text-tx-muted text-sm">Chargement…</td></tr>
             ) : rapports.length === 0 ? (
               <tr><td colSpan={7} className="px-5 py-16 text-center text-tx-muted text-sm">
-                {(search || dateFrom || dateTo) ? "Aucun rapport ne correspond aux filtres." : "Aucun rapport journalier pour l'instant."}
+                {(search || dateFrom || dateTo || roleFilter) ? "Aucun rapport ne correspond aux filtres." : "Aucun rapport journalier pour l'instant."}
               </td></tr>
             ) : rapports.map(r => {
               const diffs = parseDifficultes(r.difficultes);

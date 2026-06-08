@@ -152,6 +152,20 @@ export const suiviSuperviseurApi = {
     api.get(`/admin/suivi-superviseurs/${superviseur_id}`, { params }),
 };
 
+export const suiviEvaluationsApi = {
+  list: (params?: {
+    superviseur_id?: string;
+    resultat?: string;
+    classe?: string;
+    search?: string;
+    date_from?: string;
+    date_to?: string;
+    skip?: number;
+    limit?: number;
+  }) => api.get("/admin/suivi-evaluations", { params }),
+  superviseurs: () => api.get("/admin/suivi-evaluations/superviseurs"),
+};
+
 export const usersApi = {
   list: (params?: { limit?: number; skip?: number }) => api.get("/admin/users", { params }),
   create: (d: unknown) => api.post("/admin/users", d),
@@ -182,6 +196,7 @@ export const evaluateursApi = {
 export const rapportJournalierAdminApi = {
   list: (params?: {
     teacher_id?: string;
+    role?: string;
     search?: string;
     date_from?: string;
     date_to?: string;
@@ -192,6 +207,7 @@ export const rapportJournalierAdminApi = {
     api.get("/admin/rapports/journalier", { params }),
   exportCsv: (params?: {
     teacher_id?: string;
+    role?: string;
     search?: string;
     date_from?: string;
     date_to?: string;

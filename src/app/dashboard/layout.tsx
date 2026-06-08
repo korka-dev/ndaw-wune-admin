@@ -43,6 +43,7 @@ const NAV_SECTIONS: NavSection[] = [
       { href: "/dashboard/planning",             label: "Gestion Planning",      icon: "clock"      },
       { href: "/dashboard/suivi-seances",        label: "Suivi des séances",     icon: "activity"   },
       { href: "/dashboard/suivi-superviseurs",   label: "Suivi superviseurs",    icon: "eye"        },
+      { href: "/dashboard/suivi-evaluations",    label: "Suivi évaluation",      icon: "check-sq"   },
       { href: "/dashboard/rapports-journaliers", label: "Rapports Journaliers",  icon: "file-text"  },
     ],
   },

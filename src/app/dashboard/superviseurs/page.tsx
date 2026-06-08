@@ -19,9 +19,15 @@ type ModalState = null | "create"
   | { kind: "toggle"; sup: Superviseur }
   | { kind: "edit"; sup: Superviseur }
   | { kind: "delete"; sup: Superviseur }
-  | { kind: "assign"; sup: Superviseur };
+  | { kind: "assign"; sup: Superviseur }
+  | { kind: "created"; name: string; phone: string };
 
 const cls = "w-full border border-border rounded-xl px-3.5 py-2.5 text-sm bg-bg text-tx outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 transition-colors";
+
+/* Mot de passe temporaire attribué par le backend à la création d'un compte
+   (voir backend/app/core/config.py — DEFAULT_USER_PASSWORD). Le superviseur
+   devra le changer dès sa première connexion à l'application mobile. */
+const TEMP_PASSWORD = "Passer123";
 
 export default function SuperviseursPage() {
   const [sups, setSups] = useState<Superviseur[]>([]);
@@ -83,10 +89,12 @@ export default function SuperviseursPage() {
     try {
       if (modal === "create") {
         await superviseursApi.create({ ...form, role: "coordonnateur" });
+        load(false);
+        setModal({ kind: "created", name: form.name.trim(), phone: form.phone.trim() });
       } else if (modal && typeof modal === "object" && modal.kind === "edit") {
         await superviseursApi.update(modal.sup.id, form);
+        load(false); setModal(null);
       }
-      load(false); setModal(null);
     } finally { setLoading(false); }
   };
 
@@ -528,6 +536,38 @@ export default function SuperviseursPage() {
                 {loading ? "Enregistrement…" : "Enregistrer"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Confirmation création (mot de passe temporaire) ── */}
+      {modal && typeof modal === "object" && modal.kind === "created" && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+            <div className="w-12 h-12 rounded-full bg-success-soft text-success flex items-center justify-center mb-4">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+            </div>
+            <h2 className="text-base font-bold text-tx mb-1">Compte superviseur créé</h2>
+            <p className="text-sm text-tx-muted mb-4">
+              Communiquez ces identifiants à <strong className="text-tx">{modal.name}</strong> pour sa première connexion sur l'application mobile.
+            </p>
+            <div className="bg-surface-alt rounded-xl border border-border p-4 space-y-2.5 mb-4">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-semibold text-tx-muted">Téléphone</span>
+                <span className="text-sm font-medium text-tx">{modal.phone || "—"}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-semibold text-tx-muted">Mot de passe temporaire</span>
+                <span className="text-sm font-mono font-bold text-brand">{TEMP_PASSWORD}</span>
+              </div>
+            </div>
+            <p className="text-xs text-tx-muted mb-5">
+              Ce mot de passe est provisoire : l'application demandera au superviseur de le remplacer par un mot de passe personnel dès sa première connexion.
+            </p>
+            <button onClick={closeModal}
+              className="w-full py-2.5 rounded-xl bg-brand text-white text-sm font-semibold hover:opacity-90 transition-opacity">
+              Compris
+            </button>
           </div>
         </div>
       )}
