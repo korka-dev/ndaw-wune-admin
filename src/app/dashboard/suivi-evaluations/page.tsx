@@ -328,10 +328,17 @@ export default function SuiviEvaluationsPage() {
       </div>
 
       {/* ── Liste ────────────────────────────────────────────────────────────── */}
-      <div className="bg-surface rounded-2xl border border-border overflow-hidden flex-1">
+      {/*
+        La liste occupe tout l'espace vertical restant (flex-1).
+        On utilise un layout flex-col interne pour que :
+          • L'en-tête de colonnes reste toujours visible en haut
+          • Le corps défile indépendamment (overflow-y-auto)
+          • La pagination reste toujours visible en bas
+      */}
+      <div className="bg-surface rounded-2xl border border-border overflow-hidden flex-1 flex flex-col min-h-0">
 
-        {/* En-tête de la liste */}
-        <div className="grid grid-cols-[1fr_2fr_auto_1fr] gap-0 border-b border-border bg-surface-alt px-5 py-3">
+        {/* En-tête de colonnes — fixe */}
+        <div className="grid grid-cols-[1fr_2fr_auto_1fr] gap-0 border-b border-border bg-surface-alt px-5 py-3 flex-shrink-0">
           {["Élève & Classe", "Compétence évaluée", "Résultat", "Superviseur & Date"].map((h, i) => (
             <div key={i} className={`text-[11px] font-semibold text-tx-muted uppercase tracking-wider ${i === 2 ? "text-center px-4" : ""}`}>
               {h}
@@ -339,14 +346,14 @@ export default function SuiviEvaluationsPage() {
           ))}
         </div>
 
-        {/* Corps */}
+        {/* Corps — défilant */}
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <div className="flex-1 flex flex-col items-center justify-center py-20 gap-3">
             <div className="w-7 h-7 border-2 border-brand border-t-transparent rounded-full animate-spin" />
             <span className="text-sm text-tx-muted">Chargement des évaluations…</span>
           </div>
         ) : items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-4">
+          <div className="flex-1 flex flex-col items-center justify-center py-20 gap-4">
             <div className="w-14 h-14 rounded-2xl bg-surface-alt flex items-center justify-center text-tx-muted">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9l-6-6z"/><path d="M14 3v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="12" y2="17"/>
@@ -372,65 +379,67 @@ export default function SuiviEvaluationsPage() {
             )}
           </div>
         ) : (
-          <div className="divide-y divide-border">
-            {items.map(it => {
-              const cfg = RESULTAT_CFG[it.resultat];
-              const ini = initials(it.eleve);
-              return (
-                <div
-                  key={it.id}
-                  onClick={() => setDetail(it)}
-                  className={`grid grid-cols-[1fr_2fr_auto_1fr] gap-0 items-center cursor-pointer hover:bg-surface-alt transition-colors border-l-4 ${cfg?.rowAccent ?? "border-l-border"}`}
-                >
-                  {/* Colonne 1 : Élève */}
-                  <div className="flex items-center gap-3 px-4 py-3.5">
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0 ${cfg?.avatarCls ?? "bg-surface-alt text-tx-muted"}`}>
-                      {ini}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-tx truncate">{it.eleve}</div>
-                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                        {it.classe && (
-                          <span className="text-[11px] font-medium text-tx-muted bg-surface-alt px-1.5 py-0.5 rounded-md">
-                            {it.classe}
-                          </span>
-                        )}
-                        {it.school_name && (
-                          <span className="text-[11px] text-tx-muted truncate">{it.school_name}</span>
-                        )}
+          <div className="flex-1 overflow-y-auto">
+            <div className="divide-y divide-border">
+              {items.map(it => {
+                const cfg = RESULTAT_CFG[it.resultat];
+                const ini = initials(it.eleve);
+                return (
+                  <div
+                    key={it.id}
+                    onClick={() => setDetail(it)}
+                    className={`grid grid-cols-[1fr_2fr_auto_1fr] gap-0 items-center cursor-pointer hover:bg-surface-alt transition-colors border-l-4 ${cfg?.rowAccent ?? "border-l-border"}`}
+                  >
+                    {/* Colonne 1 : Élève */}
+                    <div className="flex items-center gap-3 px-4 py-3.5">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold flex-shrink-0 ${cfg?.avatarCls ?? "bg-surface-alt text-tx-muted"}`}>
+                        {ini}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-tx truncate">{it.eleve}</div>
+                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                          {it.classe && (
+                            <span className="text-[11px] font-medium text-tx-muted bg-surface-alt px-1.5 py-0.5 rounded-md">
+                              {it.classe}
+                            </span>
+                          )}
+                          {it.school_name && (
+                            <span className="text-[11px] text-tx-muted truncate">{it.school_name}</span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Colonne 2 : Compétence */}
-                  <div className="px-4 py-3.5">
-                    <div className="text-sm text-tx leading-snug line-clamp-2">{it.competence}</div>
-                    {it.commentaire && (
-                      <div className="text-xs text-tx-muted mt-1 line-clamp-1 italic">
-                        "{it.commentaire}"
-                      </div>
-                    )}
-                  </div>
+                    {/* Colonne 2 : Compétence */}
+                    <div className="px-4 py-3.5">
+                      <div className="text-sm text-tx leading-snug line-clamp-2">{it.competence}</div>
+                      {it.commentaire && (
+                        <div className="text-xs text-tx-muted mt-1 line-clamp-1 italic">
+                          "{it.commentaire}"
+                        </div>
+                      )}
+                    </div>
 
-                  {/* Colonne 3 : Résultat */}
-                  <div className="px-4 py-3.5 flex items-center justify-center">
-                    <ResultatBadge resultat={it.resultat} />
-                  </div>
+                    {/* Colonne 3 : Résultat */}
+                    <div className="px-4 py-3.5 flex items-center justify-center">
+                      <ResultatBadge resultat={it.resultat} />
+                    </div>
 
-                  {/* Colonne 4 : Superviseur + date */}
-                  <div className="px-4 py-3.5 text-right">
-                    <div className="text-sm font-medium text-tx truncate">{it.superviseur}</div>
-                    <div className="text-[11px] text-tx-muted mt-0.5">{fmtDate(it.date_eval)}</div>
+                    {/* Colonne 4 : Superviseur + date */}
+                    <div className="px-4 py-3.5 text-right">
+                      <div className="text-sm font-medium text-tx truncate">{it.superviseur}</div>
+                      <div className="text-[11px] text-tx-muted mt-0.5">{fmtDate(it.date_eval)}</div>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         )}
 
-        {/* Pagination */}
+        {/* Pagination — fixe en bas */}
         {!loading && total > 0 && (
-          <div className="border-t border-border px-5 flex items-center justify-between">
+          <div className="border-t border-border px-5 flex items-center justify-between flex-shrink-0 bg-surface">
             <span className="text-xs text-tx-muted py-3">
               {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} sur {total.toLocaleString("fr-FR")} résultat{total !== 1 ? "s" : ""}
             </span>
