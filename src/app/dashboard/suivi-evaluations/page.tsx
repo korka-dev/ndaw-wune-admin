@@ -130,6 +130,59 @@ function ChevronRight({ className = "" }: { className?: string }) {
   );
 }
 
+function SearchBar({
+  value,
+  onChange,
+  placeholder,
+  total,
+  filtered,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  total?: number;
+  filtered?: number;
+}) {
+  const showCount = value.trim() !== "" && total !== undefined && filtered !== undefined;
+  return (
+    <div className="mb-5">
+      <div className="relative">
+        <svg
+          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none"
+          width="15" height="15" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+        >
+          <circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input
+          type="text"
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={placeholder ?? "Rechercher…"}
+          className="w-full bg-surface border border-border rounded-xl pl-10 pr-10 py-2.5 text-sm text-tx placeholder:text-tx-muted focus:outline-none focus:border-brand/50 focus:ring-2 focus:ring-brand/10 transition-colors"
+        />
+        {value && (
+          <button
+            onClick={() => onChange("")}
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-lg text-tx-muted hover:text-tx hover:bg-surface-alt transition-colors"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M18 6 6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        )}
+      </div>
+      {showCount && (
+        <p className="mt-1.5 text-xs text-tx-muted pl-1">
+          {filtered === 0
+            ? "Aucun résultat"
+            : `${filtered} résultat${filtered! > 1 ? "s" : ""} sur ${total}`}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function SuiviEvaluationsPage() {
   // Navigation
@@ -144,6 +197,11 @@ export default function SuiviEvaluationsPage() {
   // Données niveaux 2 & 3 — toutes les évals du superviseur actif
   const [supEvals,  setSupEvals]  = useState<EvaluationItem[]>([]);
   const [loadingL2, setLoadingL2] = useState(false);
+
+  // Recherches par niveau
+  const [searchL1, setSearchL1] = useState("");
+  const [searchL2, setSearchL2] = useState("");
+  const [searchL3, setSearchL3] = useState("");
 
   // Modal détail
   const [detail, setDetail] = useState<EvaluationItem | null>(null);
@@ -175,6 +233,8 @@ export default function SuiviEvaluationsPage() {
     setActiveSup(sup);
     setActiveSchool(null);
     setLevel("schools");
+    setSearchL2("");
+    setSearchL3("");
     setLoadingL2(true);
     try {
       let all: EvaluationItem[] = [];
@@ -198,8 +258,8 @@ export default function SuiviEvaluationsPage() {
   // ── Navigation arrière ──
   const goTo = (l: Level) => {
     setLevel(l);
-    if (l === "supervisors") { setActiveSup(null); setActiveSchool(null); setSupEvals([]); }
-    if (l === "schools")     { setActiveSchool(null); }
+    if (l === "supervisors") { setActiveSup(null); setActiveSchool(null); setSupEvals([]); setSearchL2(""); setSearchL3(""); }
+    if (l === "schools")     { setActiveSchool(null); setSearchL3(""); }
   };
 
   // ── Écoles dérivées des évals ──
@@ -230,6 +290,28 @@ export default function SuiviEvaluationsPage() {
     });
     return Array.from(map.values()).sort((a, b) => a.eleve.localeCompare(b.eleve, "fr"));
   }, [supEvals, activeSchool]);
+
+  // ── Listes filtrées par recherche ──
+  const filteredSuperviseurs = useMemo(() => {
+    if (!searchL1.trim()) return superviseurs;
+    const q = searchL1.toLowerCase();
+    return superviseurs.filter(s => s.name.toLowerCase().includes(q));
+  }, [superviseurs, searchL1]);
+
+  const filteredSchools = useMemo(() => {
+    if (!searchL2.trim()) return schools;
+    const q = searchL2.toLowerCase();
+    return schools.filter(s => s.name.toLowerCase().includes(q));
+  }, [schools, searchL2]);
+
+  const filteredStudents = useMemo(() => {
+    if (!searchL3.trim()) return students;
+    const q = searchL3.toLowerCase();
+    return students.filter(s =>
+      s.eleve.toLowerCase().includes(q) ||
+      s.evals.some(e => e.competence.toLowerCase().includes(q))
+    );
+  }, [students, searchL3]);
 
   // Totaux contextuels pour le sous-titre
   const supStats    = useMemo(() => computeStats(supEvals), [supEvals]);
@@ -318,8 +400,24 @@ export default function SuiviEvaluationsPage() {
             </div>
           </div>
         ) : (
+          <>
+            <SearchBar
+              value={searchL1}
+              onChange={setSearchL1}
+              placeholder="Rechercher un superviseur…"
+              total={superviseurs.length}
+              filtered={filteredSuperviseurs.length}
+            />
+            {filteredSuperviseurs.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center py-20">
+                <div className="text-center">
+                  <div className="text-sm font-semibold text-tx mb-1">Aucun résultat</div>
+                  <div className="text-xs text-tx-muted">Aucun superviseur ne correspond à "{searchL1}".</div>
+                </div>
+              </div>
+            ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {superviseurs.map(sup => (
+            {filteredSuperviseurs.map(sup => (
               <button
                 key={sup.id}
                 onClick={() => handleSupClick(sup)}
@@ -356,6 +454,8 @@ export default function SuiviEvaluationsPage() {
               </button>
             ))}
           </div>
+            )}
+          </>
         )
       )}
 
@@ -370,8 +470,24 @@ export default function SuiviEvaluationsPage() {
             </div>
           </div>
         ) : (
+          <>
+            <SearchBar
+              value={searchL2}
+              onChange={setSearchL2}
+              placeholder="Rechercher une école…"
+              total={schools.length}
+              filtered={filteredSchools.length}
+            />
+            {filteredSchools.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center py-20">
+                <div className="text-center">
+                  <div className="text-sm font-semibold text-tx mb-1">Aucun résultat</div>
+                  <div className="text-xs text-tx-muted">Aucune école ne correspond à "{searchL2}".</div>
+                </div>
+              </div>
+            ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {schools.map(school => (
+            {filteredSchools.map(school => (
               <button
                 key={school.name}
                 onClick={() => { setActiveSchool(school.name); setLevel("students"); }}
@@ -402,6 +518,8 @@ export default function SuiviEvaluationsPage() {
               </button>
             ))}
           </div>
+            )}
+          </>
         )
       )}
 
@@ -415,8 +533,24 @@ export default function SuiviEvaluationsPage() {
             </div>
           </div>
         ) : (
+          <>
+            <SearchBar
+              value={searchL3}
+              onChange={setSearchL3}
+              placeholder="Rechercher un élève ou une compétence…"
+              total={students.length}
+              filtered={filteredStudents.length}
+            />
+            {filteredStudents.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center py-20">
+                <div className="text-center">
+                  <div className="text-sm font-semibold text-tx mb-1">Aucun résultat</div>
+                  <div className="text-xs text-tx-muted">Aucun élève ni compétence ne correspond à "{searchL3}".</div>
+                </div>
+              </div>
+            ) : (
           <div className="flex flex-col gap-3">
-            {students.map(student => {
+            {filteredStudents.map(student => {
               const stats = computeStats(student.evals);
               const ini   = initials(student.eleve);
               return (
@@ -482,6 +616,8 @@ export default function SuiviEvaluationsPage() {
               );
             })}
           </div>
+            )}
+          </>
         )
       )}
 
