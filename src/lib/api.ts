@@ -212,11 +212,26 @@ export const rapportJournalierAdminApi = {
     date_from?: string;
     date_to?: string;
     ief?: string;
+    fields?: string;
   }) =>
     api.get("/admin/rapports/journalier/export/csv", {
       params: params ?? {},
       responseType: "blob",
     }),
+};
+
+export const rapportQuestionsApi = {
+  list: () => api.get("/admin/rapport-questions"),
+  create: (d: unknown) => api.post("/admin/rapport-questions", d),
+  update: (id: string, d: unknown) => api.patch(`/admin/rapport-questions/${id}`, d),
+  delete: (id: string) => api.delete(`/admin/rapport-questions/${id}`),
+};
+
+export const evaluationCompetencesApi = {
+  list: () => api.get("/admin/evaluation-competences"),
+  create: (d: unknown) => api.post("/admin/evaluation-competences", d),
+  update: (id: string, d: unknown) => api.patch(`/admin/evaluation-competences/${id}`, d),
+  delete: (id: string) => api.delete(`/admin/evaluation-competences/${id}`),
 };
 
 export const elevesApi = {
@@ -228,7 +243,7 @@ export const elevesApi = {
   bulkDelete: (ids: string[]) => api.delete("/admin/eleves", { data: { ids } }),
   // Export
   exportCsv: () => api.get("/admin/eleves/export/csv", { responseType: "blob" }),
-  exportXlsx: () => api.get("/admin/eleves/export/xlsx", { responseType: "blob" }),
+  exportXlsx: (fields?: string) => api.get("/admin/eleves/export/xlsx", { params: fields ? { fields } : undefined, responseType: "blob" }),
   // Import unifié (CSV, Excel, PDF)
   import: (file: File) => {
     const fd = new FormData();
@@ -258,7 +273,7 @@ export const classesApi = {
   create: (d: unknown) => api.post("/admin/classes", d),
   update: (id: string, d: unknown) => api.patch(`/admin/classes/${id}`, d),
   delete: (id: string) => api.delete(`/admin/classes/${id}`),
-  exportXlsx: () => api.get("/admin/classes/export/xlsx", { responseType: "blob" }),
+  exportXlsx: (fields?: string) => api.get("/admin/classes/export/xlsx", { params: fields ? { fields } : undefined, responseType: "blob" }),
 };
 
 export const ressourcesApi = {
@@ -280,9 +295,9 @@ export const ressourcesApi = {
 // Export CSV pour les autres entités
 export const exportApi = {
   teachers: () => api.get("/admin/teachers/export/csv", { responseType: "blob" }),
-  teachersXlsx: () => api.get("/admin/teachers/export/xlsx", { responseType: "blob" }),
+  teachersXlsx: (fields?: string) => api.get("/admin/teachers/export/xlsx", { params: fields ? { fields } : undefined, responseType: "blob" }),
   schools: () => api.get("/admin/schools/export/csv", { responseType: "blob" }),
-  schoolsXlsx: () => api.get("/admin/schools/export/xlsx", { responseType: "blob" }),
+  schoolsXlsx: (fields?: string) => api.get("/admin/schools/export/xlsx", { params: fields ? { fields } : undefined, responseType: "blob" }),
   planning: () => api.get("/admin/planning/export/csv", { responseType: "blob" }),
   eleves: () => api.get("/admin/eleves/export/csv", { responseType: "blob" }),
 };

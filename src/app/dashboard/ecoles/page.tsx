@@ -4,6 +4,15 @@ import { schoolsApi, exportApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 import { SENEGAL_REGIONS, getCommunesByRegion } from "@/lib/senegal-geo";
+import ExportModal from "@/components/ExportModal";
+
+const SCHOOL_EXPORT_FIELDS = [
+  { key: "nom",       label: "Nom de l'école" },
+  { key: "region",    label: "Région (IEF)" },
+  { key: "commune",   label: "Commune / Ville" },
+  { key: "directeur", label: "Directeur(trice)" },
+  { key: "telephone", label: "Téléphone" },
+];
 
 interface School {
   id: string;
@@ -38,6 +47,7 @@ export default function EcolesPage() {
   const [filterCity, setFilterCity] = useState("");
   const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
 
 
   const load = (isFirstLoad = false) => {
@@ -82,11 +92,12 @@ export default function EcolesPage() {
     );
   };
 
-  const handleExport = async () => {
+  const handleExport = async (fields: string[]) => {
     setExporting(true);
     try {
-      const res = await exportApi.schoolsXlsx();
+      const res = await exportApi.schoolsXlsx(fields.join(","));
       downloadBlob(res.data, "ecoles.xlsx");
+      setShowExportModal(false);
     } catch { /* silencieux */ }
     finally { setExporting(false); }
   };
@@ -142,7 +153,7 @@ export default function EcolesPage() {
         <div className="flex items-center gap-2">
           {/* Exporter Excel */}
           <button
-            onClick={handleExport}
+            onClick={() => setShowExportModal(true)}
             disabled={exporting}
             className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
           >
@@ -504,7 +515,15 @@ export default function EcolesPage() {
         </div>
       )}
 
-
+      {showExportModal && (
+        <ExportModal
+          title="Exporter les écoles"
+          fields={SCHOOL_EXPORT_FIELDS}
+          exporting={exporting}
+          onClose={() => setShowExportModal(false)}
+          onExport={handleExport}
+        />
+      )}
     </div>
   );
 }

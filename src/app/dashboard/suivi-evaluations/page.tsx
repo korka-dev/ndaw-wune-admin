@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useMemo } from "react";
-import { suiviEvaluationsApi } from "@/lib/api";
+import { suiviEvaluationsApi, evaluationCompetencesApi } from "@/lib/api";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface EvaluationItem {
@@ -205,6 +205,19 @@ export default function SuiviEvaluationsPage() {
 
   // Modal détail
   const [detail, setDetail] = useState<EvaluationItem | null>(null);
+
+  // Libellés des compétences (configurées par l'admin), pour affichage lisible
+  const [competenceLabels, setCompetenceLabels] = useState<Record<string, string>>({});
+  useEffect(() => {
+    evaluationCompetencesApi.list()
+      .then(({ data }) => {
+        const map: Record<string, string> = {};
+        for (const c of data ?? []) map[c.code] = c.label;
+        setCompetenceLabels(map);
+      })
+      .catch(() => {});
+  }, []);
+  const competenceLabel = (code: string) => competenceLabels[code] ?? code;
 
   // ── Chargement initial : superviseurs + total par superviseur ──
   useEffect(() => {
@@ -595,7 +608,7 @@ export default function SuiviEvaluationsPage() {
 
                             {/* Compétence + commentaire */}
                             <div className="flex-1 min-w-0">
-                              <div className="text-sm text-tx leading-snug">{ev.competence}</div>
+                              <div className="text-sm text-tx leading-snug">{competenceLabel(ev.competence)}</div>
                               {ev.commentaire && (
                                 <div className="text-xs text-tx-muted mt-0.5 italic truncate">"{ev.commentaire}"</div>
                               )}
@@ -664,7 +677,7 @@ export default function SuiviEvaluationsPage() {
                   <div className="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
                     <div>
                       <div className="text-[10px] font-semibold text-tx-muted uppercase tracking-widest mb-1.5">Compétence évaluée</div>
-                      <p className="text-sm font-medium text-tx bg-surface-alt rounded-xl px-4 py-3 leading-relaxed">{detail.competence}</p>
+                      <p className="text-sm font-medium text-tx bg-surface-alt rounded-xl px-4 py-3 leading-relaxed">{competenceLabel(detail.competence)}</p>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="bg-surface-alt rounded-xl px-4 py-3">

@@ -3,8 +3,17 @@ import { useEffect, useState } from "react";
 import { classesApi, schoolsApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
+import ExportModal from "@/components/ExportModal";
 
 const PAGE_SIZE = 25;
+
+const CLASSE_EXPORT_FIELDS = [
+  { key: "nom",     label: "Nom de la classe" },
+  { key: "niveau",  label: "Niveau" },
+  { key: "ecole",   label: "École associée" },
+  { key: "region",  label: "Région de l'école (IEF)" },
+  { key: "commune", label: "Commune / Ville" },
+];
 const NIVEAUX = ["CP", "CE1", "CE2", "CM1", "CM2"] as const;
 
 interface SchoolClasse {
@@ -44,12 +53,14 @@ export default function ClassesPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
 
-  const handleExport = async () => {
+  const handleExport = async (fields: string[]) => {
     setExporting(true);
     try {
-      const res = await classesApi.exportXlsx();
+      const res = await classesApi.exportXlsx(fields.join(","));
       downloadBlob(res.data, "classes.xlsx");
+      setShowExportModal(false);
     } catch { /* silencieux */ }
     finally { setExporting(false); }
   };
@@ -144,7 +155,7 @@ export default function ClassesPage() {
         <div className="flex items-center gap-2">
           {/* Exporter Excel */}
           <button
-            onClick={handleExport}
+            onClick={() => setShowExportModal(true)}
             disabled={exporting}
             className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
           >
@@ -426,7 +437,15 @@ export default function ClassesPage() {
         </div>
       )}
 
-
+      {showExportModal && (
+        <ExportModal
+          title="Exporter les classes"
+          fields={CLASSE_EXPORT_FIELDS}
+          exporting={exporting}
+          onClose={() => setShowExportModal(false)}
+          onExport={handleExport}
+        />
+      )}
     </div>
   );
 }

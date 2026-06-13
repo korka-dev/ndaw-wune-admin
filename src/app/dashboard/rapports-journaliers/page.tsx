@@ -1,10 +1,33 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { rapportJournalierAdminApi } from "@/lib/api";
+import { rapportJournalierAdminApi, rapportQuestionsApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
+import ExportModal from "@/components/ExportModal";
 
 const PAGE_SIZE = 20;
+
+const RAPPORT_EXPORT_FIELDS = [
+  { key: "date_rapport",            label: "Date du rapport" },
+  { key: "tuteur",                  label: "Tuteur" },
+  { key: "ief",                     label: "IEF" },
+  { key: "commune",                 label: "Commune" },
+  { key: "ecole",                   label: "École" },
+  { key: "superviseur",             label: "Superviseur" },
+  { key: "nb_absences",             label: "Nombre d'absences" },
+  { key: "absents",                 label: "Élèves absents" },
+  { key: "semaine",                 label: "Semaine" },
+  { key: "jour_cours",              label: "Jour de cours" },
+  { key: "difficultes",             label: "Difficultés" },
+  { key: "autres_difficultes",      label: "Autres difficultés" },
+  { key: "description_difficultes", label: "Description des difficultés" },
+  { key: "directeur_venu",          label: "Directeur venu" },
+  { key: "besoin_appui",            label: "Besoin d'appui" },
+  { key: "domaines_appui",          label: "Domaines d'appui" },
+  { key: "has_observations",        label: "Observations présentes" },
+  { key: "commentaires",            label: "Commentaires" },
+  { key: "soumis_en_offline",       label: "Soumis hors-ligne" },
+];
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface RapportJournalier {
@@ -30,7 +53,15 @@ interface RapportJournalier {
   commentaires: string | null;
   soumis_en_offline: boolean;
   photo_classe_url: string | null;
+  reponses_questions: string | null;
   created_at: string;
+}
+
+interface RapportQuestionDef {
+  id: string;
+  label: string;
+  type: string;
+  options: string[] | null;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -53,6 +84,7 @@ export default function RapportsJournaliersPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [page, setPage] = useState(1);
 
   // Filtres
@@ -63,6 +95,11 @@ export default function RapportsJournaliersPage() {
 
   // Modal détail
   const [detail, setDetail] = useState<RapportJournalier | null>(null);
+  const [questionDefs, setQuestionDefs] = useState<RapportQuestionDef[]>([]);
+
+  useEffect(() => {
+    rapportQuestionsApi.list().then(({ data }) => setQuestionDefs(data)).catch(() => {});
+  }, []);
 
   const fetchRapports = useCallback(async (p: number) => {
     setLoading(true);
@@ -93,16 +130,17 @@ export default function RapportsJournaliersPage() {
   // Reset to page 1 when filters change
   useEffect(() => { setPage(1); }, [search, dateFrom, dateTo, roleFilter]);
 
-  const handleExport = async () => {
+  const handleExport = async (fields: string[]) => {
     setExporting(true);
     try {
-      const params: Record<string, unknown> = {};
+      const params: Record<string, unknown> = { fields: fields.join(",") };
       if (search.trim()) params.search = search.trim();
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo) params.date_to = dateTo;
       if (roleFilter) params.role = roleFilter;
       const res = await rapportJournalierAdminApi.exportCsv(params);
       downloadBlob(res.data, "rapports-journaliers.csv");
+      setShowExportModal(false);
     } catch { /* silencieux */ }
     finally { setExporting(false); }
   };
@@ -119,7 +157,7 @@ export default function RapportsJournaliersPage() {
           </p>
         </div>
         <button
-          onClick={handleExport}
+          onClick={() => setShowExportModal(true)}
           disabled={exporting}
           className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
         >
@@ -433,6 +471,31 @@ export default function RapportsJournaliersPage() {
                 </Section>
               )}
 
+              {/* Questions complémentaires */}
+              {detail.reponses_questions && (() => {
+                let reponses: Record<string, string> = {};
+                try { reponses = JSON.parse(detail.reponses_questions); } catch { /* ignore */ }
+                const entries = Object.entries(reponses).filter(([, v]) => v);
+                if (entries.length === 0) return null;
+                return (
+                  <Section title="Questions complémentaires">
+                    <div className="space-y-2">
+                      {entries.map(([qid, val]) => {
+                        const def = questionDefs.find(q => q.id === qid);
+                        const label = def?.label ?? "Question";
+                        const display = val.includes("||") ? val.split("||").join(", ") : val;
+                        return (
+                          <div key={qid} className="bg-surface-alt rounded-xl px-4 py-3">
+                            <div className="text-[11px] text-tx-muted mb-0.5">{label}</div>
+                            <p className="text-sm text-tx">{display}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Section>
+                );
+              })()}
+
             </div>
 
             <div className="px-6 pb-5 border-t border-border pt-4 flex justify-end">
@@ -445,6 +508,16 @@ export default function RapportsJournaliersPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showExportModal && (
+        <ExportModal
+          title="Exporter les rapports journaliers"
+          fields={RAPPORT_EXPORT_FIELDS}
+          exporting={exporting}
+          onClose={() => setShowExportModal(false)}
+          onExport={handleExport}
+        />
       )}
     </div>
   );

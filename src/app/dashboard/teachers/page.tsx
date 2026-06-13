@@ -3,6 +3,17 @@ import { useEffect, useRef, useState } from "react";
 import { teachersApi, schoolsApi, exportApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
+import ExportModal from "@/components/ExportModal";
+
+const TEACHER_EXPORT_FIELDS = [
+  { key: "nom",     label: "Nom Complet" },
+  { key: "phone",   label: "Téléphone" },
+  { key: "titre",   label: "Titre / Fonction" },
+  { key: "email",   label: "Email" },
+  { key: "niveaux", label: "Niveaux" },
+  { key: "classes", label: "Classes" },
+  { key: "statut",  label: "Statut" },
+];
 
 const PAGE_SIZE = 50;
 
@@ -57,6 +68,7 @@ export default function TeachersPage() {
   const [filterClasse, setFilterClasse] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [page, setPage] = useState(1);
 
   const load = () => {
@@ -83,11 +95,12 @@ export default function TeachersPage() {
   });
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const handleExport = async () => {
+  const handleExport = async (fields: string[]) => {
     setExporting(true);
     try {
-      const res = await exportApi.teachersXlsx();
+      const res = await exportApi.teachersXlsx(fields.join(","));
       downloadBlob(res.data, "enseignants.xlsx");
+      setShowExportModal(false);
     } catch { /* silencieux */ }
     finally { setExporting(false); }
   };
@@ -168,7 +181,7 @@ export default function TeachersPage() {
         <div className="flex items-center gap-2">
           {/* Exporter Excel */}
           <button
-            onClick={handleExport}
+            onClick={() => setShowExportModal(true)}
             disabled={exporting}
             className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
           >
@@ -780,7 +793,15 @@ export default function TeachersPage() {
         </div>
       )}
 
-
+      {showExportModal && (
+        <ExportModal
+          title="Exporter les enseignants"
+          fields={TEACHER_EXPORT_FIELDS}
+          exporting={exporting}
+          onClose={() => setShowExportModal(false)}
+          onExport={handleExport}
+        />
+      )}
     </div>
   );
 }

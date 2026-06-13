@@ -3,8 +3,18 @@ import { useEffect, useRef, useState } from "react";
 import { elevesApi, schoolsApi, sessionsApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
+import ExportModal from "@/components/ExportModal";
 
 const PAGE_SIZE = 50;
+
+const ELEVE_EXPORT_FIELDS = [
+  { key: "nom",     label: "Nom" },
+  { key: "prenom",  label: "Prénom" },
+  { key: "sexe",    label: "Sexe" },
+  { key: "naiss",   label: "Date de naissance" },
+  { key: "classe",  label: "Classe" },
+  { key: "statut",  label: "Statut" },
+];
 
 interface Eleve {
   id: string;
@@ -207,6 +217,7 @@ export default function ElevesPage() {
   const [loading, setLoading] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [search, setSearch] = useState("");
   const [filterSchool, setFilterSchool] = useState("");
   const [filterClasse, setFilterClasse] = useState("");
@@ -356,11 +367,12 @@ export default function ElevesPage() {
   };
 
   // ── Export ─────────────────────────────────────────────────────────────────
-  const handleExportXlsx = async () => {
+  const handleExportXlsx = async (fields: string[]) => {
     setExporting(true);
     try {
-      const res = await elevesApi.exportXlsx();
+      const res = await elevesApi.exportXlsx(fields.join(","));
       downloadBlob(res.data, "eleves.xlsx");
+      setShowExportModal(false);
     } catch { /* silencieux */ }
     finally { setExporting(false); }
   };
@@ -392,7 +404,7 @@ export default function ElevesPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={handleExportXlsx}
+            onClick={() => setShowExportModal(true)}
             disabled={exporting}
             className="flex items-center gap-2 border border-border bg-surface text-tx px-3.5 py-2.5 rounded-xl text-sm font-semibold hover:bg-surface-alt transition-colors disabled:opacity-60"
           >
@@ -737,6 +749,16 @@ export default function ElevesPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showExportModal && (
+        <ExportModal
+          title="Exporter les élèves"
+          fields={ELEVE_EXPORT_FIELDS}
+          exporting={exporting}
+          onClose={() => setShowExportModal(false)}
+          onExport={handleExportXlsx}
+        />
       )}
     </div>
   );

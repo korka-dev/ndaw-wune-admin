@@ -1,0 +1,441 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import { rapportQuestionsApi } from "@/lib/api";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type QuestionType = "texte_court" | "texte_long" | "nombre" | "oui_non" | "choix_unique" | "choix_multiple";
+
+type Question = {
+  id: string;
+  label: string;
+  type: QuestionType;
+  options: string[] | null;
+  required: boolean;
+  active: boolean;
+  ordre: number;
+};
+
+const TYPE_LABELS: Record<QuestionType, string> = {
+  texte_court:    "Texte court",
+  texte_long:     "Texte long",
+  nombre:         "Nombre",
+  oui_non:        "Oui / Non",
+  choix_unique:   "Choix unique",
+  choix_multiple: "Choix multiple",
+};
+
+const NEEDS_OPTIONS: QuestionType[] = ["choix_unique", "choix_multiple"];
+
+// ── Composant principal ────────────────────────────────────────────────────────
+
+export default function RapportQuestionsPage() {
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [showForm, setShowForm]   = useState(false);
+  const [editing, setEditing]     = useState<Question | null>(null);
+  const [saving, setSaving]       = useState(false);
+  const [deleteId, setDeleteId]   = useState<string | null>(null);
+  const [deleting, setDeleting]   = useState(false);
+
+  // Formulaire
+  const [label, setLabel]       = useState("");
+  const [type, setType]         = useState<QuestionType>("texte_court");
+  const [options, setOptions]   = useState<string[]>([""]);
+  const [required, setRequired] = useState(false);
+  const [active, setActive]     = useState(true);
+
+  const fetchQuestions = useCallback(async () => {
+    try {
+      const { data } = await rapportQuestionsApi.list();
+      setQuestions(data);
+    } catch {
+      /* silencieux */
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchQuestions(); }, [fetchQuestions]);
+
+  // ── Formulaire : ouverture / réinitialisation ─────────────────────────────
+  const openCreate = () => {
+    setEditing(null);
+    setLabel(""); setType("texte_court"); setOptions([""]);
+    setRequired(false); setActive(true);
+    setShowForm(true);
+  };
+
+  const openEdit = (q: Question) => {
+    setEditing(q);
+    setLabel(q.label); setType(q.type);
+    setOptions(q.options && q.options.length > 0 ? q.options : [""]);
+    setRequired(q.required); setActive(q.active);
+    setShowForm(true);
+  };
+
+  const closeForm = () => setShowForm(false);
+
+  // ── Sauvegarde ──────────────────────────────────────────────────────────────
+  const handleSave = async () => {
+    if (!label.trim()) { alert("La question ne peut pas être vide."); return; }
+    const cleanOptions = options.map(o => o.trim()).filter(Boolean);
+    if (NEEDS_OPTIONS.includes(type) && cleanOptions.length === 0) {
+      alert("Ajoutez au moins une option de réponse.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const payload = {
+        label: label.trim(),
+        type,
+        options: NEEDS_OPTIONS.includes(type) ? cleanOptions : null,
+        required,
+        active,
+        ordre: editing?.ordre ?? questions.length,
+      };
+      if (editing) {
+        await rapportQuestionsApi.update(editing.id, payload);
+      } else {
+        await rapportQuestionsApi.create(payload);
+      }
+      setShowForm(false);
+      await fetchQuestions();
+    } catch {
+      alert("Erreur lors de l'enregistrement.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── Suppression ─────────────────────────────────────────────────────────────
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    setDeleting(true);
+    try {
+      await rapportQuestionsApi.delete(deleteId);
+      setQuestions(prev => prev.filter(q => q.id !== deleteId));
+    } catch {
+      alert("Erreur lors de la suppression.");
+    } finally {
+      setDeleting(false);
+      setDeleteId(null);
+    }
+  };
+
+  // ── Activation / désactivation rapide ─────────────────────────────────────
+  const toggleActive = async (q: Question) => {
+    try {
+      await rapportQuestionsApi.update(q.id, { active: !q.active });
+      setQuestions(prev => prev.map(x => x.id === q.id ? { ...x, active: !x.active } : x));
+    } catch {
+      alert("Erreur lors de la mise à jour.");
+    }
+  };
+
+  // ── Réordonnancement ────────────────────────────────────────────────────────
+  const move = async (index: number, dir: -1 | 1) => {
+    const target = index + dir;
+    if (target < 0 || target >= questions.length) return;
+    const a = questions[index];
+    const b = questions[target];
+
+    const reordered = [...questions];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    setQuestions(reordered);
+
+    try {
+      await Promise.all([
+        rapportQuestionsApi.update(a.id, { ordre: b.ordre }),
+        rapportQuestionsApi.update(b.id, { ordre: a.ordre }),
+      ]);
+      await fetchQuestions();
+    } catch {
+      alert("Erreur lors du réordonnancement.");
+      await fetchQuestions();
+    }
+  };
+
+  const questionToDelete = questions.find(q => q.id === deleteId);
+
+  // ── Rendu ───────────────────────────────────────────────────────────────────
+  return (
+    <div className="p-7">
+      {/* En-tête */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-xl font-bold text-tx mb-0.5">Questions de Rapport</h1>
+          <p className="text-tx-muted text-sm">
+            Questions complémentaires affichées dynamiquement dans le rapport journalier de l'app mobile
+          </p>
+        </div>
+        <button
+          onClick={openCreate}
+          className="flex items-center gap-2 px-4 py-2.5 bg-brand text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Ajouter une question
+        </button>
+      </div>
+
+      {/* Liste */}
+      {loading ? (
+        <div className="bg-surface border border-border rounded-2xl p-12 text-center">
+          <p className="text-tx-muted text-sm">Chargement…</p>
+        </div>
+      ) : questions.length === 0 ? (
+        <div className="bg-surface border border-border rounded-2xl p-12 text-center">
+          <p className="text-tx-muted text-sm font-medium">Aucune question complémentaire pour l'instant</p>
+          <p className="text-tx-muted/60 text-xs mt-1">Ajoutez des questions pour qu'elles apparaissent dans le rapport journalier de l'app mobile.</p>
+        </div>
+      ) : (
+        <div className="bg-surface border border-border rounded-2xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-border">
+            <span className="text-xs font-semibold text-tx-muted uppercase tracking-wide">
+              {questions.length} question{questions.length > 1 ? "s" : ""}
+            </span>
+          </div>
+          <div className="divide-y divide-border">
+            {questions.map((q, index) => (
+              <div key={q.id} className="flex items-center gap-4 px-4 py-3.5 hover:bg-surface-alt transition-colors group">
+                {/* Réordonnancement */}
+                <div className="flex flex-col gap-0.5">
+                  <button
+                    onClick={() => move(index, -1)}
+                    disabled={index === 0}
+                    className="p-1 rounded text-tx-muted hover:text-brand disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    title="Monter"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+                  </button>
+                  <button
+                    onClick={() => move(index, 1)}
+                    disabled={index === questions.length - 1}
+                    className="p-1 rounded text-tx-muted hover:text-brand disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    title="Descendre"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+                </div>
+
+                {/* Infos */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-tx">{q.label}</span>
+                    {q.required && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-danger font-medium">Obligatoire</span>
+                    )}
+                    {!q.active && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-tx-muted font-medium">Inactive</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-xs text-tx-muted">{TYPE_LABELS[q.type]}</span>
+                    {q.options && q.options.length > 0 && (
+                      <>
+                        <span className="text-tx-muted/40 text-xs">·</span>
+                        <span className="text-xs text-tx-muted truncate">{q.options.join(", ")}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-1">
+                  {/* Activer / désactiver */}
+                  <button
+                    onClick={() => toggleActive(q)}
+                    title={q.active ? "Désactiver" : "Activer"}
+                    className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${q.active ? "bg-brand" : "bg-gray-300"}`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${q.active ? "translate-x-4" : ""}`} />
+                  </button>
+                  {/* Modifier */}
+                  <button
+                    onClick={() => openEdit(q)}
+                    title="Modifier"
+                    className="p-2 rounded-lg text-tx-muted hover:text-brand hover:bg-brand-soft transition-colors"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                      <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                  </button>
+                  {/* Supprimer */}
+                  <button
+                    onClick={() => setDeleteId(q.id)}
+                    title="Supprimer"
+                    className="p-2 rounded-lg text-tx-muted hover:text-danger hover:bg-red-50 transition-colors"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Modal formulaire */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <h2 className="text-base font-bold text-tx mb-4">
+              {editing ? "Modifier la question" : "Nouvelle question"}
+            </h2>
+
+            <div className="space-y-4">
+              {/* Label */}
+              <div>
+                <label className="block text-xs font-semibold text-tx-muted uppercase tracking-wide mb-1.5">
+                  Intitulé de la question
+                </label>
+                <textarea
+                  value={label}
+                  onChange={e => setLabel(e.target.value)}
+                  placeholder="Ex : Avez-vous reçu le matériel pédagogique ?"
+                  rows={2}
+                  className="w-full px-3 py-2.5 text-sm bg-bg border border-border rounded-xl text-tx placeholder:text-tx-muted focus:outline-none focus:border-brand/50 transition-colors resize-none"
+                />
+              </div>
+
+              {/* Type */}
+              <div>
+                <label className="block text-xs font-semibold text-tx-muted uppercase tracking-wide mb-1.5">
+                  Type de réponse
+                </label>
+                <select
+                  value={type}
+                  onChange={e => setType(e.target.value as QuestionType)}
+                  className="w-full px-3 py-2.5 text-sm bg-bg border border-border rounded-xl text-tx focus:outline-none focus:border-brand/50 transition-colors"
+                >
+                  {Object.entries(TYPE_LABELS).map(([val, lab]) => (
+                    <option key={val} value={val}>{lab}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Options (choix unique / multiple) */}
+              {NEEDS_OPTIONS.includes(type) && (
+                <div>
+                  <label className="block text-xs font-semibold text-tx-muted uppercase tracking-wide mb-1.5">
+                    Options de réponse
+                  </label>
+                  <div className="space-y-2">
+                    {options.map((opt, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={opt}
+                          onChange={e => setOptions(prev => prev.map((o, idx) => idx === i ? e.target.value : o))}
+                          placeholder={`Option ${i + 1}`}
+                          className="flex-1 px-3 py-2 text-sm bg-bg border border-border rounded-xl text-tx placeholder:text-tx-muted focus:outline-none focus:border-brand/50 transition-colors"
+                        />
+                        <button
+                          onClick={() => setOptions(prev => prev.filter((_, idx) => idx !== i))}
+                          disabled={options.length === 1}
+                          className="p-2 rounded-lg text-tx-muted hover:text-danger hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setOptions(prev => [...prev, ""])}
+                    className="mt-2 text-xs font-semibold text-brand hover:opacity-80 transition-opacity"
+                  >
+                    + Ajouter une option
+                  </button>
+                </div>
+              )}
+
+              {/* Toggles */}
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-tx">Réponse obligatoire</span>
+                <button
+                  onClick={() => setRequired(r => !r)}
+                  className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${required ? "bg-brand" : "bg-gray-300"}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${required ? "translate-x-4" : ""}`} />
+                </button>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-tx">Question active</span>
+                <button
+                  onClick={() => setActive(a => !a)}
+                  className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${active ? "bg-brand" : "bg-gray-300"}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${active ? "translate-x-4" : ""}`} />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={closeForm}
+                disabled={saving}
+                className="flex-1 py-2.5 rounded-xl border border-border text-sm text-tx-muted font-medium hover:bg-surface-alt transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 py-2.5 rounded-xl bg-brand text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-60"
+              >
+                {saving ? "Enregistrement…" : "Enregistrer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal confirmation suppression */}
+      {deleteId && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-danger">
+                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-tx">Supprimer cette question ?</p>
+                <p className="text-xs text-tx-muted mt-0.5 truncate max-w-[200px]">{questionToDelete?.label}</p>
+              </div>
+            </div>
+            <p className="text-sm text-tx-muted mb-5">
+              La question sera définitivement supprimée et n'apparaîtra plus dans l'app mobile. Cette action est irréversible.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteId(null)}
+                disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl border border-border text-sm text-tx-muted font-medium hover:bg-surface-alt transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl bg-danger text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-60"
+              >
+                {deleting ? "Suppression…" : "Supprimer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
