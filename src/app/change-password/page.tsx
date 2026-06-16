@@ -4,12 +4,6 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api";
 
-const RULES = [
-  { label: "Au moins 8 caractères",  test: (v: string) => v.length >= 8 },
-  { label: "Une lettre majuscule",    test: (v: string) => /[A-Z]/.test(v) },
-  { label: "Un chiffre",             test: (v: string) => /\d/.test(v) },
-];
-
 export default function ChangePasswordPage() {
   const { logout } = useAuth();
   const router = useRouter();
@@ -26,7 +20,7 @@ export default function ChangePasswordPage() {
     if (!localStorage.getItem("access_token")) router.replace("/login");
   }, []);
 
-  const isValid = RULES.every(r => r.test(newPwd)) && newPwd === confPwd && confPwd.length > 0;
+  const isValid = newPwd.length > 0 && newPwd === confPwd;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,19 +97,6 @@ export default function ChangePasswordPage() {
                   {showNew ? "Masquer" : "Voir"}
                 </button>
               </div>
-            </div>
-
-            {/* Règles */}
-            <div className="bg-surface-alt rounded-xl px-4 py-3 space-y-1.5">
-              {RULES.map(r => {
-                const ok = r.test(newPwd);
-                return (
-                  <div key={r.label} className="flex items-center gap-2 text-sm">
-                    <span className={`text-base ${ok ? "text-success" : "text-tx-dim"}`}>{ok ? "✓" : "○"}</span>
-                    <span className={ok ? "text-success" : "text-tx-muted"}>{r.label}</span>
-                  </div>
-                );
-              })}
             </div>
 
             <div>

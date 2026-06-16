@@ -28,6 +28,10 @@ const TYPE_LABELS: Record<QuestionType, string> = {
 
 const NEEDS_OPTIONS: QuestionType[] = ["choix_unique", "choix_multiple"];
 
+const VALID_TYPES: QuestionType[] = [
+  "texte_court", "texte_long", "nombre", "oui_non", "choix_unique", "choix_multiple",
+];
+
 // ── Composant principal ────────────────────────────────────────────────────────
 
 export default function RapportQuestionsPage() {
@@ -38,6 +42,7 @@ export default function RapportQuestionsPage() {
   const [saving, setSaving]       = useState(false);
   const [deleteId, setDeleteId]   = useState<string | null>(null);
   const [deleting, setDeleting]   = useState(false);
+  const [importing, setImporting] = useState(false);
 
   // Formulaire
   const [label, setLabel]       = useState("");
@@ -76,6 +81,66 @@ export default function RapportQuestionsPage() {
   };
 
   const closeForm = () => setShowForm(false);
+
+  // ── Import en masse (fichier JSON) ─────────────────────────────────────────
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // permet de réimporter le même fichier
+    if (!file) return;
+
+    let parsed: unknown;
+    try {
+      const text = await file.text();
+      parsed = JSON.parse(text);
+    } catch {
+      alert("Fichier invalide : le JSON n'a pas pu être lu.");
+      return;
+    }
+
+    const rawItems = Array.isArray(parsed) ? parsed : (parsed as any)?.questions;
+    if (!Array.isArray(rawItems) || rawItems.length === 0) {
+      alert("Le fichier doit contenir un tableau de questions (ou un objet { questions: [...] }).");
+      return;
+    }
+
+    // Validation et normalisation
+    const toImport: { label: string; type: QuestionType; options: string[] | null; required: boolean; active: boolean; ordre: number }[] = [];
+    for (const [i, raw] of rawItems.entries()) {
+      const label = typeof raw?.label === "string" ? raw.label.trim() : "";
+      const type  = VALID_TYPES.includes(raw?.type) ? raw.type as QuestionType : null;
+      if (!label || !type) {
+        alert(`Ligne ${i + 1} invalide : "label" et "type" sont obligatoires (type valide : ${VALID_TYPES.join(", ")}).`);
+        return;
+      }
+      const options = Array.isArray(raw?.options) ? raw.options.map(String).map((o: string) => o.trim()).filter(Boolean) : null;
+      if (NEEDS_OPTIONS.includes(type) && (!options || options.length === 0)) {
+        alert(`Ligne ${i + 1} ("${label}") : les questions de type "${TYPE_LABELS[type]}" nécessitent au moins une option.`);
+        return;
+      }
+      toImport.push({
+        label,
+        type,
+        options: NEEDS_OPTIONS.includes(type) ? options : null,
+        required: Boolean(raw?.required),
+        active: raw?.active === undefined ? true : Boolean(raw.active),
+        ordre: typeof raw?.ordre === "number" ? raw.ordre : questions.length + i,
+      });
+    }
+
+    setImporting(true);
+    try {
+      for (const item of toImport) {
+        await rapportQuestionsApi.create(item);
+      }
+      await fetchQuestions();
+      alert(`${toImport.length} question${toImport.length > 1 ? "s" : ""} importée${toImport.length > 1 ? "s" : ""} avec succès.`);
+    } catch {
+      alert("Une erreur est survenue pendant l'import. Certaines questions ont peut-être déjà été importées.");
+      await fetchQuestions();
+    } finally {
+      setImporting(false);
+    }
+  };
 
   // ── Sauvegarde ──────────────────────────────────────────────────────────────
   const handleSave = async () => {
@@ -171,15 +236,24 @@ export default function RapportQuestionsPage() {
             Questions complémentaires affichées dynamiquement dans le rapport journalier de l'app mobile
           </p>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2.5 bg-brand text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity"
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          Ajouter une question
-        </button>
+        <div className="flex items-center gap-2">
+          <label className={`flex items-center gap-2 px-4 py-2.5 bg-surface border border-border text-tx rounded-xl text-sm font-semibold hover:bg-surface-alt transition-colors cursor-pointer ${importing ? "opacity-60 pointer-events-none" : ""}`}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            {importing ? "Import en cours…" : "Importer"}
+            <input type="file" accept=".json,application/json" className="hidden" onChange={handleImportFile} disabled={importing} />
+          </label>
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 px-4 py-2.5 bg-brand text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Ajouter une question
+          </button>
+        </div>
       </div>
 
       {/* Liste */}

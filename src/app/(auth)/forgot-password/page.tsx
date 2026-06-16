@@ -21,13 +21,6 @@ const IcoCheck = () => (
   </svg>
 );
 
-/* ── Critères de sécurité ───────────────────────────────────────────────────── */
-const CRITERIA = [
-  { label: "Au moins 8 caractères", ok: (v: string) => v.length >= 8 },
-  { label: "Au moins une majuscule", ok: (v: string) => /[A-Z]/.test(v) },
-  { label: "Au moins un chiffre",    ok: (v: string) => /[0-9]/.test(v) },
-];
-
 /* ── Page principale ────────────────────────────────────────────────────────── */
 export default function ForgotPasswordPage() {
   const router  = useRouter();
@@ -47,9 +40,8 @@ export default function ForgotPasswordPage() {
     return () => clearTimeout(t);
   }, []);
 
-  const allCriteriaMet = CRITERIA.every(c => c.ok(newPwd));
   const passwordsMatch = newPwd.length > 0 && newPwd === confirmPwd;
-  const canSubmit      = identifier.trim().length > 0 && allCriteriaMet && passwordsMatch;
+  const canSubmit      = identifier.trim().length > 0 && passwordsMatch;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -149,28 +141,6 @@ export default function ForgotPasswordPage() {
                 </button>
               </div>
 
-              {/* Critères — visibles dès qu'on tape */}
-              {newPwd.length > 0 && (
-                <div className="mt-2 space-y-1">
-                  {CRITERIA.map(c => {
-                    const ok = c.ok(newPwd);
-                    return (
-                      <div key={c.label} className="flex items-center gap-2">
-                        <div className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${ok ? "bg-success" : "bg-border"}`}>
-                          {ok && (
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M5 12l5 5 9-11"/>
-                            </svg>
-                          )}
-                        </div>
-                        <span className={`text-[11px] transition-colors ${ok ? "text-success font-medium" : "text-tx-muted"}`}>
-                          {c.label}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
             </div>
 
             {/* Confirmer le mot de passe */}

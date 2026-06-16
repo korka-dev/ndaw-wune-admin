@@ -227,6 +227,11 @@ export const rapportQuestionsApi = {
   delete: (id: string) => api.delete(`/admin/rapport-questions/${id}`),
 };
 
+export const auditLogsApi = {
+  list: (params?: { skip?: number; limit?: number }) =>
+    api.get("/admin/audit-logs", { params }),
+};
+
 export const evaluationCompetencesApi = {
   list: () => api.get("/admin/evaluation-competences"),
   create: (d: unknown) => api.post("/admin/evaluation-competences", d),
