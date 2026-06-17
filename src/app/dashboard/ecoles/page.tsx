@@ -26,6 +26,8 @@ interface School {
 const EMPTY: Omit<School, "id"> = { name: "", region: "", city: "", director: "", director_phone: "" };
 const PAGE_SIZE = 25;
 
+type ReimportResult = { updated: number; created: number; skipped: number; errors: string[] };
+
 const SchoolIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8B6F1F" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <path d="M3 9l9-5 9 5-9 5-9-5z" /><path d="M5 10v6c0 2 3 4 7 4s7-2 7-4v-6" />
@@ -48,7 +50,10 @@ export default function EcolesPage() {
   const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
-
+  const [reimportLoading, setReimportLoading] = useState(false);
+  const [reimportResult, setReimportResult] = useState<ReimportResult | null>(null);
+  const [reimportError, setReimportError] = useState<string | null>(null);
+  const reimportRef = useRef<HTMLInputElement>(null);
 
   const load = (isFirstLoad = false) => {
     if (isFirstLoad) { setDataLoading(true); setDataError(null); }
@@ -102,6 +107,25 @@ export default function EcolesPage() {
     finally { setExporting(false); }
   };
 
+  const handleReiimport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setReimportLoading(true);
+    setReimportError(null);
+    setReimportResult(null);
+    try {
+      const res = await schoolsApi.reimportXlsx(file);
+      setReimportResult(res.data);
+      load();
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+      setReimportError(typeof detail === "string" ? detail : "Erreur lors de l'import.");
+    } finally {
+      setReimportLoading(false);
+    }
+  };
+
   const openCreate = () => { setForm(EMPTY); setError(""); setPhoneError(""); setModal("create"); };
   const openEdit = (s: School) => {
     setForm({ name: s.name, region: s.region ?? "", city: s.city ?? "", director: s.director ?? "", director_phone: s.director_phone ?? "" });
@@ -151,6 +175,20 @@ export default function EcolesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Réimporter */}
+          <input ref={reimportRef} type="file" accept=".xlsx" className="hidden" onChange={handleReiimport} />
+          <button
+            onClick={() => reimportRef.current?.click()}
+            disabled={reimportLoading}
+            className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
+          >
+            {reimportLoading ? (
+              <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity=".3" /><path d="M12 2a10 10 0 0 1 10 10" /></svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+            )}
+            Réimporter
+          </button>
           {/* Exporter Excel */}
           <button
             onClick={() => setShowExportModal(true)}
@@ -523,6 +561,49 @@ export default function EcolesPage() {
           onClose={() => setShowExportModal(false)}
           onExport={handleExport}
         />
+      )}
+
+      {(reimportResult !== null || reimportError !== null) && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-surface rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h2 className="text-lg font-bold text-tx mb-4">Résultat de l&apos;import</h2>
+            {reimportError ? (
+              <p className="text-danger text-sm">{reimportError}</p>
+            ) : reimportResult && (
+              <>
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  <div className="bg-bg rounded-xl p-3 text-center">
+                    <p className="text-2xl font-bold text-brand">{reimportResult.updated}</p>
+                    <p className="text-xs text-tx-muted mt-1">mis à jour</p>
+                  </div>
+                  <div className="bg-bg rounded-xl p-3 text-center">
+                    <p className="text-2xl font-bold text-success">{reimportResult.created}</p>
+                    <p className="text-xs text-tx-muted mt-1">créé(s)</p>
+                  </div>
+                  <div className="bg-bg rounded-xl p-3 text-center">
+                    <p className="text-2xl font-bold text-tx-muted">{reimportResult.skipped}</p>
+                    <p className="text-xs text-tx-muted mt-1">ignoré(s)</p>
+                  </div>
+                </div>
+                {reimportResult.errors.length > 0 && (
+                  <div className="bg-danger/10 rounded-xl p-3 max-h-40 overflow-y-auto">
+                    {reimportResult.errors.map((e, i) => (
+                      <p key={i} className="text-xs text-danger mb-1">{e}</p>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+            <div className="flex justify-end mt-4">
+              <button
+                onClick={() => { setReimportResult(null); setReimportError(null); }}
+                className="px-4 py-2 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold transition-colors"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

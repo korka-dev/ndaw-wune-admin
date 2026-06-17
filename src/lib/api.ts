@@ -120,6 +120,11 @@ export const schoolsApi = {
     fd.append("file", file);
     return api.post("/admin/schools/import/xlsx", fd, { headers: { "Content-Type": "multipart/form-data" } });
   },
+  reimportXlsx: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post("/admin/schools/reimport", fd, { headers: { "Content-Type": "multipart/form-data" } });
+  },
 };
 
 export const planningApi = {
@@ -274,6 +279,11 @@ export const elevesApi = {
     const fd = new FormData();
     fd.append("file", file);
     return api.post("/admin/eleves/import/xlsx", fd, { headers: { "Content-Type": "multipart/form-data" } });
+  },
+  reimportXlsx: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post("/admin/eleves/reimport", fd, { headers: { "Content-Type": "multipart/form-data" } });
   },
 };
 

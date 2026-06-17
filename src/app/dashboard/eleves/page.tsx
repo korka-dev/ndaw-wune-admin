@@ -53,6 +53,8 @@ const EMPTY_FORM = {
 
 type FormType = typeof EMPTY_FORM;
 
+type ReimportResult = { imported: number; skipped: number; errors: string[] };
+
 type ModalState =
   | null
   | "create"
@@ -218,6 +220,10 @@ export default function ElevesPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [reimportLoading, setReimportLoading] = useState(false);
+  const [reimportResult, setReimportResult] = useState<ReimportResult | null>(null);
+  const [reimportError, setReimportError] = useState<string | null>(null);
+  const reimportRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
   const [filterSchool, setFilterSchool] = useState("");
   const [filterClasse, setFilterClasse] = useState("");
@@ -377,6 +383,26 @@ export default function ElevesPage() {
     finally { setExporting(false); }
   };
 
+  // ── Réimport ───────────────────────────────────────────────────────────────
+  const handleReiimport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setReimportLoading(true);
+    setReimportError(null);
+    setReimportResult(null);
+    try {
+      const res = await elevesApi.reimportXlsx(file);
+      setReimportResult(res.data);
+      load();
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+      setReimportError(typeof detail === "string" ? detail : "Erreur lors de l'import.");
+    } finally {
+      setReimportLoading(false);
+    }
+  };
+
   const schoolName = (id?: string) => schools.find(s => s.id === id)?.name ?? "—";
   const sessionName = (id?: string) => sessions.find(s => s.id === id)?.name ?? "—";
   const fullName = (e: Eleve) => {
@@ -403,6 +429,19 @@ export default function ElevesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <input ref={reimportRef} type="file" accept=".xlsx" className="hidden" onChange={handleReiimport} />
+          <button
+            onClick={() => reimportRef.current?.click()}
+            disabled={reimportLoading}
+            className="flex items-center gap-2 border border-border bg-surface text-tx px-3.5 py-2.5 rounded-xl text-sm font-semibold hover:bg-surface-alt transition-colors disabled:opacity-60"
+          >
+            {reimportLoading ? (
+              <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity=".3" /><path d="M12 2a10 10 0 0 1 10 10" /></svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+            )}
+            Réimporter
+          </button>
           <button
             onClick={() => setShowExportModal(true)}
             disabled={exporting}
@@ -759,6 +798,45 @@ export default function ElevesPage() {
           onClose={() => setShowExportModal(false)}
           onExport={handleExportXlsx}
         />
+      )}
+
+      {(reimportResult !== null || reimportError !== null) && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-surface rounded-2xl shadow-xl w-full max-w-md p-6">
+            <h2 className="text-lg font-bold text-tx mb-4">Résultat de l&apos;import</h2>
+            {reimportError ? (
+              <p className="text-danger text-sm">{reimportError}</p>
+            ) : reimportResult && (
+              <>
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div className="bg-bg rounded-xl p-3 text-center">
+                    <p className="text-2xl font-bold text-brand">{reimportResult.imported}</p>
+                    <p className="text-xs text-tx-muted mt-1">créé(s)</p>
+                  </div>
+                  <div className="bg-bg rounded-xl p-3 text-center">
+                    <p className="text-2xl font-bold text-tx-muted">{reimportResult.skipped}</p>
+                    <p className="text-xs text-tx-muted mt-1">ignoré(s)</p>
+                  </div>
+                </div>
+                {reimportResult.errors.length > 0 && (
+                  <div className="bg-danger/10 rounded-xl p-3 max-h-40 overflow-y-auto">
+                    {reimportResult.errors.map((e, i) => (
+                      <p key={i} className="text-xs text-danger mb-1">{e}</p>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+            <div className="flex justify-end mt-4">
+              <button
+                onClick={() => { setReimportResult(null); setReimportError(null); }}
+                className="px-4 py-2 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold transition-colors"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
