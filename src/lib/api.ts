@@ -297,6 +297,11 @@ export const ressourcesApi = {
   delete: (id: string) => api.delete(`/admin/ressources/${id}`),
 };
 
+// ── Dashboard stats (agrégations SQL, un seul appel) ─────────────────────────
+export const dashboardApi = {
+  stats: () => api.get("/admin/dashboard/stats"),
+};
+
 // Export CSV pour les autres entités
 export const exportApi = {
   teachers: () => api.get("/admin/teachers/export/csv", { responseType: "blob" }),

@@ -1,10 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
-import {
-  sessionsApi, teachersApi, schoolsApi, rapportsApi, planningApi,
-  suiviApi, suiviSuperviseurApi, superviseursApi, elevesApi,
-} from "@/lib/api";
+import { dashboardApi, suiviApi, suiviSuperviseurApi } from "@/lib/api";
 
 /* ── Types ── */
 interface Stats {
@@ -208,119 +205,56 @@ export default function DashboardHome() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // 1 appel agrégé pour toutes les stats statiques + 2 appels légers pour les données temps réel
     Promise.allSettled([
-      sessionsApi.list(),                    // 0
-      teachersApi.list({ limit: 10000 } as any), // 1 — tous les enseignants
-      schoolsApi.list(),                     // 2
-      rapportsApi.list({ limit: 500 }),      // 3
-      planningApi.list(),                    // 4
-      suiviApi.list(),                       // 5 — présence enseignants
-      suiviSuperviseurApi.list(),            // 6 — couverture superviseurs
-      superviseursApi.list(),                // 7 — liste superviseurs
-      elevesApi.list({ limit: 1 }),          // 8 — juste pour le total
-    ]).then(([sr, tr, scr, rr, pr, suiviR, supSuiviR, supervR, eleveR]) => {
-      const sessions = sr.status === "fulfilled" ? (sr.value.data.items ?? sr.value.data ?? []) : [];
-      const teachers = tr.status === "fulfilled" ? (tr.value.data.items ?? tr.value.data ?? []) : [];
-      const schools = scr.status === "fulfilled" ? (scr.value.data.items ?? scr.value.data ?? []) : [];
-      const rapports = rr.status === "fulfilled" ? (rr.value.data.items ?? rr.value.data ?? []) : [];
-      const segs = pr.status === "fulfilled" ? (pr.value.data.items ?? pr.value.data ?? []) : [];
+      dashboardApi.stats(),        // agrégations SQL côté backend
+      suiviApi.list(),             // présence enseignants (données live)
+      suiviSuperviseurApi.list(),  // couverture superviseurs (données live)
+    ]).then(([statsR, suiviR, supSuiviR]) => {
+      const d  = statsR.status === "fulfilled" ? statsR.value.data : null;
       const suiviItems = suiviR.status === "fulfilled" ? (suiviR.value.data.items ?? suiviR.value.data ?? []) : [];
-      const supSuivi = supSuiviR.status === "fulfilled" ? (supSuiviR.value.data.items ?? supSuiviR.value.data ?? []) : [];
-      const superviseurs = supervR.status === "fulfilled" ? (supervR.value.data.items ?? supervR.value.data ?? []) : [];
-      // Vrais totaux depuis le champ `total` de la réponse paginée
-      const elevesTotal = eleveR.status === "fulfilled" ? (eleveR.value.data.total ?? 0) : 0;
-      const teachersTotal = tr.status === "fulfilled" ? (tr.value.data.total ?? teachers.length) : teachers.length;
+      const supSuivi   = supSuiviR.status === "fulfilled" ? (supSuiviR.value.data.items ?? supSuiviR.value.data ?? []) : [];
 
-      /* ── Entités de base ── */
-      const active = sessions.find((s: any) => s.status === "active");
-      const regionSet = new Set(schools.map((s: any) => s.region).filter(Boolean));
-
-      /* ── Présence enseignants (depuis suiviApi) ── */
+      /* ── Présence enseignants (données live depuis suiviApi) ── */
       let teachersEnCours = 0, teachersPresents = 0, teachersAbsents = 0;
       suiviItems.forEach((t: any) => {
         if ((t.seances_en_cours ?? 0) > 0) teachersEnCours++;
         else if ((t.seances_terminees ?? 0) > 0) teachersPresents++;
         else teachersAbsents++;
       });
-      // Si aucun suivi disponible, on tombe en arrière sur le total des enseignants
-      if (suiviItems.length === 0) {
-        teachersAbsents = teachers.filter((t: any) => t.status === "actif").length || teachers.length;
+      if (suiviItems.length === 0 && d) {
+        teachersAbsents = d.teachers;
       }
 
-      /* ── Rapports & séances ── */
-      const rapportsTotal = rapports.length;
-      const seancesTotal = rapports.length;  // 1 rapport = 1 séance réalisée
-
-      /* ── Chart : séances réalisées par mois ── */
-      const monthMap = new Map<string, number>();
-      rapports.forEach((r: any) => {
-        const d = new Date(r.created_at ?? r.date_seance ?? Date.now());
-        const key = `${MONTHS_FR[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`;
-        monthMap.set(key, (monthMap.get(key) ?? 0) + 1);
-      });
-      const now = new Date();
-      const seancesByMonth = Array.from({ length: 6 }, (_, i) => {
-        const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
-        const key = `${MONTHS_FR[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`;
-        return { m: key, v: monthMap.get(key) ?? 0 };
-      });
-
-      /* ── Chart : écoles par région ── */
-      const ecolesByRegion = Array.from(
-        schools.reduce((m: Map<string, number>, s: any) => {
-          const r = s.region ?? "—"; m.set(r, (m.get(r) ?? 0) + 1); return m;
-        }, new Map<string, number>())
-      ).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
-
-      /* ── Chart : enseignants par école ── */
-      const schoolMap = new Map<string, number>();
-      teachers.forEach((t: any) => {
-        // Utiliser school.name directement (joint) ou fallback sur lookup
-        const key = t.school?.name ?? schools.find((s: any) => s.id === t.school_id)?.name ?? "Sans école";
-        schoolMap.set(key, (schoolMap.get(key) ?? 0) + 1);
-      });
-      const teachersBySchool = Array.from(schoolMap)
-        .map(([label, value]) => ({ label, value }))
-        .sort((a, b) => b.value - a.value)
-        .slice(0, 5);
-
-      /* ── Chart : durée planning par jour ── */
-      const JOURS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
-      const durByDay = new Array(7).fill(0);
-      segs.forEach((seg: any) => {
-        if (seg.jour >= 0 && seg.jour < 7) {
-          durByDay[seg.jour] += toMinutes(seg.heure_fin) - toMinutes(seg.heure_debut);
-        }
-      });
-      const planningByDay = JOURS
-        .map((label, i) => ({ label, value: durByDay[i] }))
-        .filter(d => d.value > 0);
-
-      /* ── Chart : couverture superviseurs ── */
+      /* ── Couverture superviseurs (live) ── */
       const superviseursCoverage = supSuivi
         .map((sup: any) => ({
-          label: sup.name,
+          label:    sup.name,
           presents: (sup.presents ?? 0) + (sup.en_cours ?? 0),
-          total: sup.total_assignes ?? 0,
+          total:    sup.total_assignes ?? 0,
         }))
         .filter((s: any) => s.total > 0)
         .sort((a: any, b: any) => b.total - a.total)
         .slice(0, 6);
 
       setStats({
-        schools: schools.length, schoolRegions: regionSet.size,
-        teachers: teachersTotal,
-        superviseurs: superviseurs.length,
-        sessionsTotal: sessions.length,
-        activeSession: active ? { name: active.name, dateDebut: active.date_debut, dateFin: active.date_fin } : null,
-        students: elevesTotal,
-        eleves: elevesTotal,
+        schools:       d?.schools       ?? 0,
+        schoolRegions: d?.school_regions ?? 0,
+        teachers:      d?.teachers      ?? 0,
+        superviseurs:  d?.superviseurs  ?? 0,
+        sessionsTotal: d?.sessions_total ?? 0,
+        activeSession: d?.active_session
+          ? { name: d.active_session.name, dateDebut: d.active_session.date_debut, dateFin: d.active_session.date_fin }
+          : null,
+        students: d?.students ?? 0,
+        eleves:   d?.students ?? 0,
         teachersEnCours, teachersPresents, teachersAbsents,
-        rapportsTotal, seancesTotal,
-        seancesByMonth,
-        ecolesByRegion,
-        teachersBySchool,
-        planningByDay,
+        rapportsTotal: d?.rapports_total ?? 0,
+        seancesTotal:  d?.rapports_total ?? 0,
+        seancesByMonth: (d?.seances_by_month ?? []).map((p: any) => ({ m: p.label, v: p.value })),
+        ecolesByRegion:   d?.ecoles_by_region  ?? [],
+        teachersBySchool: d?.teachers_by_school ?? [],
+        planningByDay:    d?.planning_by_day    ?? [],
         superviseursCoverage,
       });
       setLoading(false);

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { rapportJournalierAdminApi, rapportQuestionsApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
@@ -89,9 +89,18 @@ export default function RapportsJournaliersPage() {
 
   // Filtres
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [roleFilter, setRoleFilter] = useState<"" | "enseignant" | "superviseur">("");
+
+  // Debounce recherche — évite une requête par frappe clavier
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleSearchChange = (v: string) => {
+    setSearch(v);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedSearch(v), 350);
+  };
 
   // Modal détail
   const [detail, setDetail] = useState<RapportJournalier | null>(null);
@@ -108,7 +117,7 @@ export default function RapportsJournaliersPage() {
         skip: (p - 1) * PAGE_SIZE,
         limit: PAGE_SIZE,
       };
-      if (search.trim()) params.search = search.trim();
+      if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo) params.date_to = dateTo;
       if (roleFilter) params.role = roleFilter;
@@ -122,13 +131,13 @@ export default function RapportsJournaliersPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, dateFrom, dateTo, roleFilter]);
+  }, [debouncedSearch, dateFrom, dateTo, roleFilter]);
 
   // Re-fetch when filters or page changes
   useEffect(() => { fetchRapports(page); }, [fetchRapports, page]);
 
   // Reset to page 1 when filters change
-  useEffect(() => { setPage(1); }, [search, dateFrom, dateTo, roleFilter]);
+  useEffect(() => { setPage(1); }, [debouncedSearch, dateFrom, dateTo, roleFilter]);
 
   const handleExport = async (fields: string[]) => {
     setExporting(true);
@@ -206,12 +215,12 @@ export default function RapportsJournaliersPage() {
             <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.35-4.35" />
           </svg>
           <input
-            type="text" value={search} onChange={e => setSearch(e.target.value)}
+            type="text" value={search} onChange={e => handleSearchChange(e.target.value)}
             placeholder="Tuteur, école, IEF, commune…"
             className="w-full bg-surface border border-border rounded-xl pl-10 pr-9 py-2.5 text-sm text-tx placeholder:text-tx-muted focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition"
           />
           {search && (
-            <button onClick={() => setSearch("")} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-tx-muted hover:text-tx">
+            <button onClick={() => { setSearch(""); setDebouncedSearch(""); }} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-tx-muted hover:text-tx">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <path d="M18 6L6 18M6 6l12 12" />
               </svg>
@@ -234,7 +243,7 @@ export default function RapportsJournaliersPage() {
         {/* Clear filters */}
         {(search || dateFrom || dateTo || roleFilter) && (
           <button
-            onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setRoleFilter(""); }}
+            onClick={() => { setSearch(""); setDebouncedSearch(""); setDateFrom(""); setDateTo(""); setRoleFilter(""); }}
             className="px-4 py-2.5 rounded-xl text-sm text-tx-muted border border-border hover:bg-surface-alt transition-colors"
           >
             Effacer filtres
