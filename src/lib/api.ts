@@ -98,6 +98,11 @@ export const teachersApi = {
     fd.append("file", file);
     return api.post("/admin/teachers/import/xlsx", fd, { headers: { "Content-Type": "multipart/form-data" } });
   },
+  reimportXlsx: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post("/admin/teachers/reimport", fd, { headers: { "Content-Type": "multipart/form-data" } });
+  },
 };
 
 export const schoolsApi = {
@@ -279,6 +284,11 @@ export const classesApi = {
   update: (id: string, d: unknown) => api.patch(`/admin/classes/${id}`, d),
   delete: (id: string) => api.delete(`/admin/classes/${id}`),
   exportXlsx: (fields?: string) => api.get("/admin/classes/export/xlsx", { params: fields ? { fields } : undefined, responseType: "blob" }),
+  reimportXlsx: (file: File) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post("/admin/classes/reimport", fd, { headers: { "Content-Type": "multipart/form-data" } });
+  },
 };
 
 export const ressourcesApi = {

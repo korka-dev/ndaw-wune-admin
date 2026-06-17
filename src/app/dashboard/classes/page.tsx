@@ -1,9 +1,11 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { classesApi, schoolsApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 import ExportModal from "@/components/ExportModal";
+
+type ReimportResult = { created: number; skipped: number; schools_created: number; errors: string[] };
 
 const PAGE_SIZE = 25;
 
@@ -54,6 +56,29 @@ export default function ClassesPage() {
   const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [reimportLoading, setReimportLoading] = useState(false);
+  const [reimportResult, setReimportResult] = useState<ReimportResult | null>(null);
+  const [reimportError, setReimportError] = useState<string | null>(null);
+  const reimportRef = useRef<HTMLInputElement>(null);
+
+  const handleReiimport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setReimportLoading(true);
+    setReimportError(null);
+    setReimportResult(null);
+    try {
+      const res = await classesApi.reimportXlsx(file);
+      setReimportResult(res.data);
+      load(false);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      setReimportError(typeof detail === "string" ? detail : "Erreur lors de l'import.");
+    } finally {
+      setReimportLoading(false);
+    }
+  };
 
   const handleExport = async (fields: string[]) => {
     setExporting(true);
@@ -166,6 +191,26 @@ export default function ClassesPage() {
             </svg>
             {exporting ? "Export…" : "Exporter Excel"}
           </button>
+          {/* Réimporter */}
+          <button
+            onClick={() => reimportRef.current?.click()}
+            disabled={reimportLoading}
+            className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
+          >
+            {reimportLoading ? (
+              <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M21 12a9 9 0 11-6.219-8.56" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+            )}
+            {reimportLoading ? "Import…" : "Réimporter"}
+          </button>
+          <input ref={reimportRef} type="file" accept=".xlsx" className="hidden" onChange={handleReiimport} />
           <button
             onClick={() => { setForm(EMPTY_FORM); setSaveError(null); setModal("create"); }}
             className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
@@ -445,6 +490,100 @@ export default function ClassesPage() {
           onClose={() => setShowExportModal(false)}
           onExport={handleExport}
         />
+      )}
+
+      {/* ── Modal résultat réimport ── */}
+      {(reimportResult !== null || reimportError !== null) && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4"
+          onClick={e => { if (e.target === e.currentTarget) { setReimportResult(null); setReimportError(null); } }}>
+          <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-md">
+
+            {/* En-tête */}
+            <div className={`rounded-t-2xl px-6 pt-5 pb-4 flex items-center gap-3 ${
+              reimportError ? "bg-danger-soft" :
+              (reimportResult && reimportResult.created > 0) ? "bg-success-soft" : "bg-warn-soft"
+            }`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                reimportError ? "bg-danger/10 text-danger" :
+                (reimportResult && reimportResult.created > 0) ? "bg-success/10 text-success" : "bg-warn/10 text-warn"
+              }`}>
+                {reimportError ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                ) : (reimportResult && reimportResult.created > 0) ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 13l4 4L19 7"/></svg>
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                )}
+              </div>
+              <div>
+                <p className="font-semibold text-tx text-sm">
+                  {reimportError ? "Erreur d'import" :
+                    (reimportResult && reimportResult.created > 0) ? "Réimport terminé" : "Aucune nouvelle classe"}
+                </p>
+                <p className="text-xs text-tx-muted mt-0.5">Fichier Excel classes</p>
+              </div>
+            </div>
+
+            {/* Corps */}
+            <div className="px-6 py-4">
+              {reimportError ? (
+                <p className="text-sm text-tx">{reimportError}</p>
+              ) : reimportResult ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="bg-surface-alt rounded-xl px-3 py-3 text-center">
+                      <div className={`text-2xl font-bold ${reimportResult.created > 0 ? "text-success" : "text-tx-muted"}`}>
+                        {reimportResult.created}
+                      </div>
+                      <div className="text-xs text-tx-muted mt-0.5">créées</div>
+                    </div>
+                    <div className="bg-surface-alt rounded-xl px-3 py-3 text-center">
+                      <div className={`text-2xl font-bold ${reimportResult.skipped > 0 ? "text-warn" : "text-tx-muted"}`}>
+                        {reimportResult.skipped}
+                      </div>
+                      <div className="text-xs text-tx-muted mt-0.5">ignorées</div>
+                    </div>
+                    <div className="bg-surface-alt rounded-xl px-3 py-3 text-center">
+                      <div className={`text-2xl font-bold ${reimportResult.schools_created > 0 ? "text-brand" : "text-tx-muted"}`}>
+                        {reimportResult.schools_created}
+                      </div>
+                      <div className="text-xs text-tx-muted mt-0.5">écoles créées</div>
+                    </div>
+                  </div>
+
+                  {reimportResult.errors.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-tx-muted uppercase tracking-wide mb-2">
+                        Lignes avec problème ({reimportResult.errors.length})
+                      </p>
+                      <div className="max-h-44 overflow-y-auto rounded-xl border border-border bg-surface-alt divide-y divide-border">
+                        {reimportResult.errors.map((err, i) => (
+                          <div key={i} className="px-3 py-2 flex items-start gap-2">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-warn flex-shrink-0 mt-0.5">
+                              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                            </svg>
+                            <span className="text-xs text-tx">{err}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+
+            {/* Pied */}
+            <div className="px-6 pb-5">
+              <button
+                onClick={() => { setReimportResult(null); setReimportError(null); }}
+                className="w-full py-2.5 rounded-xl bg-brand text-white text-sm font-semibold hover:opacity-90 transition-opacity"
+              >
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
