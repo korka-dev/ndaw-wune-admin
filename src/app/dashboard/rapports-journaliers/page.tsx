@@ -53,6 +53,7 @@ interface RapportJournalier {
   commentaires: string | null;
   soumis_en_offline: boolean;
   photo_classe_url: string | null;
+  photos_classe_url: string | null;
   reponses_questions: string | null;
   created_at: string;
 }
@@ -370,16 +371,32 @@ export default function RapportsJournaliersPage() {
 
             <div className="px-6 py-5 space-y-5">
 
-              {/* Photo */}
-              {detail.photo_classe_url && (
-                <Section title="Photo de la classe">
-                  <img
-                    src={detail.photo_classe_url}
-                    alt="Photo de la classe"
-                    className="w-full rounded-xl object-cover max-h-64"
-                  />
-                </Section>
-              )}
+              {/* Photos */}
+              {(() => {
+                let urls: string[] = [];
+                if (detail.photos_classe_url) {
+                  try { urls = JSON.parse(detail.photos_classe_url); } catch {}
+                }
+                if (urls.length === 0 && detail.photo_classe_url) {
+                  urls = [detail.photo_classe_url];
+                }
+                if (urls.length === 0) return null;
+                return (
+                  <Section title={`Photo${urls.length > 1 ? "s" : ""} de la classe (${urls.length})`}>
+                    <div className={`grid gap-2 ${urls.length === 1 ? "grid-cols-1" : "grid-cols-3"}`}>
+                      {urls.map((src, i) => (
+                        <a key={i} href={src} target="_blank" rel="noopener noreferrer" className="block">
+                          <img
+                            src={src}
+                            alt={`Photo ${i + 1}`}
+                            className={`w-full rounded-xl object-cover ${urls.length === 1 ? "max-h-64" : "aspect-square"} hover:opacity-90 transition-opacity cursor-zoom-in`}
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  </Section>
+                );
+              })()}
 
               {/* Informations générales */}
               <Section title="Informations générales">
