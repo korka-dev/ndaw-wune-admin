@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { elevesApi, schoolsApi, sessionsApi } from "@/lib/api";
+import { elevesApi, schoolsApi, sessionsApi, classesApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 import ExportModal from "@/components/ExportModal";
@@ -29,7 +29,7 @@ interface Eleve {
   school_name?: string;
   school_region?: string;
 }
-interface School { id: string; name: string; }
+interface School { id: string; name: string; region?: string; }
 interface Session { id: string; name: string; status: string; }
 
 const NIVEAU_CLASSES: Record<string, string[]> = {
@@ -81,8 +81,23 @@ function EleveFormFields({
   sessions: Session[];
 }) {
   const [niveau, setNiveau] = useState<string>(() => getInitialNiveau(form.classe));
+  const [schoolClasses, setSchoolClasses] = useState<string[]>([]);
 
-  const classesForNiveau = niveau ? (NIVEAU_CLASSES[niveau] ?? []) : [];
+  // Charger les classes réelles de l'école sélectionnée
+  useEffect(() => {
+    if (!form.school_id) { setSchoolClasses([]); return; }
+    classesApi.list({ school_id: form.school_id, limit: 500 })
+      .then(res => {
+        const names: string[] = (res.data.items ?? []).map((c: { name: string }) => c.name).sort();
+        setSchoolClasses(names);
+      })
+      .catch(() => setSchoolClasses([]));
+  }, [form.school_id]);
+
+  // Options de classes : classes réelles de l'école si disponibles, sinon liste hardcodée par niveau
+  const classesForNiveau = schoolClasses.length > 0
+    ? schoolClasses
+    : (niveau ? (NIVEAU_CLASSES[niveau] ?? []) : []);
 
   const handleNiveauChange = (n: string) => {
     setNiveau(n);
@@ -229,6 +244,7 @@ export default function ElevesPage() {
   const [filterClasse, setFilterClasse] = useState("");
   const [filterSession, setFilterSession] = useState("");
   const [filterSexe, setFilterSexe] = useState("");
+  const [filterIef, setFilterIef] = useState("");
   const [page, setPage] = useState(1);
 
   // ── Sélection multiple ────────────────────────────────────────────────────
@@ -253,10 +269,14 @@ export default function ElevesPage() {
     });
   };
   useEffect(() => { load(true); }, []);
-  useEffect(() => { setPage(1); }, [search, filterSchool, filterClasse, filterSession, filterSexe]);
-  useEffect(() => { setSelectedIds(new Set()); setSelectAll(false); }, [search, filterSchool, filterClasse, filterSession, filterSexe]);
+  useEffect(() => { setPage(1); }, [search, filterSchool, filterClasse, filterSession, filterSexe, filterIef]);
+  useEffect(() => { setSelectedIds(new Set()); setSelectAll(false); }, [search, filterSchool, filterClasse, filterSession, filterSexe, filterIef]);
 
-  const hasFilters = !!(search || filterSchool || filterClasse || filterSession || filterSexe);
+  // Listes dérivées filtrées par IEF
+  const iefs = [...new Set(schools.map(s => s.region).filter(Boolean))].sort() as string[];
+  const schoolsByIef = filterIef ? schools.filter(s => s.region === filterIef) : schools;
+
+  const hasFilters = !!(search || filterSchool || filterClasse || filterSession || filterSexe || filterIef);
 
   const filtered = eleves.filter(e => {
     const cleanNom = cleanNamePart(e.nom);
@@ -266,7 +286,7 @@ export default function ElevesPage() {
     const matchSchool = !filterSchool || e.school_id === filterSchool;
     const matchClasse = !filterClasse || e.classe === filterClasse;
     const matchSession = !filterSession || e.session_id === filterSession;
-    const matchSexe = !filterSexe || e.genre === filterSexe;
+    const matchSexe = !filterSexe || (e.genre?.toLowerCase() === filterSexe.toLowerCase());
     return matchSearch && matchSchool && matchClasse && matchSession && matchSexe;
   });
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -480,10 +500,19 @@ export default function ElevesPage() {
         </div>
 
         <div className="relative">
+          <select value={filterIef} onChange={e => { setFilterIef(e.target.value); setFilterSchool(""); }}
+            className={`pl-4 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 transition appearance-none min-w-[140px] ${filterIef ? "border-brand text-brand font-medium" : "border-border text-tx"}`}>
+            <option value="">Tous les IEF</option>
+            {iefs.map(ief => <option key={ief} value={ief}>{ief}</option>)}
+          </select>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none"><path d="M6 9l6 6 6-6" /></svg>
+        </div>
+
+        <div className="relative">
           <select value={filterSchool} onChange={e => setFilterSchool(e.target.value)}
             className={`pl-4 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 transition appearance-none min-w-[160px] ${filterSchool ? "border-brand text-brand font-medium" : "border-border text-tx"}`}>
             <option value="">Toutes les écoles</option>
-            {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {schoolsByIef.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none"><path d="M6 9l6 6 6-6" /></svg>
         </div>
@@ -518,7 +547,7 @@ export default function ElevesPage() {
 
         {hasFilters && (
           <button
-            onClick={() => { setSearch(""); setFilterSchool(""); setFilterClasse(""); setFilterSession(""); setFilterSexe(""); }}
+            onClick={() => { setSearch(""); setFilterSchool(""); setFilterClasse(""); setFilterSession(""); setFilterSexe(""); setFilterIef(""); }}
             className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-brand/30 bg-brand-soft text-brand text-sm font-medium hover:bg-brand hover:text-white transition-colors"
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
@@ -717,7 +746,7 @@ export default function ElevesPage() {
             <h2 className="text-base font-bold text-tx mb-5">
               {modal === "create" ? "Nouvel élève" : "Modifier l'élève"}
             </h2>
-            <EleveFormFields form={form} setForm={setForm} schools={schools} sessions={sessions} />
+            <EleveFormFields form={form} setForm={setForm} schools={schoolsByIef} sessions={sessions} />
             {saveError && (
               <p className="mt-3 text-sm text-danger bg-danger-soft rounded-xl px-3.5 py-2">{saveError}</p>
             )}
