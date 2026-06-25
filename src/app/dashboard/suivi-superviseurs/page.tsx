@@ -6,17 +6,24 @@ import Pagination from "@/components/Pagination";
 const PAGE_SIZE = 20;
 
 /* ══ Types ═══════════════════════════════════════════════════════ */
+interface TuteurEnAlerte {
+  teacher_id:       string;
+  name:             string;
+  rapports_manques: number;
+}
+
 interface SuperviseurSuivi {
-  superviseur_id:  string;
-  name:            string;
-  title?:          string;
-  phone?:          string;
-  email?:          string;
-  school_name?:    string;
-  total_assignes:  number;
-  presents:        number;
-  en_cours:        number;
-  absents:         number;
+  superviseur_id:    string;
+  name:              string;
+  title?:            string;
+  phone?:            string;
+  email?:            string;
+  school_name?:      string;
+  total_assignes:    number;
+  presents:          number;
+  en_cours:          number;
+  absents:           number;
+  tuteurs_en_alerte: TuteurEnAlerte[];
 }
 
 interface TeacherPresence {
@@ -440,8 +447,24 @@ export default function SuiviSuperviseurPage() {
                     {initials(sup.name)}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-tx truncate">{sup.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold text-tx truncate">{sup.name}</p>
+                      {sup.tuteurs_en_alerte?.length > 0 && (
+                        <span
+                          title={`⚠️ ${sup.tuteurs_en_alerte.length} tuteur${sup.tuteurs_en_alerte.length > 1 ? "s" : ""} avec 3+ rapports manquants : ${sup.tuteurs_en_alerte.map(t => t.name).join(", ")}`}
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-600 text-[10px] font-bold cursor-help flex-shrink-0"
+                        >
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                          {sup.tuteurs_en_alerte.length}
+                        </span>
+                      )}
+                    </div>
                     {sup.title && <p className="text-xs text-tx-muted truncate">{sup.title}</p>}
+                    {sup.tuteurs_en_alerte?.length > 0 && (
+                      <p className="text-[10px] text-amber-600 font-semibold mt-0.5">
+                        {sup.tuteurs_en_alerte.length} tuteur{sup.tuteurs_en_alerte.length > 1 ? "s" : ""} sans rapport (&ge;3 jours)
+                      </p>
+                    )}
                   </div>
                 </div>
 

@@ -5,6 +5,8 @@ import { ressourcesApi } from "@/lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+type ResourceType = "document" | "video" | "autre";
+
 type Document = {
   id: string;
   title: string;
@@ -12,6 +14,7 @@ type Document = {
   mime_type: string;
   file_size: number;
   description: string | null;
+  resource_type: ResourceType;
   uploaded_by: string | null;
   created_at: string;
 };
@@ -32,7 +35,6 @@ function formatDate(iso: string): string {
   });
 }
 
-// Catégorie visuelle selon le MIME type
 type FileCategory = "pdf" | "image" | "video" | "audio" | "word" | "excel" | "pptx" | "archive" | "text" | "other";
 
 function getCategory(mime: string): FileCategory {
@@ -59,6 +61,18 @@ const CATEGORY_COLORS: Record<FileCategory, string> = {
   archive: "bg-yellow-50 text-yellow-600 border-yellow-100",
   text:    "bg-gray-50   text-gray-500   border-gray-100",
   other:   "bg-gray-50   text-gray-400   border-gray-100",
+};
+
+const RESOURCE_TYPE_LABELS: Record<ResourceType, string> = {
+  document: "Document",
+  video:    "Vidéo",
+  autre:    "Autre",
+};
+
+const RESOURCE_TYPE_COLORS: Record<ResourceType, string> = {
+  document: "bg-blue-50 text-blue-600 border border-blue-200",
+  video:    "bg-purple-50 text-purple-600 border border-purple-200",
+  autre:    "bg-gray-50 text-gray-500 border border-gray-200",
 };
 
 function FileIcon({ category, size = 20 }: { category: FileCategory; size?: number }) {
@@ -89,6 +103,13 @@ function FileIcon({ category, size = 20 }: { category: FileCategory; size?: numb
 
 // ── Composant principal ────────────────────────────────────────────────────────
 
+const TAB_TYPES: { key: "all" | ResourceType; label: string }[] = [
+  { key: "all",      label: "Tous" },
+  { key: "document", label: "Documents" },
+  { key: "video",    label: "Vidéos" },
+  { key: "autre",    label: "Autres" },
+];
+
 export default function RessourcesPage() {
   const [docs, setDocs]               = useState<Document[]>([]);
   const [loading, setLoading]         = useState(true);
@@ -98,6 +119,8 @@ export default function RessourcesPage() {
   const [deleteId, setDeleteId]       = useState<string | null>(null);
   const [deleting, setDeleting]       = useState(false);
   const [search, setSearch]           = useState("");
+  const [activeTab, setActiveTab]     = useState<"all" | ResourceType>("all");
+  const [uploadType, setUploadType]   = useState<ResourceType>("document");
   const inputRef = useRef<HTMLInputElement>(null);
 
   // ── Chargement ──────────────────────────────────────────────────────────────
@@ -122,8 +145,11 @@ export default function RessourcesPage() {
     setProgress(arr.map(f => ({ name: f.name, done: false })));
 
     for (let i = 0; i < arr.length; i++) {
+      const f = arr[i];
+      // Auto-détecter vidéo si le MIME le dit
+      const effectiveType: ResourceType = f.type.startsWith("video/") ? "video" : uploadType;
       try {
-        await ressourcesApi.upload(arr[i]);
+        await ressourcesApi.upload(f, undefined, undefined, effectiveType);
         setProgress(prev => prev.map((p, idx) => idx === i ? { ...p, done: true } : p));
       } catch {
         setProgress(prev => prev.map((p, idx) => idx === i ? { ...p, done: true, error: "Échec" } : p));
@@ -135,9 +161,8 @@ export default function RessourcesPage() {
       setUploading(false);
       setProgress([]);
     }, 1200);
-  }, [fetchDocs]);
+  }, [fetchDocs, uploadType]);
 
-  // Drag & Drop
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
@@ -175,10 +200,19 @@ export default function RessourcesPage() {
   };
 
   // ── Filtrage ────────────────────────────────────────────────────────────────
-  const filtered = docs.filter(d =>
-    !search || d.title.toLowerCase().includes(search.toLowerCase()) ||
-    d.original_filename.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = docs.filter(d => {
+    if (activeTab !== "all" && d.resource_type !== activeTab) return false;
+    if (search && !d.title.toLowerCase().includes(search.toLowerCase()) &&
+        !d.original_filename.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
+  const counts: Record<string, number> = {
+    all:      docs.length,
+    document: docs.filter(d => d.resource_type === "document").length,
+    video:    docs.filter(d => d.resource_type === "video").length,
+    autre:    docs.filter(d => d.resource_type === "autre").length,
+  };
 
   const docToDelete = docs.find(d => d.id === deleteId);
 
@@ -200,11 +234,11 @@ export default function RessourcesPage() {
             <polyline points="17 8 12 3 7 8"/>
             <line x1="12" y1="3" x2="12" y2="15"/>
           </svg>
-          Ajouter un document
+          Ajouter une ressource
         </button>
       </div>
 
-      {/* Input fichier caché — tout type accepté */}
+      {/* Input fichier caché */}
       <input
         ref={inputRef}
         type="file"
@@ -213,6 +247,26 @@ export default function RessourcesPage() {
         className="hidden"
         onChange={e => e.target.files && handleFiles(e.target.files)}
       />
+
+      {/* Sélecteur de type d'upload */}
+      <div className="mb-4 flex items-center gap-3">
+        <span className="text-xs font-semibold text-tx-muted uppercase tracking-wide">Type à uploader :</span>
+        <div className="flex gap-2">
+          {(["document", "video", "autre"] as ResourceType[]).map(t => (
+            <button
+              key={t}
+              onClick={() => setUploadType(t)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                uploadType === t
+                  ? "bg-brand text-white border-brand"
+                  : "bg-surface text-tx-muted border-border hover:border-brand/40"
+              }`}
+            >
+              {RESOURCE_TYPE_LABELS[t]}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Zone drag & drop */}
       <div
@@ -227,22 +281,33 @@ export default function RessourcesPage() {
           }`}
       >
         <div className="flex flex-col items-center gap-2 pointer-events-none select-none">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-            className={dragOver ? "text-brand" : "text-tx-muted"}>
-            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-            <polyline points="17 8 12 3 7 8"/>
-            <line x1="12" y1="3" x2="12" y2="15"/>
-          </svg>
+          {uploadType === "video" ? (
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+              className={dragOver ? "text-brand" : "text-tx-muted"}>
+              <rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3V9z"/>
+            </svg>
+          ) : (
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+              className={dragOver ? "text-brand" : "text-tx-muted"}>
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          )}
           <p className="text-sm font-medium text-tx">
-            {dragOver ? "Relâchez pour uploader" : "Glissez-déposez vos fichiers ici"}
+            {dragOver ? "Relâchez pour uploader" : `Glissez-déposez vos ${RESOURCE_TYPE_LABELS[uploadType].toLowerCase()}s ici`}
           </p>
           <p className="text-xs text-tx-muted">
-            Tous types acceptés · PDF, Word, Excel, images, vidéos, archives…
+            {uploadType === "video"
+              ? "MP4, MOV, AVI, MKV…"
+              : uploadType === "document"
+                ? "PDF, Word, Excel, images…"
+                : "Tous types acceptés"}
           </p>
         </div>
       </div>
 
-      {/* Barre de progression multi-fichiers */}
+      {/* Barre de progression */}
       {uploading && uploadProgress.length > 0 && (
         <div className="mb-5 bg-surface border border-border rounded-2xl p-4 space-y-2">
           <p className="text-xs font-semibold text-tx-muted uppercase tracking-wide mb-2">Upload en cours…</p>
@@ -258,6 +323,28 @@ export default function RessourcesPage() {
         </div>
       )}
 
+      {/* Onglets de type */}
+      <div className="flex gap-1 mb-4">
+        {TAB_TYPES.map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+              activeTab === tab.key
+                ? "bg-brand text-white"
+                : "bg-surface text-tx-muted hover:bg-surface-alt border border-border"
+            }`}
+          >
+            {tab.label}
+            <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
+              activeTab === tab.key ? "bg-white/20 text-white" : "bg-surface-alt text-tx-muted"
+            }`}>
+              {counts[tab.key] ?? 0}
+            </span>
+          </button>
+        ))}
+      </div>
+
       {/* Barre de recherche */}
       {docs.length > 0 && (
         <div className="mb-4 relative">
@@ -266,7 +353,7 @@ export default function RessourcesPage() {
           </svg>
           <input
             type="text"
-            placeholder="Rechercher un document…"
+            placeholder="Rechercher une ressource…"
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="w-full pl-9 pr-4 py-2.5 text-sm bg-surface border border-border rounded-xl text-tx placeholder:text-tx-muted focus:outline-none focus:border-brand/50 transition-colors"
@@ -274,7 +361,7 @@ export default function RessourcesPage() {
         </div>
       )}
 
-      {/* Liste des documents */}
+      {/* Liste des ressources */}
       {loading ? (
         <div className="bg-surface border border-border rounded-2xl p-12 text-center">
           <p className="text-tx-muted text-sm">Chargement…</p>
@@ -288,24 +375,25 @@ export default function RessourcesPage() {
                 <path d="M14 3v6h6"/>
                 <line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="12" y2="17"/>
               </svg>
-              <p className="text-tx-muted text-sm font-medium">Aucun document pour l'instant</p>
+              <p className="text-tx-muted text-sm font-medium">Aucune ressource pour l'instant</p>
               <p className="text-tx-muted/60 text-xs mt-1">Utilisez le bouton ci-dessus ou glissez des fichiers pour commencer.</p>
             </>
           ) : (
-            <p className="text-tx-muted text-sm">Aucun document ne correspond à votre recherche.</p>
+            <p className="text-tx-muted text-sm">Aucune ressource ne correspond à votre recherche.</p>
           )}
         </div>
       ) : (
         <div className="bg-surface border border-border rounded-2xl overflow-hidden">
           <div className="px-4 py-3 border-b border-border">
             <span className="text-xs font-semibold text-tx-muted uppercase tracking-wide">
-              {filtered.length} document{filtered.length > 1 ? "s" : ""}
+              {filtered.length} ressource{filtered.length > 1 ? "s" : ""}
             </span>
           </div>
           <div className="divide-y divide-border">
             {filtered.map(doc => {
               const cat = getCategory(doc.mime_type);
               const colors = CATEGORY_COLORS[cat];
+              const rType = doc.resource_type as ResourceType ?? "document";
               return (
                 <div key={doc.id} className="flex items-center gap-4 px-4 py-3.5 hover:bg-surface-alt transition-colors group">
                   {/* Icône fichier */}
@@ -317,6 +405,9 @@ export default function RessourcesPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline gap-2">
                       <span className="text-sm font-medium text-tx truncate">{doc.title}</span>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${RESOURCE_TYPE_COLORS[rType]}`}>
+                        {RESOURCE_TYPE_LABELS[rType]}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-xs text-tx-muted truncate">{doc.original_filename}</span>
@@ -332,7 +423,6 @@ export default function RessourcesPage() {
 
                   {/* Actions */}
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {/* Télécharger */}
                     <button
                       onClick={() => handleDownload(doc)}
                       title="Télécharger"
@@ -344,7 +434,6 @@ export default function RessourcesPage() {
                         <line x1="12" y1="15" x2="12" y2="3"/>
                       </svg>
                     </button>
-                    {/* Supprimer */}
                     <button
                       onClick={() => setDeleteId(doc.id)}
                       title="Supprimer"
@@ -362,7 +451,7 @@ export default function RessourcesPage() {
         </div>
       )}
 
-      {/* Modal confirmation suppression */}
+      {/* Modal suppression */}
       {deleteId && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-sm">
@@ -373,7 +462,7 @@ export default function RessourcesPage() {
                 </svg>
               </div>
               <div>
-                <p className="text-sm font-semibold text-tx">Supprimer ce document ?</p>
+                <p className="text-sm font-semibold text-tx">Supprimer cette ressource ?</p>
                 <p className="text-xs text-tx-muted mt-0.5 truncate max-w-[200px]">{docToDelete?.title}</p>
               </div>
             </div>
