@@ -191,6 +191,8 @@ export const superviseursApi = {
   delete: (id: string) => api.delete(`/admin/superviseurs/${id}`),
   toggleStatus: (id: string) => api.post(`/admin/superviseurs/${id}/toggle-status`),
   assignTeachers: (id: string, ids: string[]) => api.post(`/admin/superviseurs/${id}/assign-teachers`, { assigned_teacher_ids: ids }),
+  exportCsv: () => api.get("/admin/superviseurs/export/csv", { responseType: "blob" }),
+  exportXlsx: (fields?: string) => api.get("/admin/superviseurs/export/xlsx", { params: fields ? { fields } : undefined, responseType: "blob" }),
 };
 
 export const evaluateursApi = {

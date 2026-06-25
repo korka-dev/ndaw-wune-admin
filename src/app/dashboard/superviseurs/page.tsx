@@ -1,15 +1,18 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { superviseursApi, schoolsApi, teachersApi } from "@/lib/api";
+import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 50;
 
+interface SchoolBrief { id: string; name: string; code_ecole?: number; region?: string; }
 interface Superviseur {
   id: string; name: string; phone?: string; title?: string;
   status: string; school_id?: string; classes?: string[];
+  school?: SchoolBrief;
 }
-interface School { id: string; name: string; }
+interface School { id: string; name: string; code_ecole?: number; region?: string; }
 interface Teacher { id: string; name: string; phone?: string; school_id?: string; classes?: string[]; }
 
 const EMPTY = { name: "", phone: "", title: "", school_id: "", classes: [] as string[] };
@@ -46,9 +49,24 @@ export default function SuperviseursPage() {
   const [page, setPage] = useState(1);
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<"csv" | "xlsx" | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
 
   /* auto-focus premier champ à l'ouverture du modal */
   const firstFieldRef = useRef<HTMLInputElement>(null);
+  const exportRef = useRef<HTMLDivElement>(null);
+
+  /* fermer le dropdown export au clic extérieur */
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setExportOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   useEffect(() => {
     if (modal === "create" || (modal && typeof modal === "object" && (modal.kind === "edit"))) {
       setTimeout(() => firstFieldRef.current?.focus(), 50);
@@ -58,7 +76,7 @@ export default function SuperviseursPage() {
   const load = (isFirstLoad = false) => {
     if (isFirstLoad) { setDataLoading(true); setDataError(null); }
     Promise.all([
-      superviseursApi.list(),
+      superviseursApi.list({ limit: 10000 }),
       schoolsApi.list({ limit: 10000 }),
       teachersApi.list({ limit: 10000 }),
     ])
@@ -72,6 +90,17 @@ export default function SuperviseursPage() {
       .finally(() => { if (isFirstLoad) setDataLoading(false); });
   };
   useEffect(() => { load(true); }, []);
+
+  const handleExport = async (fmt: "csv" | "xlsx") => {
+    setExporting(fmt);
+    try {
+      const res = fmt === "csv"
+        ? await superviseursApi.exportCsv()
+        : await superviseursApi.exportXlsx();
+      downloadBlob(res.data, fmt === "csv" ? "superviseurs.csv" : "superviseurs.xlsx");
+    } catch { /* silencieux */ }
+    finally { setExporting(null); }
+  };
 
   /* Vérification unicité téléphone : superviseurs + enseignants */
   const checkPhone = (phone: string, excludeId?: string) => {
@@ -128,7 +157,13 @@ export default function SuperviseursPage() {
   };
 
   const initials = (n: string) => n.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase();
-  const schoolName = (id?: string) => schools.find(s => s.id === id)?.name ?? "—";
+  const getSchool = (sup: Superviseur) => sup.school ?? schools.find(s => s.id === sup.school_id);
+  const schoolName = (sup: Superviseur) => {
+    const s = getSchool(sup);
+    if (!s) return "—";
+    return s.code_ecole != null ? `[${s.code_ecole}] ${s.name}` : s.name;
+  };
+  const schoolNameById = (id?: string) => schools.find(s => s.id === id)?.name ?? "—";
   const schoolTeachers = (sid: string) => teachers.filter(t => t.school_id === sid);
   const assignedTeachers = (ids?: string[]) => teachers.filter(t => ids?.includes(t.id));
 
@@ -139,7 +174,7 @@ export default function SuperviseursPage() {
   const filtered = sups.filter(s => {
     const matchSearch = !search.trim() ||
       s.name.toLowerCase().includes(search.toLowerCase()) ||
-      schoolName(s.school_id).toLowerCase().includes(search.toLowerCase());
+      schoolName(s).toLowerCase().includes(search.toLowerCase());
     const matchSchool = !filterSchool || s.school_id === filterSchool;
     const matchStatus = !filterStatus || s.status === filterStatus;
     return matchSearch && matchSchool && matchStatus;
@@ -186,11 +221,60 @@ export default function SuperviseursPage() {
               : `${sups.length} superviseur${sups.length !== 1 ? "s" : ""} au total`}
           </p>
         </div>
-        <button onClick={openCreate}
-          className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-          Ajouter
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Export — bouton unique avec dropdown */}
+          <div ref={exportRef} className="relative">
+            <button
+              onClick={() => setExportOpen(o => !o)}
+              disabled={!!exporting}
+              className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50">
+              {exporting ? (
+                <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <circle cx="12" cy="12" r="10" strokeOpacity=".25"/><path d="M12 2a10 10 0 0110 10"/>
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+              )}
+              {exporting ? "Export…" : "Exporter"}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+                className={`transition-transform duration-150 ${exportOpen ? "rotate-180" : ""}`}>
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+
+            {exportOpen && (
+              <div className="absolute right-0 top-full mt-1.5 bg-surface border border-border rounded-xl shadow-lg overflow-hidden z-20 min-w-[160px]">
+                <button
+                  onClick={() => { setExportOpen(false); handleExport("csv"); }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-tx hover:bg-surface-alt transition-colors text-left">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-tx-muted">
+                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+                  </svg>
+                  CSV (.csv)
+                </button>
+                <div className="border-t border-border"/>
+                <button
+                  onClick={() => { setExportOpen(false); handleExport("xlsx"); }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-tx hover:bg-surface-alt transition-colors text-left">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-success">
+                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                    <polyline points="8 13 10.5 17 13 13"/><line x1="10.5" y1="17" x2="10.5" y2="10"/>
+                  </svg>
+                  Excel (.xlsx)
+                </button>
+              </div>
+            )}
+          </div>
+          {/* Ajouter */}
+          <button onClick={openCreate}
+            className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+            Ajouter
+          </button>
+        </div>
       </div>
 
       {/* ── Barre de recherche + filtres ── */}
@@ -248,14 +332,18 @@ export default function SuperviseursPage() {
       </div>
 
       {/* ── Table ── */}
-      <div className="bg-surface rounded-2xl border border-border overflow-hidden flex-1">
-        <table className="w-full text-sm table-fixed">
-          <colgroup><col className="w-[24%]" /><col className="w-[16%]" /><col className="w-[22%]" /><col className="w-[18%]" /><col className="w-[10%]" /><col className="w-[10%]" /></colgroup>
-          <thead>
+      <div className="bg-surface rounded-2xl border border-border overflow-hidden flex-1 flex flex-col">
+        <div className="overflow-x-auto overflow-y-auto flex-1">
+        <table className="w-full text-sm table-fixed min-w-[800px]">
+          <colgroup><col className="w-[24%]" /><col className="w-[14%]" /><col className="w-[30%]" /><col className="w-[13%]" /><col className="w-[10%]" /><col className="w-[9%]" /></colgroup>
+          <thead className="sticky top-0 z-10">
             <tr className="border-b border-border bg-surface-alt">
-              {["Superviseur", "Contact", "École", "Profs assignés", "Statut", "Actions"].map(h => (
-                <th key={h} className="px-5 py-3 text-center text-xs font-semibold text-tx-muted uppercase tracking-wide">{h}</th>
-              ))}
+              <th className="px-4 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide bg-surface-alt sticky top-0">Superviseur</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide bg-surface-alt sticky top-0">Téléphone</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide bg-surface-alt sticky top-0">École</th>
+              <th className="px-4 py-3 text-center text-xs font-semibold text-tx-muted uppercase tracking-wide bg-surface-alt sticky top-0">Enseignants</th>
+              <th className="px-4 py-3 text-center text-xs font-semibold text-tx-muted uppercase tracking-wide bg-surface-alt sticky top-0">Statut</th>
+              <th className="px-4 py-3 text-center text-xs font-semibold text-tx-muted uppercase tracking-wide bg-surface-alt sticky top-0">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -282,40 +370,76 @@ export default function SuperviseursPage() {
             )}
             {!dataLoading && !dataError && paginated.map(sup => {
               const assigned = assignedTeachers(sup.classes);
+              /* Utilise l'école embarquée si disponible, sinon fallback lookup */
+              const school = sup.school ?? schools.find(s => s.id === sup.school_id);
+              const nbProfs = assigned.length;
               return (
                 <tr key={sup.id} onClick={() => setModal({ kind: "view", sup })}
                   className="border-t border-border hover:bg-surface-alt transition-colors cursor-pointer">
-                  <td className="px-5 py-3.5">
+
+                  {/* Superviseur */}
+                  <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-brand-soft text-brand flex items-center justify-center text-xs font-bold flex-shrink-0">{initials(sup.name)}</div>
-                      <div>
-                        <div className="font-medium text-tx">{sup.name}</div>
-                        {sup.title && <div className="text-xs text-tx-muted">{sup.title}</div>}
+                      <div className="w-8 h-8 rounded-full bg-brand-soft text-brand flex items-center justify-center text-xs font-bold flex-shrink-0">
+                        {initials(sup.name)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-medium text-tx text-sm leading-tight truncate">{sup.name}</div>
                       </div>
                     </div>
                   </td>
-                  <td className="px-5 py-3.5 text-tx-muted text-center text-xs">{sup.phone ?? "—"}</td>
-                  <td className="px-5 py-3.5 text-tx-muted text-center text-xs">{schoolName(sup.school_id)}</td>
-                  <td className="px-5 py-3.5 text-center">
-                    {assigned.length > 0 ? (
-                      <div className="flex items-center justify-center gap-1 flex-wrap">
-                        {assigned.slice(0, 3).map(t => (
-                          <span key={t.id} title={t.name}
-                            className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary-soft text-primary text-[9px] font-bold">
-                            {initials(t.name)}
-                          </span>
-                        ))}
-                        {assigned.length > 3 && <span className="text-xs text-tx-muted">+{assigned.length - 3}</span>}
-                      </div>
-                    ) : <span className="text-xs text-tx-muted italic">Aucun</span>}
+
+                  {/* Téléphone */}
+                  <td className="px-4 py-3">
+                    {sup.phone
+                      ? <span className="text-sm text-tx font-mono">{sup.phone}</span>
+                      : <span className="text-xs text-tx-muted/50 italic">—</span>
+                    }
                   </td>
-                  <td className="px-5 py-3.5 text-center">
-                    <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full ${sup.status === "actif" ? "bg-success-soft text-success" : "bg-surface-alt text-tx-muted"}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${sup.status === "actif" ? "bg-success" : "bg-tx-muted"}`} />
-                      {sup.status}
+
+                  {/* École */}
+                  <td className="px-4 py-3">
+                    {school ? (
+                      <div className="min-w-0">
+                        <div className="text-sm text-tx font-medium truncate leading-tight">{school.name}</div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {school.code_ecole != null && (
+                            <span className="text-[10px] font-mono font-semibold text-brand bg-brand-soft px-1.5 py-0.5 rounded">
+                              #{school.code_ecole}
+                            </span>
+                          )}
+                          {school.region && (
+                            <span className="text-[10px] text-tx-muted">{school.region}</span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-tx-muted/60 italic">Non assignée</span>
+                    )}
+                  </td>
+
+                  {/* Enseignants */}
+                  <td className="px-4 py-3 text-center">
+                    {nbProfs > 0 ? (
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="text-base font-bold text-tx leading-none">{nbProfs}</span>
+                        <span className="text-[10px] text-tx-muted">enseignant{nbProfs > 1 ? "s" : ""}</span>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-tx-muted/60 italic">—</span>
+                    )}
+                  </td>
+
+                  {/* Statut */}
+                  <td className="px-4 py-3 text-center">
+                    <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-full ${sup.status === "actif" ? "bg-success-soft text-success" : "bg-surface-alt text-tx-muted"}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${sup.status === "actif" ? "bg-success" : "bg-tx-muted"}`} />
+                      {sup.status === "actif" ? "Actif" : "Inactif"}
                     </span>
                   </td>
-                  <td className="px-5 py-3.5 text-center" onClick={e => e.stopPropagation()}>
+
+                  {/* Actions */}
+                  <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
                     <button onClick={() => setModal({ kind: "manage", sup })}
                       className="text-xs bg-primary-soft text-primary px-3 py-1.5 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors">
                       Gérer
@@ -326,7 +450,8 @@ export default function SuperviseursPage() {
             })}
           </tbody>
         </table>
-        <div className="border-t border-border px-5">
+        </div>
+        <div className="pb-4 px-5 border-t border-border">
           <Pagination page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
         </div>
       </div>
@@ -347,7 +472,7 @@ export default function SuperviseursPage() {
                   <span className={`w-1.5 h-1.5 rounded-full inline-block ${modal.sup.status === "actif" ? "bg-success" : "bg-tx-muted"}`} />
                   {modal.sup.status === "actif" ? "Actif" : "Inactif"}
                   {modal.sup.school_id && (
-                    <><span className="text-border">·</span>{schoolName(modal.sup.school_id)}</>
+                    <><span className="text-border">·</span>{schoolName(modal.sup)}</>
                   )}
                 </div>
               </div>
@@ -617,7 +742,7 @@ export default function SuperviseursPage() {
                 </div>
                 <div>
                   <div className="text-[10px] font-semibold text-tx-muted uppercase tracking-wide">École</div>
-                  <div className="text-sm text-tx font-medium">{schoolName(modal.sup.school_id)}</div>
+                  <div className="text-sm text-tx font-medium">{schoolName(modal.sup)}</div>
                 </div>
               </div>
 
@@ -716,7 +841,7 @@ export default function SuperviseursPage() {
         const filtered2 = display.filter(t =>
           !assignSearch.trim() ||
           t.name.toLowerCase().includes(assignSearch.toLowerCase()) ||
-          schoolName(t.school_id).toLowerCase().includes(assignSearch.toLowerCase())
+          schoolNameById(t.school_id).toLowerCase().includes(assignSearch.toLowerCase())
         );
         const allSelected = display.length > 0 && display.every(t => assignIds.includes(t.id));
         const toggleAll = () => setAssignIds(allSelected ? [] : display.map(t => t.id));
@@ -728,7 +853,7 @@ export default function SuperviseursPage() {
               <div className="px-6 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
                 <div>
                   <h2 className="text-base font-bold text-tx">Enseignants assignés</h2>
-                  <p className="text-xs text-tx-muted mt-0.5">{sup.name} · {schoolName(sup.school_id)}</p>
+                  <p className="text-xs text-tx-muted mt-0.5">{sup.name} · {schoolName(sup)}</p>
                 </div>
                 <button onClick={closeModal} className="w-8 h-8 flex items-center justify-center rounded-lg text-tx-muted hover:text-tx hover:bg-surface-alt transition-colors">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 6l12 12M18 6L6 18" /></svg>
