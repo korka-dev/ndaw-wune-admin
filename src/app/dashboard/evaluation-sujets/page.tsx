@@ -279,62 +279,70 @@ export default function EvaluationSujetsPage() {
         </button>
       </div>
 
-      {/* Formulaire de création */}
+      {/* Modal de création */}
       {showForm && (
-        <form onSubmit={handleCreate} className="mb-6 bg-surface border border-border rounded-2xl p-5 space-y-4">
-          <h3 className="text-sm font-bold text-tx">Nouveau sujet d'évaluation</h3>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label className="text-xs font-semibold text-tx-muted mb-1 block">Titre *</label>
-              <input
-                type="text"
-                value={titre}
-                onChange={e => setTitre(e.target.value)}
-                placeholder="Ex. Évaluation lecture Semaine 3"
-                required
-                className="w-full px-3 py-2.5 text-sm bg-bg border border-border rounded-xl text-tx placeholder:text-tx-muted focus:outline-none focus:border-brand/50"
-              />
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-lg">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-border">
+              <h2 className="text-base font-bold text-tx">Nouveau sujet d'évaluation</h2>
+              <button onClick={() => setShowForm(false)} className="p-2 rounded-xl hover:bg-surface-alt text-tx-muted transition-colors">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
             </div>
-            <div>
-              <label className="text-xs font-semibold text-tx-muted mb-1 block">
-                Élèves par classe à tirer <span className="text-tx-muted/60">(0 = tous)</span>
-              </label>
-              <input
-                type="number"
-                value={nbEleves}
-                onChange={e => setNbEleves(Math.max(0, parseInt(e.target.value) || 0))}
-                min={0}
-                className="w-full px-3 py-2.5 text-sm bg-bg border border-border rounded-xl text-tx focus:outline-none focus:border-brand/50"
-              />
-            </div>
+            <form onSubmit={handleCreate} className="px-6 py-5 space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-tx-muted mb-1 block">Titre *</label>
+                <input
+                  type="text"
+                  value={titre}
+                  onChange={e => setTitre(e.target.value)}
+                  placeholder="Ex. Évaluation lecture Semaine 3"
+                  required
+                  autoFocus
+                  className="w-full px-3 py-2.5 text-sm bg-bg border border-border rounded-xl text-tx placeholder:text-tx-muted focus:outline-none focus:border-brand/50"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-tx-muted mb-1 block">
+                  Élèves par classe à tirer <span className="text-tx-muted/60">(0 = tous)</span>
+                </label>
+                <input
+                  type="number"
+                  value={nbEleves}
+                  onChange={e => setNbEleves(Math.max(0, parseInt(e.target.value) || 0))}
+                  min={0}
+                  className="w-full px-3 py-2.5 text-sm bg-bg border border-border rounded-xl text-tx focus:outline-none focus:border-brand/50"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-tx-muted mb-1 block">Description</label>
+                <textarea
+                  value={description}
+                  onChange={e => setDescription(e.target.value)}
+                  placeholder="Instructions pour le superviseur…"
+                  rows={2}
+                  className="w-full px-3 py-2.5 text-sm bg-bg border border-border rounded-xl text-tx placeholder:text-tx-muted focus:outline-none focus:border-brand/50 resize-none"
+                />
+              </div>
+              <div className="flex gap-3 pt-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowForm(false)}
+                  className="px-4 py-2.5 text-sm text-tx-muted border border-border rounded-xl hover:bg-surface-alt transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={creating || !titre.trim()}
+                  className="px-5 py-2.5 bg-brand text-white text-sm font-semibold rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity"
+                >
+                  {creating ? "Création…" : "Créer et tirer au sort"}
+                </button>
+              </div>
+            </form>
           </div>
-          <div>
-            <label className="text-xs font-semibold text-tx-muted mb-1 block">Description</label>
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="Instructions pour le superviseur…"
-              rows={2}
-              className="w-full px-3 py-2.5 text-sm bg-bg border border-border rounded-xl text-tx placeholder:text-tx-muted focus:outline-none focus:border-brand/50 resize-none"
-            />
-          </div>
-          <div className="flex gap-3 pt-1">
-            <button
-              type="button"
-              onClick={() => setShowForm(false)}
-              className="px-4 py-2 text-sm text-tx-muted border border-border rounded-xl hover:bg-surface-alt transition-colors"
-            >
-              Annuler
-            </button>
-            <button
-              type="submit"
-              disabled={creating || !titre.trim()}
-              className="px-5 py-2 bg-brand text-white text-sm font-semibold rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity"
-            >
-              {creating ? "Création…" : "Créer et tirer au sort"}
-            </button>
-          </div>
-        </form>
+        </div>
       )}
 
       {/* Liste des sujets */}
