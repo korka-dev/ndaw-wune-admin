@@ -329,6 +329,29 @@ export const evaluationSujetsApi = {
   audioUrl: (filename: string) => `${API_URL}/app/supervisor/evaluation-audio/${filename}`,
 };
 
+export const evaluationDocsApi = {
+  list:   ()                          => api.get("/admin/evaluation-docs"),
+  get:    (id: string)                => api.get(`/admin/evaluation-docs/${id}`),
+  create: (d: {
+    langue: string; titre: string;
+    lettres: string[]; syllabes: string[]; mots: string[]; operations: string[];
+    is_active: boolean;
+  })                                  => api.post("/admin/evaluation-docs", d),
+  update: (id: string, d: Partial<{
+    langue: string; titre: string;
+    lettres: string[]; syllabes: string[]; mots: string[]; operations: string[];
+    is_active: boolean;
+  }>)                                 => api.patch(`/admin/evaluation-docs/${id}`, d),
+  delete: (id: string)                => api.delete(`/admin/evaluation-docs/${id}`),
+  upload: (file: File)                => {
+    const form = new FormData();
+    form.append("file", file);
+    return api.post("/admin/evaluation-docs/upload", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+};
+
 // ── Dashboard stats (agrégations SQL, un seul appel) ─────────────────────────
 export const dashboardApi = {
   stats: () => api.get("/admin/dashboard/stats"),
