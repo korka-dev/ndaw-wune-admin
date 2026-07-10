@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 # ==============================================================================
-#  NDAW WUNE — Script de redéploiement Dashboard Admin Next.js (VPS)
+#  NDAW WUNE — Redéploiement Dashboard Admin Next.js via PM2 (VPS)
 #
-#  Usage (à lancer après votre "git pull" manuel dans le dossier admin du VPS) :
+#  Usage (depuis le dossier admin sur le VPS, après git pull) :
 #    ./redeploy_admin.sh
 # ==============================================================================
 
 set -euo pipefail
 
-# ── Couleurs pour l'affichage ──────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
@@ -21,69 +20,58 @@ header()  { echo -e "\n${BOLD}${CYAN}══════════════�
 ADMIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ADMIN_DIR"
 
-header "NDAW WUNE — Redéploiement Admin Dashboard VPS"
+header "NDAW WUNE — Redéploiement Admin Dashboard (PM2)"
 
-# ── 1. Installation des dépendances ───────────────────────────────────────────
-header "Étape 1/3 — Installation des dépendances Node.js"
-log "Exécution de npm install..."
-npm install --silent
-success "Dépendances installées avec succès."
-
-# ── 2. Compilation de l'application Next.js ────────────────────────────────────
-header "Étape 2/3 — Compilation de l'application (Next Build)"
-log "Lancement du build de production..."
-npm run build
-success "Next.js compilé avec succès."
-
-# ── 3. Relance du serveur de production ─────────────────────────────────────────
-header "Étape 3/3 — Redémarrage du processus de production"
-
-# Détection de PM2 (le gestionnaire de processus recommandé en production pour Next.js)
-if command -v pm2 &>/dev/null; then
-  log "PM2 détecté sur le système."
-  
-  # Essayer de trouver un processus existant lié au dashboard admin
-  PM2_APP_NAME=""
-  if pm2 list | grep -q "ndawwune-admin"; then
-    PM2_APP_NAME="ndawwune-admin"
-  elif pm2 list | grep -q "ared-ndawune-plateforme"; then
-    PM2_APP_NAME="ared-ndawune-plateforme"
-  elif pm2 list | grep -q "admin"; then
-    PM2_APP_NAME="admin"
-  fi
-
-  if [[ -n "$PM2_APP_NAME" ]]; then
-    log "Redémarrage du processus existant PM2 '$PM2_APP_NAME'..."
-    pm2 restart "$PM2_APP_NAME"
-    success "Dashboard redémarré avec succès par PM2."
-  else
-    warn "Aucun processus existant trouvé dans PM2 pour le Dashboard."
-    log "Lancement d'un nouveau processus PM2 nommé 'ndawwune-admin'..."
-    pm2 start npm --name "ndawwune-admin" -- run start
-    pm2 save
-    success "Dashboard démarré avec succès sous le nom 'ndawwune-admin' !"
-  fi
-  pm2 status
-
-# Détection alternative si système d'unité systemd
-elif systemctl is-active --quiet ndawwune-admin 2>/dev/null; then
-  log "Service systemd 'ndawwune-admin' détecté."
-  log "Redémarrage du service systemd..."
-  sudo systemctl restart ndawwune-admin
-  success "Dashboard redémarré via systemd."
-
-# Sinon, guide interactif
-else
-  warn "Aucun gestionnaire (PM2 ou systemd) n'a été détecté pour Next.js."
-  log "Vous pouvez démarrer l'application Next.js en arrière-plan :"
-  log "  Option A (Nohup classique) :"
-  log "    nohup npm run start > next.log 2>&1 &"
-  echo ""
-  log "  Option B (PM2 - Recommandé, à installer via 'npm install -g pm2') :"
-  log "    pm2 start npm --name \"ndawwune-admin\" -- run start"
-  echo ""
+# ── Vérification PM2 ──────────────────────────────────────────────────────────
+if ! command -v pm2 &>/dev/null; then
+  error "PM2 n'est pas installé. Lancez : npm install -g pm2"
 fi
 
-header "Redéploiement Terminé !"
-success "Le Dashboard Admin a été mis à jour et compilé avec succès."
+# ── 1. Installation des dépendances ──────────────────────────────────────────
+header "Étape 1/4 — Installation des dépendances"
+log "npm install --production=false ..."
+npm install --silent
+success "Dépendances installées."
+
+# ── 2. Build de production ────────────────────────────────────────────────────
+header "Étape 2/4 — Build Next.js (standalone)"
+log "npm run build ..."
+npm run build
+success "Build terminé."
+
+# ── 3. Copie des assets statiques dans le répertoire standalone ───────────────
+# Nécessaire avec output: "standalone" : Next.js ne les copie pas automatiquement
+header "Étape 3/4 — Copie des assets statiques"
+log "Copie de public/ et .next/static/ dans .next/standalone/ ..."
+cp -r public .next/standalone/public
+mkdir -p .next/standalone/.next
+cp -r .next/static .next/standalone/.next/static
+success "Assets copiés."
+
+# ── 4. Démarrage / Rechargement PM2 ──────────────────────────────────────────
+header "Étape 4/4 — Gestion du processus PM2"
+
+if pm2 list | grep -q "ndawwune-admin"; then
+  log "Processus existant détecté — rechargement sans coupure (reload) ..."
+  pm2 reload ecosystem.config.js --env production
+  success "Processus rechargé avec succès."
+else
+  log "Aucun processus existant — démarrage initial ..."
+  mkdir -p /var/log/pm2
+  pm2 start ecosystem.config.js --env production
+  pm2 save
+  success "Processus démarré et sauvegardé."
+fi
+
+echo ""
+pm2 status
+echo ""
+
+header "Déploiement terminé !"
+success "Dashboard Admin opérationnel sur le port 3000."
+echo ""
+log "Commandes utiles :"
+echo "  pm2 logs ndawwune-admin     # logs en temps réel"
+echo "  pm2 status                  # état du processus"
+echo "  pm2 stop ndawwune-admin     # arrêt"
 echo ""
