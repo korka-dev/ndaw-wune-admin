@@ -61,6 +61,8 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/dashboard/comptes",    label: "Comptes utilisateurs",         icon: "lock",      adminOnly: true },
       { href: "/dashboard/historique", label: "Historique des modifications", icon: "activity",  adminOnly: true },
+      { href: "/dashboard/logs-utilisation", label: "Logs d'utilisation",     icon: "activity",  adminOnly: true },
+      { href: "/dashboard/remarques",  label: "Remarques utilisateurs",       icon: "file-text", adminOnly: true },
     ],
   },
 ];

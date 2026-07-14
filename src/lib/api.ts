@@ -128,15 +128,22 @@ export const schoolsApi = {
 };
 
 export const planningApi = {
-  list: (session_id?: string) =>
-    api.get("/admin/planning", { params: session_id ? { session_id } : {} }),
+  list: (session_id?: string, semaine?: number) =>
+    api.get("/admin/planning", {
+      params: {
+        ...(session_id ? { session_id } : {}),
+        ...(semaine != null ? { semaine } : {}),
+        limit: 200,
+      },
+    }),
   create: (d: unknown) => api.post("/admin/planning", d),
   update: (id: string, d: unknown) => api.patch(`/admin/planning/${id}`, d),
   delete: (id: string) => api.delete(`/admin/planning/${id}`),
-  import: (session_id: string, file: File) => {
+  import: (session_id: string, file: File, semaine?: number) => {
     const fd = new FormData();
     fd.append("file", file);
-    return api.post(`/admin/planning/import?session_id=${session_id}`, fd, {
+    const qs = semaine != null ? `&semaine=${semaine}` : "";
+    return api.post(`/admin/planning/import?session_id=${session_id}${qs}`, fd, {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
@@ -350,6 +357,22 @@ export const evaluationDocsApi = {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
+};
+
+// ── Logs d'utilisation de l'app mobile ────────────────────────────────────────
+export const usageLogsApi = {
+  list: (params?: { feature?: string; user_role?: string; date_from?: string; date_to?: string; skip?: number; limit?: number }) =>
+    api.get("/admin/usage-logs", { params }),
+  stats: (params?: { date_from?: string; date_to?: string }) =>
+    api.get("/admin/usage-logs/stats", { params }),
+};
+
+// ── Remarques des utilisateurs de l'app mobile ────────────────────────────────
+export const remarquesApi = {
+  list: (params?: { categorie?: string; statut?: string; skip?: number; limit?: number }) =>
+    api.get("/admin/remarques", { params }),
+  setStatus: (id: string, statut: "nouveau" | "traite") =>
+    api.patch(`/admin/remarques/${id}`, { statut }),
 };
 
 // ── Dashboard stats (agrégations SQL, un seul appel) ─────────────────────────

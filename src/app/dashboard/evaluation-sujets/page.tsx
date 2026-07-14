@@ -41,6 +41,10 @@ const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
 
 const RESULTAT_CFG: Record<string, { label: string; cls: string }> = {
+  reussi:        { label: "Réussi",        cls: "bg-success-soft text-success border-success/20" },
+  intermediaire: { label: "Intermédiaire", cls: "bg-primary-soft text-primary border-primary/20" },
+  pas_reussi:    { label: "Pas réussi",    cls: "bg-danger-soft text-danger border-danger/20" },
+  // Anciens résultats (rétrocompatibilité)
   acquis:  { label: "Acquis",  cls: "bg-success-soft text-success border-success/20" },
   a_aider: { label: "À aider", cls: "bg-warn-soft text-warn border-warn/20" },
 };
@@ -55,12 +59,14 @@ function SujetDetailModal({
   onClose: () => void;
 }) {
   const [search, setSearch] = useState("");
-  const [filterResultat, setFilterResultat] = useState<"all" | "acquis" | "a_aider" | "pending">("all");
+  const [filterResultat, setFilterResultat] = useState<"all" | "reussi" | "intermediaire" | "pas_reussi" | "pending">("all");
 
   const filtered = sujet.tirages.filter(t => {
     if (filterResultat === "pending" && t.resultat !== null) return false;
-    if (filterResultat === "acquis" && t.resultat !== "acquis") return false;
-    if (filterResultat === "a_aider" && t.resultat !== "a_aider") return false;
+    // "reussi" englobe l'ancien "acquis", "pas_reussi" l'ancien "a_aider"
+    if (filterResultat === "reussi" && t.resultat !== "reussi" && t.resultat !== "acquis") return false;
+    if (filterResultat === "intermediaire" && t.resultat !== "intermediaire") return false;
+    if (filterResultat === "pas_reussi" && t.resultat !== "pas_reussi" && t.resultat !== "a_aider") return false;
     if (search) {
       const q = search.toLowerCase();
       const nom = `${t.eleve_prenom ?? ""} ${t.eleve_nom}`.toLowerCase();
@@ -113,7 +119,7 @@ function SujetDetailModal({
         {/* Filtres */}
         <div className="px-6 py-3 border-b border-border flex items-center gap-3 flex-wrap">
           <div className="flex gap-1">
-            {(["all", "pending", "acquis", "a_aider"] as const).map(f => (
+            {(["all", "pending", "reussi", "intermediaire", "pas_reussi"] as const).map(f => (
               <button
                 key={f}
                 onClick={() => setFilterResultat(f)}
@@ -121,7 +127,7 @@ function SujetDetailModal({
                   filterResultat === f ? "bg-brand text-white border-brand" : "border-border text-tx-muted hover:bg-surface-alt"
                 }`}
               >
-                {f === "all" ? "Tous" : f === "pending" ? "En attente" : f === "acquis" ? "Acquis" : "À aider"}
+                {f === "all" ? "Tous" : f === "pending" ? "En attente" : f === "reussi" ? "Réussi" : f === "intermediaire" ? "Intermédiaire" : "Pas réussi"}
               </button>
             ))}
           </div>

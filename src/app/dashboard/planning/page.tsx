@@ -50,13 +50,14 @@ function parseCSVPreview(text: string): { rows: any[]; errors: string[] } {
 interface Seg {
   id: string;
   session_id: string;
+  semaine?: number | null;
   jour: number;
   heure_debut: string;
   heure_fin: string;
   matiere?: string;
 }
 
-const EMPTY = { session_id: "", jour: 0, heure_debut: "08:00", heure_fin: "10:00", matiere: "" };
+const EMPTY = { session_id: "", semaine: "", jour: 0, heure_debut: "08:00", heure_fin: "10:00", matiere: "" };
 
 export default function PlanningPage() {
   const [segs, setSegs] = useState<Seg[]>([]);
@@ -70,6 +71,8 @@ export default function PlanningPage() {
   const [page, setPage] = useState(1);
   const [filterJour, setFilterJour] = useState<string>("");
   const [filterMatiere, setFilterMatiere] = useState<string>("");
+  const [filterSemaine, setFilterSemaine] = useState<string>("");
+  const [importSemaine, setImportSemaine] = useState<string>("");
 
   /* ── Export CSV ── */
   const [exporting, setExporting] = useState(false);
@@ -93,7 +96,7 @@ export default function PlanningPage() {
 
   const resetImport = () => {
     setImportFile(null); setImportPreview([]); setImportErrors([]);
-    setImportResult(null); setImporting(false);
+    setImportResult(null); setImporting(false); setImportSemaine("");
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -124,7 +127,11 @@ export default function PlanningPage() {
     }
     setImporting(true);
     try {
-      const res = await planningApi.import(sessId, importFile);
+      const res = await planningApi.import(
+        sessId,
+        importFile,
+        importSemaine ? Number(importSemaine) : undefined
+      );
       setImportResult(res.data);
       if (res.data.imported > 0) loadSegs();
     } catch (e: any) {
@@ -174,7 +181,12 @@ export default function PlanningPage() {
     setLoading(true);
     try {
       // Sanitize : matiere vide → null (le backend attend Optional[str])
-      const payload = { ...form, matiere: form.matiere || undefined };
+      const payload = {
+        ...form,
+        matiere: form.matiere || undefined,
+        // création : semaine absente si vide · édition : null explicite pour effacer
+        semaine: form.semaine !== "" ? Number(form.semaine) : (modal === "create" ? undefined : null),
+      };
       if (modal === "create") await planningApi.create(payload);
       else await planningApi.update((modal as Seg).id, payload);
       loadSegs();
@@ -201,12 +213,19 @@ export default function PlanningPage() {
     new Set(segs.map(s => s.matiere).filter((m): m is string => !!m))
   ).sort();
 
-  const hasFilters = !!(filterJour || filterMatiere);
+  const semaines = Array.from(
+    new Set(segs.map(s => s.semaine).filter((s): s is number => s != null))
+  ).sort((a, b) => a - b);
+
+  const hasFilters = !!(filterJour || filterMatiere || filterSemaine);
 
   const filteredSegs = segs.filter(s => {
     const matchJour = !filterJour || s.jour === Number(filterJour);
     const matchMatiere = !filterMatiere || (s.matiere ?? "") === filterMatiere;
-    return matchJour && matchMatiere;
+    const matchSemaine =
+      !filterSemaine ||
+      (filterSemaine === "none" ? s.semaine == null : s.semaine === Number(filterSemaine));
+    return matchJour && matchMatiere && matchSemaine;
   });
 
   const segsByDay = filteredSegs.reduce<Record<number, Seg[]>>((acc, s) => {
@@ -277,6 +296,21 @@ export default function PlanningPage() {
       {/* ── Barre de filtres ──────────────────────────────────────────────── */}
       {segs.length > 0 && (
         <div className="flex gap-3 mb-5">
+          {/* Filtre Semaine */}
+          <div className="relative">
+            <select value={filterSemaine} onChange={e => { setFilterSemaine(e.target.value); setPage(1); }}
+              className={`pl-3 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[150px] ${filterSemaine ? "border-brand text-brand font-medium" : "border-border text-tx"
+                }`}>
+              <option value="">Toutes les semaines</option>
+              {semaines.map(s => <option key={s} value={s}>Semaine {s}</option>)}
+              <option value="none">Sans semaine</option>
+            </select>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </div>
+
           {/* Filtre Jour */}
           <div className="relative">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
@@ -317,7 +351,7 @@ export default function PlanningPage() {
 
           {/* Reset */}
           {hasFilters && (
-            <button onClick={() => { setFilterJour(""); setFilterMatiere(""); setPage(1); }}
+            <button onClick={() => { setFilterJour(""); setFilterMatiere(""); setFilterSemaine(""); setPage(1); }}
               className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-brand/30 bg-brand-soft text-brand text-sm font-medium hover:bg-brand hover:text-white transition-colors">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
               Réinitialiser
@@ -347,7 +381,7 @@ export default function PlanningPage() {
             <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
           </svg>
           <p className="text-tx-muted text-sm">Aucun créneau ne correspond aux filtres.</p>
-          <button onClick={() => { setFilterJour(""); setFilterMatiere(""); setPage(1); }}
+          <button onClick={() => { setFilterJour(""); setFilterMatiere(""); setFilterSemaine(""); setPage(1); }}
             className="mt-1 text-xs text-brand hover:underline font-medium">
             Effacer les filtres
           </button>
@@ -409,9 +443,16 @@ export default function PlanningPage() {
                             {s.heure_debut} – {s.heure_fin}
                           </td>
                           <td className="px-5 py-3 text-tx font-medium">
-                            {s.matiere ?? (
-                              <span className="text-tx-muted italic">Sans titre</span>
-                            )}
+                            <span className="inline-flex items-center gap-2">
+                              {s.matiere ?? (
+                                <span className="text-tx-muted italic">Sans titre</span>
+                              )}
+                              {s.semaine != null && (
+                                <span className="text-[10px] font-bold uppercase tracking-wide bg-brand-soft text-brand px-1.5 py-0.5 rounded-md">
+                                  S{s.semaine}
+                                </span>
+                              )}
+                            </span>
                           </td>
                           <td className="px-5 py-3">
                             <div className="flex gap-2 justify-center">
@@ -419,6 +460,7 @@ export default function PlanningPage() {
                                 onClick={() => {
                                   setForm({
                                     session_id: s.session_id,
+                                    semaine: s.semaine != null ? String(s.semaine) : "",
                                     jour: s.jour,
                                     heure_debut: s.heure_debut,
                                     heure_fin: s.heure_fin,
@@ -467,6 +509,21 @@ export default function PlanningPage() {
               </div>
             )}
             <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-tx mb-1">Semaine concernée</label>
+                <select
+                  value={form.semaine}
+                  onChange={e => setForm(f => ({ ...f, semaine: e.target.value }))}
+                  className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 transition">
+                  <option value="">Toutes les semaines</option>
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map(s => (
+                    <option key={s} value={s}>Semaine {s}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-tx-muted mt-1">
+                  Le planning ne sera affiché aux tuteurs que pour la semaine choisie.
+                </p>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-tx mb-1">Jour</label>
                 <select
@@ -533,6 +590,19 @@ export default function PlanningPage() {
             {/* Zone upload + modèle */}
             {!importResult && (
               <>
+                {/* Semaine cible de l'import */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-tx mb-1">Semaine concernée</label>
+                  <select
+                    value={importSemaine}
+                    onChange={e => setImportSemaine(e.target.value)}
+                    className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 transition">
+                    <option value="">Toutes les semaines (remplace tout le planning)</option>
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map(s => (
+                      <option key={s} value={s}>Semaine {s} (remplace uniquement cette semaine)</option>
+                    ))}
+                  </select>
+                </div>
                 <div className="flex items-center gap-3 mb-4">
                   {/* Bouton sélectionner fichier */}
                   <label className="flex-1 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-border rounded-xl py-6 cursor-pointer hover:border-brand hover:bg-brand/5 transition-colors">

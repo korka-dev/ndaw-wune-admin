@@ -46,6 +46,25 @@ const RESULTAT_CFG: Record<string, {
     kpiText: "text-warn", kpiBg: "bg-warn-soft", barCls: "bg-warn",
     icon: "alert",
   },
+  // Nouveaux résultats (évaluation superviseur à 3 options)
+  reussi: {
+    label: "Réussi", badgeCls: "bg-success-soft text-success",
+    rowAccent: "border-l-success", avatarCls: "bg-success-soft text-success",
+    kpiText: "text-success", kpiBg: "bg-success-soft", barCls: "bg-success",
+    icon: "check",
+  },
+  intermediaire: {
+    label: "Intermédiaire", badgeCls: "bg-brand-soft text-brand",
+    rowAccent: "border-l-brand", avatarCls: "bg-brand-soft text-brand",
+    kpiText: "text-brand", kpiBg: "bg-brand-soft", barCls: "bg-brand",
+    icon: "clock",
+  },
+  pas_reussi: {
+    label: "Pas réussi", badgeCls: "bg-danger-soft text-danger",
+    rowAccent: "border-l-danger", avatarCls: "bg-danger-soft text-danger",
+    kpiText: "text-danger", kpiBg: "bg-danger-soft", barCls: "bg-danger",
+    icon: "alert",
+  },
 };
 
 const RESULTAT_KEYS = ["acquis", "en_cours", "a_aider"] as const;
