@@ -1,0 +1,42 @@
+# ==============================================================================
+#  NDAW WUNE — Docker Compose — Admin Dashboard
+#
+#  Les variables sont lues depuis .env.production :
+#    cp .env.production.example .env.production && nano .env.production
+#
+#  Démarrer :
+#    docker compose --env-file .env.production up -d --build
+#
+#  Rebuild complet (après changement de code ou d'env) :
+#    docker compose --env-file .env.production build --no-cache
+#    docker compose --env-file .env.production up -d
+# ==============================================================================
+
+services:
+  admin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_* sont injectées au BUILD (pas au runtime)
+        NEXT_PUBLIC_API_URL:    ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_APP_ORIGIN: ${NEXT_PUBLIC_APP_ORIGIN:-admin.ndawwune.cloud}
+
+    image: ndawwune-admin:latest
+    container_name: ndawwune-admin
+
+    # Écoute uniquement sur localhost — Nginx est le seul à y accéder
+    ports:
+      - "127.0.0.1:3000:3000"
+
+    restart: unless-stopped
+
+    environment:
+      NODE_ENV: production
+
+    # Logs Docker structurés
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
