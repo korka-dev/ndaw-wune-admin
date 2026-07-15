@@ -67,11 +67,24 @@ success "Image construite."
 # ── Démarrage du conteneur ────────────────────────────────────────────────────
 header "Étape 2/2 — Démarrage du conteneur"
 
-# Arrêter proprement l'ancien conteneur s'il tourne
-if docker ps -q --filter "name=ndawwune-admin" | grep -q .; then
-  log "Arrêt de l'ancien conteneur ..."
-  docker compose --env-file .env.production down
+# Libérer le port 3000 si PM2 tourne encore
+if command -v pm2 &>/dev/null && pm2 list 2>/dev/null | grep -q "online"; then
+  warn "PM2 occupe le port 3000 — arrêt en cours ..."
+  pm2 stop all 2>/dev/null || true
+  pm2 delete all 2>/dev/null || true
+  success "PM2 arrêté."
 fi
+
+# Vérifier que le port est bien libre
+if ss -tlnp 2>/dev/null | grep -q ":3000"; then
+  PROC=$(ss -tlnp | grep ":3000" | grep -oP 'pid=\K[0-9]+' | head -1)
+  warn "Port 3000 encore occupé (PID $PROC) — kill en cours ..."
+  kill -9 "$PROC" 2>/dev/null || true
+  sleep 1
+fi
+
+# Arrêter proprement l'ancien conteneur Docker s'il tourne
+docker compose --env-file .env.production down 2>/dev/null || true
 
 log "Démarrage du nouveau conteneur ..."
 docker compose --env-file .env.production up -d
