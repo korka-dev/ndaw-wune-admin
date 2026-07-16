@@ -447,7 +447,7 @@ export default function TeachersPage() {
                 { icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.12 1.22 2 2 0 012.11 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 14.92z" /></svg>, label: "Téléphone", value: modal.teacher.phone ?? "—" },
                 { icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 9l9-5 9 5-9 5-9-5z" /><path d="M5 10v6c0 2 3 4 7 4s7-2 7-4v-6" /></svg>, label: "École", value: modal.teacher.school?.name ?? schools.find(s => s.id === modal.teacher.school_id)?.name ?? "—" },
                 { icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>, label: "IEF", value: modal.teacher.school?.region ?? "—" },
-                { icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>, label: "Accès app", value: modal.teacher.app_access === "timer_only" ? "Timer uniquement" : "Toutes les fonctionnalités" },
+                { icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>, label: "Accès app", value: modal.teacher.app_access === "no_timer" ? "Toutes les fonctionnalités sauf timer" : "Toutes les fonctionnalités" },
               ].map(({ icon, label, value }) => (
                 <div key={label} className="flex items-center gap-3">
                   <div className="w-7 h-7 rounded-lg bg-surface-alt flex items-center justify-center text-tx-muted flex-shrink-0">{icon}</div>
@@ -618,10 +618,10 @@ export default function TeachersPage() {
                 <select value={form.app_access ?? "full"} onChange={e => setForm(f => ({ ...f, app_access: e.target.value }))}
                   className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 transition">
                   <option value="full">Toutes les fonctionnalités</option>
-                  <option value="timer_only">Timer uniquement</option>
+                  <option value="no_timer">Toutes les fonctionnalités sauf timer</option>
                 </select>
                 <p className="text-xs text-tx-muted mt-1">
-                  « Timer uniquement » limite le tuteur au planning/timer dans l'app mobile.
+                  « Toutes les fonctionnalités sauf timer » masque le chronomètre dans l'app mobile.
                 </p>
               </div>
               <div>
@@ -749,10 +749,10 @@ export default function TeachersPage() {
                 <select value={form.app_access ?? "full"} onChange={e => setForm(f => ({ ...f, app_access: e.target.value }))}
                   className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 transition">
                   <option value="full">Toutes les fonctionnalités</option>
-                  <option value="timer_only">Timer uniquement</option>
+                  <option value="no_timer">Toutes les fonctionnalités sauf timer</option>
                 </select>
                 <p className="text-xs text-tx-muted mt-1">
-                  « Timer uniquement » limite le tuteur au planning/timer dans l'app mobile.
+                  « Toutes les fonctionnalités sauf timer » masque le chronomètre dans l'app mobile.
                 </p>
               </div>
               <div>
