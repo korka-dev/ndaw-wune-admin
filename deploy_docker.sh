@@ -56,9 +56,28 @@ fi
 
 success "Config : NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL"
 
+# ── Récupération du code le plus récent ───────────────────────────────────────
+header "Étape 0/2 — Mise à jour du code (git pull)"
+
+if git rev-parse --git-dir &>/dev/null; then
+  BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+  log "Branche : $BRANCH — récupération des dernières modifications..."
+  git fetch origin "$BRANCH"
+  LOCAL=$(git rev-parse HEAD)
+  REMOTE=$(git rev-parse "origin/$BRANCH")
+  if [ "$LOCAL" = "$REMOTE" ]; then
+    success "Code déjà à jour ($(git log -1 --format='%h %s'))."
+  else
+    git reset --hard "origin/$BRANCH"
+    success "Code mis à jour : $(git log -1 --format='%h %s')"
+  fi
+else
+  warn "Pas de dépôt git détecté — le code actuel sera utilisé tel quel."
+fi
+
 # ── Build de l'image ──────────────────────────────────────────────────────────
 header "Étape 1/2 — Build de l'image Docker"
-log "docker compose build (NEXT_PUBLIC_API_URL est injecté dans le bundle) ..."
+log "docker compose build --no-cache (NEXT_PUBLIC_API_URL injecté dans le bundle) ..."
 
 docker compose --env-file .env.production build --no-cache
 
