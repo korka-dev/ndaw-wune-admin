@@ -4,21 +4,25 @@ import { planningApi, sessionsApi, exportApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 
-const JOURS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+const JOURS = Array.from({ length: 7 }, (_, i) => `Jour ${i + 1}`);
 const DAYS_PER_PAGE = 3;
 
 /* ── Template CSV téléchargeable ── */
 const CSV_TEMPLATE =
   "jour,heure_debut,heure_fin,matiere\n" +
-  "Lundi,08:00,10:00,Mathématiques\n" +
-  "Lundi,10:00,12:00,Français\n" +
-  "Mardi,08:00,10:00,Sciences\n" +
-  "Mardi,10:00,12:00,Histoire-Géo\n" +
-  "Dimanche,08:00,10:00,Révisions\n";
+  "0,16:00,16:05,Promesse Ndaw Wune\n" +
+  "0,16:05,16:40,Leçon Maths\n" +
+  "0,16:40,16:45,Chanson éducative de transition\n" +
+  "0,16:45,16:50,Chanson alphabet\n" +
+  "0,16:50,17:00,Cahier récits\n" +
+  "0,17:00,17:45,Leçon Lecture\n" +
+  "0,17:45,18:00,Lecture indépendante avec feedback correctif\n";
 
 /* ── Parse CSV côté client pour prévisualisation ── */
 const JOURS_MAP: Record<string, number> = {
   lundi: 0, mardi: 1, mercredi: 2, jeudi: 3, vendredi: 4, samedi: 5, dimanche: 6,
+  // Format séquentiel
+  ...Object.fromEntries(Array.from({ length: 7 }, (_, i) => [`jour ${i + 1}`, i])),
 };
 function parseJour(raw: string): number {
   const n = parseInt(raw);
@@ -577,7 +581,7 @@ export default function PlanningPage() {
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h2 className="text-base font-bold text-tx">Importer un planning</h2>
-                <p className="text-xs text-tx-muted mt-0.5">Emploi du temps PDF Ndaw Wune · ou fichier CSV</p>
+                <p className="text-xs text-tx-muted mt-0.5">PDF Ndaw Wune · Excel · CSV (colonnes : jour, heure_debut, heure_fin, matiere)</p>
               </div>
               <button onClick={() => { setShowImport(false); resetImport(); }}
                 className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-alt text-tx-muted transition-colors">
@@ -614,7 +618,7 @@ export default function PlanningPage() {
                     <span className="text-sm text-tx-muted text-center px-2">
                       {importFile
                         ? <span className="text-brand font-semibold">{importFile.name}</span>
-                        : <><span className="font-medium text-tx">Cliquez pour choisir un fichier</span><br /><span className="text-xs">Fichier Excel (.xlsx, .xls), CSV ou PDF<br />Le fichier sera traité automatiquement</span></>
+                        : <><span className="font-medium text-tx">Cliquez ou glissez un fichier ici</span><br /><span className="text-xs">PDF Ndaw Wune, Excel (.xlsx) ou CSV<br />L'emploi du temps sera importé automatiquement</span></>
                       }
                     </span>
                     <input ref={fileInputRef} type="file" accept=".pdf,.csv,.xlsx,.xls,text/csv,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
