@@ -94,15 +94,8 @@ if command -v pm2 &>/dev/null && pm2 list 2>/dev/null | grep -q "online"; then
   success "PM2 arrêté."
 fi
 
-# Vérifier que le port est bien libre
-if ss -tlnp 2>/dev/null | grep -q ":3000"; then
-  PROC=$(ss -tlnp | grep ":3000" | grep -oP 'pid=\K[0-9]+' | head -1)
-  warn "Port 3000 encore occupé (PID $PROC) — kill en cours ..."
-  kill -9 "$PROC" 2>/dev/null || true
-  sleep 1
-fi
-
-# Arrêter proprement l'ancien conteneur Docker s'il tourne
+# Arrêter l'ancien conteneur Docker (libère le port 3000 automatiquement)
+log "Arrêt de l'ancien conteneur..."
 docker compose --env-file .env.production down 2>/dev/null || true
 
 log "Démarrage du nouveau conteneur ..."

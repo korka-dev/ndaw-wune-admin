@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { rapportQuestionsApi } from "@/lib/api";
+import { rapportQuestionsApi, rapportDifficultesApi } from "@/lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -31,6 +31,13 @@ const NEEDS_OPTIONS: QuestionType[] = ["choix_unique", "choix_multiple"];
 const VALID_TYPES: QuestionType[] = [
   "texte_court", "texte_long", "nombre", "oui_non", "choix_unique", "choix_multiple",
 ];
+
+type Difficulte = {
+  id: string;
+  label: string;
+  active: boolean;
+  ordre: number;
+};
 
 // ── Composant principal ────────────────────────────────────────────────────────
 
@@ -356,6 +363,9 @@ export default function RapportQuestionsPage() {
         </div>
       )}
 
+      {/* Difficultés du rapport */}
+      <DifficultesSection />
+
       {/* Modal formulaire */}
       {showForm && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
@@ -490,6 +500,286 @@ export default function RapportQuestionsPage() {
             </div>
             <p className="text-sm text-tx-muted mb-5">
               La question sera définitivement supprimée et n'apparaîtra plus dans l'app mobile. Cette action est irréversible.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteId(null)}
+                disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl border border-border text-sm text-tx-muted font-medium hover:bg-surface-alt transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl bg-danger text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-60"
+              >
+                {deleting ? "Suppression…" : "Supprimer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Section : Difficultés du rapport ───────────────────────────────────────────
+// Liste des options affichées dans l'étape "Difficultés rencontrées" du rapport
+// journalier de l'app mobile (autrefois codée en dur, désormais configurable ici).
+
+function DifficultesSection() {
+  const [items, setItems]         = useState<Difficulte[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [showForm, setShowForm]   = useState(false);
+  const [editing, setEditing]     = useState<Difficulte | null>(null);
+  const [label, setLabel]         = useState("");
+  const [saving, setSaving]       = useState(false);
+  const [deleteId, setDeleteId]   = useState<string | null>(null);
+  const [deleting, setDeleting]   = useState(false);
+
+  const fetchItems = useCallback(async () => {
+    try {
+      const { data } = await rapportDifficultesApi.list();
+      setItems(data);
+    } catch {
+      /* silencieux */
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchItems(); }, [fetchItems]);
+
+  const openCreate = () => { setEditing(null); setLabel(""); setShowForm(true); };
+  const openEdit = (d: Difficulte) => { setEditing(d); setLabel(d.label); setShowForm(true); };
+  const closeForm = () => setShowForm(false);
+
+  const handleSave = async () => {
+    if (!label.trim()) { alert("La difficulté ne peut pas être vide."); return; }
+    setSaving(true);
+    try {
+      if (editing) {
+        await rapportDifficultesApi.update(editing.id, { label: label.trim() });
+      } else {
+        await rapportDifficultesApi.create({ label: label.trim(), ordre: items.length });
+      }
+      setShowForm(false);
+      await fetchItems();
+    } catch {
+      alert("Erreur lors de l'enregistrement.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    setDeleting(true);
+    try {
+      await rapportDifficultesApi.delete(deleteId);
+      setItems(prev => prev.filter(d => d.id !== deleteId));
+    } catch {
+      alert("Erreur lors de la suppression.");
+    } finally {
+      setDeleting(false);
+      setDeleteId(null);
+    }
+  };
+
+  const toggleActive = async (d: Difficulte) => {
+    try {
+      await rapportDifficultesApi.update(d.id, { active: !d.active });
+      setItems(prev => prev.map(x => x.id === d.id ? { ...x, active: !x.active } : x));
+    } catch {
+      alert("Erreur lors de la mise à jour.");
+    }
+  };
+
+  const move = async (index: number, dir: -1 | 1) => {
+    const target = index + dir;
+    if (target < 0 || target >= items.length) return;
+    const a = items[index];
+    const b = items[target];
+
+    const reordered = [...items];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    setItems(reordered);
+
+    try {
+      await Promise.all([
+        rapportDifficultesApi.update(a.id, { ordre: b.ordre }),
+        rapportDifficultesApi.update(b.id, { ordre: a.ordre }),
+      ]);
+      await fetchItems();
+    } catch {
+      alert("Erreur lors du réordonnancement.");
+      await fetchItems();
+    }
+  };
+
+  const itemToDelete = items.find(d => d.id === deleteId);
+
+  return (
+    <div className="mt-8">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-lg font-bold text-tx mb-0.5">Difficultés du rapport</h2>
+          <p className="text-tx-muted text-sm">
+            Options proposées dans l'étape « Difficultés rencontrées » du rapport journalier de l'app mobile
+          </p>
+        </div>
+        <button
+          onClick={openCreate}
+          className="flex items-center gap-2 px-4 py-2.5 bg-brand text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Ajouter une difficulté
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="bg-surface border border-border rounded-2xl p-12 text-center">
+          <p className="text-tx-muted text-sm">Chargement…</p>
+        </div>
+      ) : items.length === 0 ? (
+        <div className="bg-surface border border-border rounded-2xl p-12 text-center">
+          <p className="text-tx-muted text-sm font-medium">Aucune difficulté pour l'instant</p>
+        </div>
+      ) : (
+        <div className="bg-surface border border-border rounded-2xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-border">
+            <span className="text-xs font-semibold text-tx-muted uppercase tracking-wide">
+              {items.length} difficulté{items.length > 1 ? "s" : ""}
+            </span>
+          </div>
+          <div className="divide-y divide-border">
+            {items.map((d, index) => (
+              <div key={d.id} className="flex items-center gap-4 px-4 py-3.5 hover:bg-surface-alt transition-colors group">
+                <div className="flex flex-col gap-0.5">
+                  <button
+                    onClick={() => move(index, -1)}
+                    disabled={index === 0}
+                    className="p-1 rounded text-tx-muted hover:text-brand disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    title="Monter"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+                  </button>
+                  <button
+                    onClick={() => move(index, 1)}
+                    disabled={index === items.length - 1}
+                    className="p-1 rounded text-tx-muted hover:text-brand disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    title="Descendre"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-tx">{d.label}</span>
+                    {!d.active && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-tx-muted font-medium">Inactive</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => toggleActive(d)}
+                    title={d.active ? "Désactiver" : "Activer"}
+                    className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${d.active ? "bg-brand" : "bg-gray-300"}`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${d.active ? "translate-x-4" : ""}`} />
+                  </button>
+                  <button
+                    onClick={() => openEdit(d)}
+                    title="Modifier"
+                    className="p-2 rounded-lg text-tx-muted hover:text-brand hover:bg-brand-soft transition-colors"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                      <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => setDeleteId(d.id)}
+                    title="Supprimer"
+                    className="p-2 rounded-lg text-tx-muted hover:text-danger hover:bg-red-50 transition-colors"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Modal formulaire */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <h2 className="text-base font-bold text-tx mb-4">
+              {editing ? "Modifier la difficulté" : "Nouvelle difficulté"}
+            </h2>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-tx-muted uppercase tracking-wide mb-1.5">
+                  Intitulé
+                </label>
+                <textarea
+                  value={label}
+                  onChange={e => setLabel(e.target.value)}
+                  placeholder="Ex : Gestion des groupes"
+                  rows={2}
+                  className="w-full px-3 py-2.5 text-sm bg-bg border border-border rounded-xl text-tx placeholder:text-tx-muted focus:outline-none focus:border-brand/50 transition-colors resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={closeForm}
+                disabled={saving}
+                className="flex-1 py-2.5 rounded-xl border border-border text-sm text-tx-muted font-medium hover:bg-surface-alt transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 py-2.5 rounded-xl bg-brand text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-60"
+              >
+                {saving ? "Enregistrement…" : "Enregistrer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal confirmation suppression */}
+      {deleteId && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-danger">
+                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-tx">Supprimer cette difficulté ?</p>
+                <p className="text-xs text-tx-muted mt-0.5 truncate max-w-[200px]">{itemToDelete?.label}</p>
+              </div>
+            </div>
+            <p className="text-sm text-tx-muted mb-5">
+              Elle sera définitivement supprimée et n'apparaîtra plus dans l'app mobile. Cette action est irréversible.
             </p>
             <div className="flex gap-3">
               <button

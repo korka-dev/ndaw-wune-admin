@@ -246,6 +246,42 @@ export const rapportQuestionsApi = {
   delete: (id: string) => api.delete(`/admin/rapport-questions/${id}`),
 };
 
+export const rapportDifficultesApi = {
+  list: () => api.get("/admin/rapport-difficultes"),
+  create: (d: unknown) => api.post("/admin/rapport-difficultes", d),
+  update: (id: string, d: unknown) => api.patch(`/admin/rapport-difficultes/${id}`, d),
+  delete: (id: string) => api.delete(`/admin/rapport-difficultes/${id}`),
+};
+
+export const rapportDifficulteResolutionsApi = {
+  list: (params?: { rapport_id?: string; resolue?: boolean }) =>
+    api.get("/admin/rapport-difficulte-resolutions", { params }),
+  resolve: (
+    rapport_id: string,
+    d: { difficulte_label: string; resolue: boolean; commentaire_resolution?: string }
+  ) => api.patch(`/admin/rapport-difficulte-resolutions/${rapport_id}/resolve`, d),
+};
+
+export const progressionConfigsApi = {
+  list: () => api.get("/admin/progression-configs"),
+  create: (d: { school_id?: string | null; session_id?: string | null; nb_semaines: number; nb_jours: number }) =>
+    api.post("/admin/progression-configs", d),
+  update: (id: string, d: Partial<{ school_id: string | null; session_id: string | null; nb_semaines: number; nb_jours: number }>) =>
+    api.patch(`/admin/progression-configs/${id}`, d),
+  delete: (id: string) => api.delete(`/admin/progression-configs/${id}`),
+};
+
+export const remplacementsApi = {
+  list: (params?: {
+    school_id?: string;
+    teacher_id?: string;
+    date_from?: string;
+    date_to?: string;
+    skip?: number;
+    limit?: number;
+  }) => api.get("/admin/remplacements", { params }),
+};
+
 export const auditLogsApi = {
   list: (params?: { skip?: number; limit?: number }) =>
     api.get("/admin/audit-logs", { params }),

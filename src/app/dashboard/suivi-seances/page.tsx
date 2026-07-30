@@ -38,6 +38,8 @@ interface TeacherSuivi {
   seances_planifiees:  number;
   seances_ad_hoc:      number;
   score_engagement:    number;
+  progression_semaine?: number;
+  progression_jour?:    number;
 }
 interface PauseEvent {
   paused_at:   string;        // ISO 8601
@@ -1012,6 +1014,7 @@ export default function SuiviSeancesPage() {
                   <th className="sticky top-0 z-10 bg-surface-alt px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">Heure début</th>
                   <th className="sticky top-0 z-10 bg-surface-alt px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">Heure fin</th>
                   <th className="sticky top-0 z-10 bg-surface-alt px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">Statut</th>
+                  <th className="sticky top-0 z-10 bg-surface-alt px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">Progression</th>
                   <th className="sticky top-0 z-10 bg-surface-alt px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">Séances</th>
                   <th className="sticky top-0 z-10 bg-surface-alt px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">Score</th>
                   <th className="sticky top-0 z-10 bg-surface-alt px-5 py-3 text-center text-xs font-semibold text-tx-muted uppercase tracking-wide w-[90px]">Détail</th>
@@ -1076,6 +1079,16 @@ export default function SuiviSeancesPage() {
 
                     {/* Statut */}
                     <td className="px-5 py-4"><StatusBadge status={t.dernier_status} /></td>
+
+                    {/* Progression (semaine · jour) */}
+                    <td className="px-5 py-4 whitespace-nowrap">
+                      {t.progression_semaine != null ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-2 py-0.5 rounded-full bg-brand-soft text-brand text-[11px] font-semibold">S{t.progression_semaine}</span>
+                          <span className="px-2 py-0.5 rounded-full bg-surface-alt border border-border text-tx-muted text-[11px] font-medium">J{t.progression_jour}</span>
+                        </div>
+                      ) : <span className="text-sm text-tx-muted">—</span>}
+                    </td>
 
                     {/* Compteur + mini-activité */}
                     <td className="px-5 py-4">

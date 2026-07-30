@@ -48,6 +48,7 @@ const NAV_SECTIONS: NavSection[] = [
       { href: "/dashboard/evaluation-competences", label: "Compétences",           icon: "check-sq",  adminOnly: true },
       { href: "/dashboard/rapports-journaliers", label: "Rapports Journaliers",  icon: "file-text"  },
       { href: "/dashboard/rapport-questions",    label: "Questions de Rapport",  icon: "check-sq",  adminOnly: true },
+      { href: "/dashboard/remplacements",        label: "Remplacements élève",   icon: "users-sm"   },
     ],
   },
   {
@@ -63,6 +64,7 @@ const NAV_SECTIONS: NavSection[] = [
       { href: "/dashboard/historique", label: "Historique des modifications", icon: "activity",  adminOnly: true },
       { href: "/dashboard/logs-utilisation", label: "Logs d'utilisation",     icon: "activity",  adminOnly: true },
       { href: "/dashboard/remarques",  label: "Remarques utilisateurs",       icon: "file-text", adminOnly: true },
+      { href: "/dashboard/parametres/progression", label: "Semaines / Jours", icon: "clock",     adminOnly: true },
     ],
   },
 ];

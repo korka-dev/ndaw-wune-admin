@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
-import { dashboardApi, suiviApi, suiviSuperviseurApi } from "@/lib/api";
+import { dashboardApi, suiviApi, suiviSuperviseurApi, remplacementsApi } from "@/lib/api";
 
 /* ── Types ── */
 interface Stats {
@@ -179,6 +179,51 @@ function StatCard({ icon, label, value, sub, iconBg, iconColor }: {
         <div className="text-xs font-medium text-tx mt-1">{label}</div>
         {sub && <div className="text-[11px] text-tx-muted mt-0.5">{sub}</div>}
       </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Widget — Remplacements élève récents
+══════════════════════════════════════════════════════════════ */
+function RemplacementsWidget() {
+  const [items, setItems] = useState<{ id: string; nouveau_eleve_nom: string; ancien_eleve_nom: string | null; classe: string; date_remplacement: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    remplacementsApi.list({ limit: 5 })
+      .then(r => setItems(r.data.items ?? []))
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div className="bg-surface border border-border rounded-2xl p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-sm font-semibold text-tx">Remplacements élève récents</div>
+        <a href="/dashboard/remplacements" className="text-xs text-brand font-semibold hover:underline">Voir tout →</a>
+      </div>
+      {loading ? (
+        <p className="text-xs text-tx-muted text-center py-4">Chargement…</p>
+      ) : items.length === 0 ? (
+        <p className="text-xs text-tx-muted text-center py-4">Aucun remplacement enregistré</p>
+      ) : (
+        <div className="space-y-2.5">
+          {items.map(r => (
+            <div key={r.id} className="flex items-center justify-between text-xs">
+              <div className="min-w-0">
+                <span className="text-tx-muted">{r.ancien_eleve_nom ?? "?"}</span>
+                <span className="text-tx-muted mx-1">→</span>
+                <span className="font-semibold text-tx">{r.nouveau_eleve_nom}</span>
+                <span className="text-tx-muted ml-1.5">({r.classe})</span>
+              </div>
+              <span className="text-tx-muted flex-shrink-0 ml-2">
+                {new Date(r.date_remplacement).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -566,6 +611,11 @@ export default function DashboardHome() {
               ))}
             </div>
           </div>
+        </div>
+
+        {/* ══ Charts row 4 ══ */}
+        <div className="grid grid-cols-3 gap-4">
+          <RemplacementsWidget />
         </div>
 
       </div>

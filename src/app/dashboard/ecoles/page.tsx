@@ -12,6 +12,11 @@ const SCHOOL_EXPORT_FIELDS = [
   { key: "commune",   label: "Commune / Ville" },
   { key: "directeur", label: "Directeur(trice)" },
   { key: "telephone", label: "Téléphone" },
+  { key: "langue",    label: "Langue" },
+];
+
+const LANGUES_NATIONALES = [
+  "pulaar", "wolof", "sereer", "joola", "mandinka", "soninke", "hassaniya",
 ];
 
 interface School {
@@ -21,9 +26,10 @@ interface School {
   city: string | null;
   director: string | null;
   director_phone: string | null;
+  langue: string | null;
 }
 
-const EMPTY: Omit<School, "id"> = { name: "", region: "", city: "", director: "", director_phone: "" };
+const EMPTY: Omit<School, "id"> = { name: "", region: "", city: "", director: "", director_phone: "", langue: "" };
 const PAGE_SIZE = 25;
 
 type ReimportResult = { updated: number; created: number; skipped: number; errors: string[] };
@@ -128,7 +134,7 @@ export default function EcolesPage() {
 
   const openCreate = () => { setForm(EMPTY); setError(""); setPhoneError(""); setModal("create"); };
   const openEdit = (s: School) => {
-    setForm({ name: s.name, region: s.region ?? "", city: s.city ?? "", director: s.director ?? "", director_phone: s.director_phone ?? "" });
+    setForm({ name: s.name, region: s.region ?? "", city: s.city ?? "", director: s.director ?? "", director_phone: s.director_phone ?? "", langue: s.langue ?? "" });
     setError(""); setPhoneError("");
     setModal(s);
   };
@@ -145,6 +151,7 @@ export default function EcolesPage() {
         city: form.city?.trim() || null,
         director: form.director?.trim() || null,
         director_phone: form.director_phone?.trim() || null,
+        langue: form.langue?.trim() || null,
       };
       if (modal === "create") await schoolsApi.create(payload);
       else await schoolsApi.update((modal as School).id, payload);
@@ -290,10 +297,10 @@ export default function EcolesPage() {
       <div className="bg-surface rounded-2xl border border-border overflow-hidden flex-1 flex flex-col">
         <div className="overflow-x-auto overflow-y-auto flex-1">
           <table className="w-full text-sm table-fixed min-w-[950px]">
-            <colgroup><col className="w-[28%]" /><col className="w-[18%]" /><col className="w-[18%]" /><col className="w-[20%]" /><col className="w-[16%]" /></colgroup>
+            <colgroup><col className="w-[24%]" /><col className="w-[14%]" /><col className="w-[14%]" /><col className="w-[12%]" /><col className="w-[20%]" /><col className="w-[16%]" /></colgroup>
             <thead className="sticky top-0 z-10 bg-surface-alt shadow-sm">
               <tr className="border-b border-border bg-surface-alt">
-                {["École", "Région", "Commune", "Directeur(trice)", "Actions"].map(h => (
+                {["École", "Région", "Commune", "Langue", "Directeur(trice)", "Actions"].map(h => (
                   <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide bg-surface-alt sticky top-0 z-10">{h}</th>
                 ))}
               </tr>
@@ -313,6 +320,7 @@ export default function EcolesPage() {
                 </td>
                 <td className="px-5 py-3.5 text-tx-muted truncate">{s.region ?? "—"}</td>
                 <td className="px-5 py-3.5 text-tx-muted truncate">{s.city ?? "—"}</td>
+                <td className="px-5 py-3.5 text-tx-muted truncate capitalize">{s.langue ?? "—"}</td>
                 <td className="px-5 py-3.5 text-tx-muted truncate">
                   {s.director ? (
                     <div>
@@ -337,7 +345,7 @@ export default function EcolesPage() {
               </tr>
             ))}
             {dataLoading && (
-              <tr><td colSpan={5} className="px-5 py-16 text-center">
+              <tr><td colSpan={6} className="px-5 py-16 text-center">
                 <div className="flex flex-col items-center gap-3">
                   <svg className="animate-spin" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="12" cy="12" r="10" strokeOpacity=".2" /><path d="M12 2a10 10 0 0110 10" />
@@ -347,14 +355,14 @@ export default function EcolesPage() {
               </td></tr>
             )}
             {!dataLoading && dataError && (
-              <tr><td colSpan={5} className="px-5 py-12 text-center">
+              <tr><td colSpan={6} className="px-5 py-12 text-center">
                 <p className="text-sm text-danger">{dataError}</p>
                 <button onClick={() => load(true)} className="mt-2 text-xs text-brand underline">Réessayer</button>
               </td></tr>
             )}
             {!dataLoading && !dataError && paginated.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-5 py-16 text-center text-tx-muted text-sm">
+                <td colSpan={6} className="px-5 py-16 text-center text-tx-muted text-sm">
                   {(search || filterRegion || filterCity)
                     ? "Aucune école ne correspond aux filtres."
                     : <span>Aucune école enregistrée. <button onClick={openCreate} className="text-brand font-medium hover:underline">Créer la première →</button></span>
@@ -392,6 +400,7 @@ export default function EcolesPage() {
                 { label: "Ville", value: viewData.city },
                 { label: "Directeur(trice)", value: viewData.director },
                 { label: "N° Directeur(trice)", value: viewData.director_phone },
+                { label: "Langue", value: viewData.langue },
               ].map(({ label, value }) => value ? (
                 <div key={label} className="flex items-center justify-between text-sm">
                   <span className="text-tx-muted">{label}</span>
@@ -536,6 +545,24 @@ export default function EcolesPage() {
                     {phoneError}
                   </p>
                 )}
+              </div>
+
+              {/* Langue */}
+              <div>
+                <label className="block text-sm font-medium text-tx mb-1">Langue nationale d&apos;enseignement</label>
+                <select
+                  value={form.langue ?? ""}
+                  onChange={e => setForm(f => ({ ...f, langue: e.target.value }))}
+                  className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none cursor-pointer capitalize"
+                >
+                  <option value="">— Non renseignée —</option>
+                  {LANGUES_NATIONALES.map(l => (
+                    <option key={l} value={l} className="capitalize">{l}</option>
+                  ))}
+                  {form.langue && !LANGUES_NATIONALES.includes(form.langue) && (
+                    <option value={form.langue}>{form.langue}</option>
+                  )}
+                </select>
               </div>
             </div>
 

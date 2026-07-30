@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback, useRef } from "react";
-import { rapportJournalierAdminApi, rapportQuestionsApi } from "@/lib/api";
+import { rapportJournalierAdminApi, rapportQuestionsApi, rapportDifficulteResolutionsApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 import ExportModal from "@/components/ExportModal";
@@ -107,9 +107,37 @@ export default function RapportsJournaliersPage() {
   const [detail, setDetail] = useState<RapportJournalier | null>(null);
   const [questionDefs, setQuestionDefs] = useState<RapportQuestionDef[]>([]);
 
+  // Résolution des difficultés du rapport ouvert
+  const [resolutions, setResolutions] = useState<Record<string, boolean>>({});
+  const [resolving, setResolving] = useState<string | null>(null);
+
   useEffect(() => {
     rapportQuestionsApi.list().then(({ data }) => setQuestionDefs(data)).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!detail) { setResolutions({}); return; }
+    rapportDifficulteResolutionsApi.list({ rapport_id: detail.id })
+      .then(({ data }) => {
+        const map: Record<string, boolean> = {};
+        (data ?? []).forEach((row: { difficulte_label: string; resolue: boolean }) => {
+          map[row.difficulte_label] = row.resolue;
+        });
+        setResolutions(map);
+      })
+      .catch(() => setResolutions({}));
+  }, [detail]);
+
+  const toggleResolve = async (label: string) => {
+    if (!detail) return;
+    const nextValue = !resolutions[label];
+    setResolving(label);
+    try {
+      await rapportDifficulteResolutionsApi.resolve(detail.id, { difficulte_label: label, resolue: nextValue });
+      setResolutions(prev => ({ ...prev, [label]: nextValue }));
+    } catch { /* silencieux */ }
+    finally { setResolving(null); }
+  };
 
   const fetchRapports = useCallback(async (p: number) => {
     setLoading(true);
@@ -449,9 +477,31 @@ export default function RapportsJournaliersPage() {
                   ) : (
                     <div className="space-y-3">
                       <div className="flex flex-wrap gap-2">
-                        {diffs.map((d, i) => (
-                          <span key={i} className="px-2.5 py-1 rounded-full bg-warn-soft text-warn text-xs font-medium">{d}</span>
-                        ))}
+                        {diffs.map((d, i) => {
+                          const isResolved = !!resolutions[d];
+                          const isBusy = resolving === d;
+                          return (
+                            <span
+                              key={i}
+                              className={`flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full text-xs font-medium ${
+                                isResolved ? "bg-success-soft text-success" : "bg-warn-soft text-warn"
+                              }`}
+                            >
+                              {d}
+                              <button
+                                onClick={() => toggleResolve(d)}
+                                disabled={isBusy}
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold transition-colors disabled:opacity-50 ${
+                                  isResolved
+                                    ? "bg-success text-white hover:bg-success/80"
+                                    : "bg-white/70 text-warn hover:bg-white"
+                                }`}
+                              >
+                                {isBusy ? "…" : isResolved ? "✓ Résolu" : "Régler"}
+                              </button>
+                            </span>
+                          );
+                        })}
                         {detail.autres_difficultes && (
                           <span className="px-2.5 py-1 rounded-full bg-surface-alt text-tx-muted text-xs font-medium">{detail.autres_difficultes}</span>
                         )}
