@@ -2,10 +2,20 @@
  * Utilitaires de gestion des cookies côté client (admin Next.js).
  *
  * Stratégie de sécurité :
- *   - access_token  → cookie SameSite=Strict; Secure (pas httpOnly : axios doit le lire).
- *                     Durée courte (60 min) donc le risque XSS est limité.
- *   - refresh_token → cookie httpOnly via la route API /api/auth/refresh.
+ *   - access_token  → cookie SameSite=Strict; Secure (PAS httpOnly : axios a besoin
+ *                     de lire sa valeur pour l'attacher en header Authorization).
+ *                     C'est un compromis assumé, pas une garantie : un XSS peut
+ *                     encore lire ce cookie comme il lirait un localStorage. Seule
+ *                     sa durée de vie courte (60 min) limite la fenêtre d'exploitation.
+ *                     Le vrai fix (accès non lisible en JS) demanderait de faire
+ *                     passer tous les appels API par des routes serveur Next.js
+ *                     (proxy), pas juste un changement de cookie.
+ *   - refresh_token → cookie httpOnly via la route API /api/auth/set-refresh.
  *                     JS ne peut pas le lire → XSS ne peut pas l'exfiltrer.
+ *                     AUCUN repli en cookie JS-lisible si cette route échoue —
+ *                     dans ce cas la session ne survit simplement pas au
+ *                     rechargement (ré-authentification requise), plutôt que
+ *                     d'exposer un refresh token de 30 jours en clair.
  *
  * Les tokens ne sont PLUS stockés dans localStorage.
  */
@@ -79,17 +89,21 @@ export function removeAccessToken(): void {
 /**
  * Stocke le refresh token via la route API Next.js (/api/auth/set-refresh).
  * La route crée un cookie httpOnly → JS ne peut pas lire le refresh token.
+ *
+ * Volontairement AUCUN repli en cookie JS-lisible si la requête échoue : un
+ * refresh token de 30 jours exposé à un XSS serait bien pire qu'une session
+ * qui ne survit pas à un rechargement de page en cas d'échec réseau rare.
  */
 export async function setRefreshToken(token: string): Promise<void> {
   try {
-    await fetch("/api/auth/set-refresh", {
+    const res = await fetch("/api/auth/set-refresh", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ refresh_token: token }),
     });
-  } catch {
-    // Fallback : stocker en cookie ordinaire si la route échoue
-    setCookie(REFRESH_TOKEN_KEY, token, { maxAgeSeconds: 30 * 24 * 60 * 60 });
+    if (!res.ok) throw new Error(`set-refresh a échoué (${res.status})`);
+  } catch (e) {
+    console.error("[Auth] Impossible de stocker le refresh token de façon sécurisée :", e);
   }
 }
 
@@ -103,7 +117,7 @@ export async function getRefreshToken(): Promise<string | null> {
     const data = await res.json();
     return data.refresh_token ?? null;
   } catch {
-    return getCookie(REFRESH_TOKEN_KEY);
+    return null;
   }
 }
 

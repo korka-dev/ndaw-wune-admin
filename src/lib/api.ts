@@ -62,7 +62,10 @@ export const authApi = {
   me: () => api.get("/auth/me"),
   refresh: (refresh_token: string) =>
     api.post("/auth/refresh", { refresh_token }),
-  logout: () => api.post("/auth/logout"),
+  /** Envoie aussi le refresh_token pour qu'il soit révoqué côté serveur, pas
+   *  seulement le token d'accès — sinon un refresh token volé survivrait au logout. */
+  logout: (refresh_token?: string | null) =>
+    api.post("/auth/logout", refresh_token ? { refresh_token } : {}),
   changePassword: (new_password: string) =>
     api.post("/auth/change-password", { new_password }),
   resetPassword: (identifier: string, new_password: string, confirm_password: string) =>

@@ -4,6 +4,7 @@ import { authApi } from "./api";
 import {
   setAccessToken,
   setRefreshToken,
+  getRefreshToken,
   removeAccessToken,
   clearAuthCookies,
 } from "./cookies";
@@ -62,8 +63,11 @@ export const useAuth = create<AuthStore>((set) => ({
   },
 
   logout: async () => {
-    // Révoquer le token côté serveur (best-effort)
-    try { await authApi.logout(); } catch {}
+    // Révoquer le token d'accès ET le refresh token côté serveur (best-effort)
+    try {
+      const refreshToken = await getRefreshToken().catch(() => null);
+      await authApi.logout(refreshToken);
+    } catch {}
     // Supprimer les cookies
     await clearAuthCookies();
     set({ user: null, mustChangePassword: false });
