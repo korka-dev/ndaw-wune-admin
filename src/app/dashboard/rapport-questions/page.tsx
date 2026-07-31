@@ -6,6 +6,7 @@ import { rapportQuestionsApi, rapportDifficultesApi } from "@/lib/api";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type QuestionType = "texte_court" | "texte_long" | "nombre" | "oui_non" | "choix_unique" | "choix_multiple";
+type QuestionCible = "tuteur" | "superviseur" | "tous";
 
 type Question = {
   id: string;
@@ -15,6 +16,7 @@ type Question = {
   required: boolean;
   active: boolean;
   ordre: number;
+  cible: QuestionCible;
 };
 
 const TYPE_LABELS: Record<QuestionType, string> = {
@@ -26,11 +28,25 @@ const TYPE_LABELS: Record<QuestionType, string> = {
   choix_multiple: "Choix multiple",
 };
 
+const CIBLE_LABELS: Record<QuestionCible, string> = {
+  tuteur:      "Tuteur",
+  superviseur: "Superviseur",
+  tous:        "Tuteur + Superviseur",
+};
+
+const CIBLE_FILTERS: { value: QuestionCible | "toutes"; label: string }[] = [
+  { value: "toutes",     label: "Toutes" },
+  { value: "tuteur",      label: "Tuteur" },
+  { value: "superviseur", label: "Superviseur" },
+  { value: "tous",        label: "Tuteur + Superviseur" },
+];
+
 const NEEDS_OPTIONS: QuestionType[] = ["choix_unique", "choix_multiple"];
 
 const VALID_TYPES: QuestionType[] = [
   "texte_court", "texte_long", "nombre", "oui_non", "choix_unique", "choix_multiple",
 ];
+const VALID_CIBLES: QuestionCible[] = ["tuteur", "superviseur", "tous"];
 
 type Difficulte = {
   id: string;
@@ -50,6 +66,7 @@ export default function RapportQuestionsPage() {
   const [deleteId, setDeleteId]   = useState<string | null>(null);
   const [deleting, setDeleting]   = useState(false);
   const [importing, setImporting] = useState(false);
+  const [cibleFilter, setCibleFilter] = useState<QuestionCible | "toutes">("toutes");
 
   // Formulaire
   const [label, setLabel]       = useState("");
@@ -57,6 +74,7 @@ export default function RapportQuestionsPage() {
   const [options, setOptions]   = useState<string[]>([""]);
   const [required, setRequired] = useState(false);
   const [active, setActive]     = useState(true);
+  const [cible, setCible]       = useState<QuestionCible>("tuteur");
 
   const fetchQuestions = useCallback(async () => {
     try {
@@ -75,7 +93,7 @@ export default function RapportQuestionsPage() {
   const openCreate = () => {
     setEditing(null);
     setLabel(""); setType("texte_court"); setOptions([""]);
-    setRequired(false); setActive(true);
+    setRequired(false); setActive(true); setCible("tuteur");
     setShowForm(true);
   };
 
@@ -83,7 +101,7 @@ export default function RapportQuestionsPage() {
     setEditing(q);
     setLabel(q.label); setType(q.type);
     setOptions(q.options && q.options.length > 0 ? q.options : [""]);
-    setRequired(q.required); setActive(q.active);
+    setRequired(q.required); setActive(q.active); setCible(q.cible ?? "tuteur");
     setShowForm(true);
   };
 
@@ -111,7 +129,7 @@ export default function RapportQuestionsPage() {
     }
 
     // Validation et normalisation
-    const toImport: { label: string; type: QuestionType; options: string[] | null; required: boolean; active: boolean; ordre: number }[] = [];
+    const toImport: { label: string; type: QuestionType; options: string[] | null; required: boolean; active: boolean; ordre: number; cible: QuestionCible }[] = [];
     for (const [i, raw] of rawItems.entries()) {
       const label = typeof raw?.label === "string" ? raw.label.trim() : "";
       const type  = VALID_TYPES.includes(raw?.type) ? raw.type as QuestionType : null;
@@ -124,6 +142,7 @@ export default function RapportQuestionsPage() {
         alert(`Ligne ${i + 1} ("${label}") : les questions de type "${TYPE_LABELS[type]}" nécessitent au moins une option.`);
         return;
       }
+      const cible = VALID_CIBLES.includes(raw?.cible) ? raw.cible as QuestionCible : "tuteur";
       toImport.push({
         label,
         type,
@@ -131,6 +150,7 @@ export default function RapportQuestionsPage() {
         required: Boolean(raw?.required),
         active: raw?.active === undefined ? true : Boolean(raw.active),
         ordre: typeof raw?.ordre === "number" ? raw.ordre : questions.length + i,
+        cible,
       });
     }
 
@@ -167,6 +187,7 @@ export default function RapportQuestionsPage() {
         required,
         active,
         ordre: editing?.ordre ?? questions.length,
+        cible,
       };
       if (editing) {
         await rapportQuestionsApi.update(editing.id, payload);
@@ -207,16 +228,12 @@ export default function RapportQuestionsPage() {
     }
   };
 
-  // ── Réordonnancement ────────────────────────────────────────────────────────
-  const move = async (index: number, dir: -1 | 1) => {
+  // ── Réordonnancement (au sein de la liste filtrée actuellement affichée) ────
+  const move = async (list: Question[], index: number, dir: -1 | 1) => {
     const target = index + dir;
-    if (target < 0 || target >= questions.length) return;
-    const a = questions[index];
-    const b = questions[target];
-
-    const reordered = [...questions];
-    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
-    setQuestions(reordered);
+    if (target < 0 || target >= list.length) return;
+    const a = list[index];
+    const b = list[target];
 
     try {
       await Promise.all([
@@ -231,6 +248,9 @@ export default function RapportQuestionsPage() {
   };
 
   const questionToDelete = questions.find(q => q.id === deleteId);
+  const filteredQuestions = cibleFilter === "toutes"
+    ? questions
+    : questions.filter(q => q.cible === cibleFilter);
 
   // ── Rendu ───────────────────────────────────────────────────────────────────
   return (
@@ -240,7 +260,7 @@ export default function RapportQuestionsPage() {
         <div>
           <h1 className="text-xl font-bold text-tx mb-0.5">Questions de Rapport</h1>
           <p className="text-tx-muted text-sm">
-            Questions complémentaires affichées dynamiquement dans le rapport journalier de l'app mobile
+            Questions complémentaires affichées dynamiquement dans les rapports du tuteur et/ou du superviseur sur l'app mobile
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -263,12 +283,29 @@ export default function RapportQuestionsPage() {
         </div>
       </div>
 
+      {/* Filtre par destinataire */}
+      <div className="flex items-center gap-1.5 mb-4">
+        {CIBLE_FILTERS.map(f => (
+          <button
+            key={f.value}
+            onClick={() => setCibleFilter(f.value)}
+            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+              cibleFilter === f.value
+                ? "bg-brand text-white"
+                : "bg-surface border border-border text-tx-muted hover:bg-surface-alt"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
       {/* Liste */}
       {loading ? (
         <div className="bg-surface border border-border rounded-2xl p-12 text-center">
           <p className="text-tx-muted text-sm">Chargement…</p>
         </div>
-      ) : questions.length === 0 ? (
+      ) : filteredQuestions.length === 0 ? (
         <div className="bg-surface border border-border rounded-2xl p-12 text-center">
           <p className="text-tx-muted text-sm font-medium">Aucune question complémentaire pour l'instant</p>
           <p className="text-tx-muted/60 text-xs mt-1">Ajoutez des questions pour qu'elles apparaissent dans le rapport journalier de l'app mobile.</p>
@@ -277,16 +314,16 @@ export default function RapportQuestionsPage() {
         <div className="bg-surface border border-border rounded-2xl overflow-hidden">
           <div className="px-4 py-3 border-b border-border">
             <span className="text-xs font-semibold text-tx-muted uppercase tracking-wide">
-              {questions.length} question{questions.length > 1 ? "s" : ""}
+              {filteredQuestions.length} question{filteredQuestions.length > 1 ? "s" : ""}
             </span>
           </div>
           <div className="divide-y divide-border">
-            {questions.map((q, index) => (
+            {filteredQuestions.map((q, index) => (
               <div key={q.id} className="flex items-center gap-4 px-4 py-3.5 hover:bg-surface-alt transition-colors group">
                 {/* Réordonnancement */}
                 <div className="flex flex-col gap-0.5">
                   <button
-                    onClick={() => move(index, -1)}
+                    onClick={() => move(filteredQuestions, index, -1)}
                     disabled={index === 0}
                     className="p-1 rounded text-tx-muted hover:text-brand disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                     title="Monter"
@@ -294,8 +331,8 @@ export default function RapportQuestionsPage() {
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
                   </button>
                   <button
-                    onClick={() => move(index, 1)}
-                    disabled={index === questions.length - 1}
+                    onClick={() => move(filteredQuestions, index, 1)}
+                    disabled={index === filteredQuestions.length - 1}
                     className="p-1 rounded text-tx-muted hover:text-brand disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                     title="Descendre"
                   >
@@ -307,6 +344,7 @@ export default function RapportQuestionsPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-medium text-tx">{q.label}</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-brand-soft text-brand font-medium">{CIBLE_LABELS[q.cible ?? "tuteur"]}</span>
                     {q.required && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-danger font-medium">Obligatoire</span>
                     )}
@@ -400,6 +438,22 @@ export default function RapportQuestionsPage() {
                   className="w-full px-3 py-2.5 text-sm bg-bg border border-border rounded-xl text-tx focus:outline-none focus:border-brand/50 transition-colors"
                 >
                   {Object.entries(TYPE_LABELS).map(([val, lab]) => (
+                    <option key={val} value={val}>{lab}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Destinataire */}
+              <div>
+                <label className="block text-xs font-semibold text-tx-muted uppercase tracking-wide mb-1.5">
+                  Destiné à
+                </label>
+                <select
+                  value={cible}
+                  onChange={e => setCible(e.target.value as QuestionCible)}
+                  className="w-full px-3 py-2.5 text-sm bg-bg border border-border rounded-xl text-tx focus:outline-none focus:border-brand/50 transition-colors"
+                >
+                  {Object.entries(CIBLE_LABELS).map(([val, lab]) => (
                     <option key={val} value={val}>{lab}</option>
                   ))}
                 </select>
