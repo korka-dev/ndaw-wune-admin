@@ -256,6 +256,11 @@ export const rapportDifficultesApi = {
   delete: (id: string) => api.delete(`/admin/rapport-difficultes/${id}`),
 };
 
+export const rapportLibellesApi = {
+  list: () => api.get("/admin/rapport-libelles"),
+  update: (cle: string, d: { texte: string }) => api.patch(`/admin/rapport-libelles/${cle}`, d),
+};
+
 export const rapportDifficulteResolutionsApi = {
   list: (params?: { rapport_id?: string; resolue?: boolean }) =>
     api.get("/admin/rapport-difficulte-resolutions", { params }),

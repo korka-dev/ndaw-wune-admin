@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { rapportQuestionsApi, rapportDifficultesApi } from "@/lib/api";
+import { rapportQuestionsApi, rapportDifficultesApi, rapportLibellesApi } from "@/lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -401,6 +401,9 @@ export default function RapportQuestionsPage() {
         </div>
       )}
 
+      {/* Libellés des champs fixes des rapports */}
+      <LibellesSection />
+
       {/* Difficultés du rapport */}
       <DifficultesSection />
 
@@ -571,6 +574,135 @@ export default function RapportQuestionsPage() {
                 {deleting ? "Suppression…" : "Supprimer"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Section : Libellés des champs fixes des rapports ───────────────────────────
+// Contrairement aux questions complémentaires, l'ensemble des clés est fixe
+// (une par champ structurel du formulaire tuteur/superviseur) : on ne peut
+// qu'éditer le texte affiché, pas ajouter/supprimer une clé.
+
+type Libelle = { id: string; cle: string; cible: "tuteur" | "superviseur"; texte: string };
+
+function LibellesSection() {
+  const [items, setItems]     = useState<Libelle[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab]         = useState<"tuteur" | "superviseur">("tuteur");
+  const [editingCle, setEditingCle] = useState<string | null>(null);
+  const [draftTexte, setDraftTexte] = useState("");
+  const [saving, setSaving]   = useState(false);
+
+  const fetchItems = useCallback(async () => {
+    try {
+      const { data } = await rapportLibellesApi.list();
+      setItems(data);
+    } catch {
+      /* silencieux */
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchItems(); }, [fetchItems]);
+
+  const openEdit = (l: Libelle) => { setEditingCle(l.cle); setDraftTexte(l.texte); };
+  const cancelEdit = () => { setEditingCle(null); setDraftTexte(""); };
+
+  const handleSave = async (cle: string) => {
+    if (!draftTexte.trim()) { alert("Le libellé ne peut pas être vide."); return; }
+    setSaving(true);
+    try {
+      await rapportLibellesApi.update(cle, { texte: draftTexte.trim() });
+      setItems(prev => prev.map(x => x.cle === cle ? { ...x, texte: draftTexte.trim() } : x));
+      cancelEdit();
+    } catch {
+      alert("Erreur lors de l'enregistrement.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const filtered = items.filter(l => l.cible === tab);
+
+  return (
+    <div className="mt-8">
+      <div className="mb-4">
+        <h2 className="text-lg font-bold text-tx mb-0.5">Libellés des rapports</h2>
+        <p className="text-tx-muted text-sm">
+          Texte des questions fixes affichées dans les formulaires de rapport du tuteur et du superviseur sur l'app mobile
+        </p>
+      </div>
+
+      <div className="flex items-center gap-1.5 mb-4">
+        {(["tuteur", "superviseur"] as const).map(v => (
+          <button
+            key={v}
+            onClick={() => setTab(v)}
+            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+              tab === v ? "bg-brand text-white" : "bg-surface border border-border text-tx-muted hover:bg-surface-alt"
+            }`}
+          >
+            {v === "tuteur" ? "Tuteur" : "Superviseur"}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="bg-surface border border-border rounded-2xl p-12 text-center">
+          <p className="text-tx-muted text-sm">Chargement…</p>
+        </div>
+      ) : (
+        <div className="bg-surface border border-border rounded-2xl overflow-hidden">
+          <div className="divide-y divide-border">
+            {filtered.map(l => (
+              <div key={l.cle} className="flex items-center gap-4 px-4 py-3.5">
+                {editingCle === l.cle ? (
+                  <>
+                    <textarea
+                      value={draftTexte}
+                      onChange={e => setDraftTexte(e.target.value)}
+                      rows={2}
+                      autoFocus
+                      className="flex-1 px-3 py-2 text-sm bg-bg border border-border rounded-xl text-tx focus:outline-none focus:border-brand/50 transition-colors resize-none"
+                    />
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <button
+                        onClick={cancelEdit}
+                        disabled={saving}
+                        className="px-3 py-2 rounded-lg text-xs font-semibold text-tx-muted hover:bg-surface-alt transition-colors"
+                      >
+                        Annuler
+                      </button>
+                      <button
+                        onClick={() => handleSave(l.cle)}
+                        disabled={saving}
+                        className="px-3 py-2 rounded-lg text-xs font-semibold bg-brand text-white hover:opacity-90 transition-opacity disabled:opacity-60"
+                      >
+                        {saving ? "…" : "Enregistrer"}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 text-sm text-tx">{l.texte}</span>
+                    <button
+                      onClick={() => openEdit(l)}
+                      title="Modifier"
+                      className="p-2 rounded-lg text-tx-muted hover:text-brand hover:bg-brand-soft transition-colors flex-shrink-0"
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}
