@@ -5,6 +5,7 @@ import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 import { SENEGAL_REGIONS, getCommunesByRegion } from "@/lib/senegal-geo";
 import ExportModal from "@/components/ExportModal";
+import { LANGUES_NATIONALES } from "@/lib/langues";
 
 const SCHOOL_EXPORT_FIELDS = [
   { key: "nom",       label: "Nom de l'école" },
@@ -13,10 +14,6 @@ const SCHOOL_EXPORT_FIELDS = [
   { key: "directeur", label: "Directeur(trice)" },
   { key: "telephone", label: "Téléphone" },
   { key: "langue",    label: "Langue" },
-];
-
-const LANGUES_NATIONALES = [
-  "pulaar", "wolof", "sereer", "joola", "mandinka", "soninke", "hassaniya",
 ];
 
 interface School {

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { ressourcesApi } from "@/lib/api";
+import { LANGUES_NATIONALES } from "@/lib/langues";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -15,9 +16,14 @@ type Document = {
   file_size: number;
   description: string | null;
   resource_type: ResourceType;
+  langue: string | null;
   uploaded_by: string | null;
   created_at: string;
 };
+
+function langueLabel(langue: string | null): string {
+  return langue ? langue.charAt(0).toUpperCase() + langue.slice(1) : "Toutes langues";
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -121,6 +127,8 @@ export default function RessourcesPage() {
   const [search, setSearch]           = useState("");
   const [activeTab, setActiveTab]     = useState<"all" | ResourceType>("all");
   const [uploadType, setUploadType]   = useState<ResourceType>("document");
+  const [uploadLangue, setUploadLangue] = useState<string>("");
+  const [langueEditId, setLangueEditId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // ── Chargement ──────────────────────────────────────────────────────────────
@@ -149,7 +157,7 @@ export default function RessourcesPage() {
       // Auto-détecter vidéo si le MIME le dit
       const effectiveType: ResourceType = f.type.startsWith("video/") ? "video" : uploadType;
       try {
-        await ressourcesApi.upload(f, undefined, undefined, effectiveType);
+        await ressourcesApi.upload(f, undefined, undefined, effectiveType, uploadLangue || undefined);
         setProgress(prev => prev.map((p, idx) => idx === i ? { ...p, done: true } : p));
       } catch {
         setProgress(prev => prev.map((p, idx) => idx === i ? { ...p, done: true, error: "Échec" } : p));
@@ -161,7 +169,7 @@ export default function RessourcesPage() {
       setUploading(false);
       setProgress([]);
     }, 1200);
-  }, [fetchDocs, uploadType]);
+  }, [fetchDocs, uploadType, uploadLangue]);
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -181,6 +189,19 @@ export default function RessourcesPage() {
       URL.revokeObjectURL(url);
     } catch {
       alert("Erreur lors du téléchargement.");
+    }
+  };
+
+  // ── Langue ──────────────────────────────────────────────────────────────────
+  const handleChangeLangue = async (doc: Document, langue: string) => {
+    const prev = doc.langue;
+    setDocs(list => list.map(d => d.id === doc.id ? { ...d, langue: langue || null } : d));
+    setLangueEditId(null);
+    try {
+      await ressourcesApi.update(doc.id, { langue: langue || null });
+    } catch {
+      setDocs(list => list.map(d => d.id === doc.id ? { ...d, langue: prev } : d));
+      alert("Erreur lors de la mise à jour de la langue.");
     }
   };
 
@@ -249,7 +270,7 @@ export default function RessourcesPage() {
       />
 
       {/* Sélecteur de type d'upload */}
-      <div className="mb-4 flex items-center gap-3">
+      <div className="mb-4 flex items-center gap-3 flex-wrap">
         <span className="text-xs font-semibold text-tx-muted uppercase tracking-wide">Type à uploader :</span>
         <div className="flex gap-2">
           {(["document", "video", "autre"] as ResourceType[]).map(t => (
@@ -266,6 +287,18 @@ export default function RessourcesPage() {
             </button>
           ))}
         </div>
+
+        <span className="text-xs font-semibold text-tx-muted uppercase tracking-wide ml-2">Langue :</span>
+        <select
+          value={uploadLangue}
+          onChange={e => setUploadLangue(e.target.value)}
+          className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-border bg-surface text-tx focus:outline-none focus:border-brand/50"
+        >
+          <option value="">Toutes langues</option>
+          {LANGUES_NATIONALES.map(l => (
+            <option key={l} value={l}>{langueLabel(l)}</option>
+          ))}
+        </select>
       </div>
 
       {/* Zone drag & drop */}
@@ -408,6 +441,28 @@ export default function RessourcesPage() {
                       <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${RESOURCE_TYPE_COLORS[rType]}`}>
                         {RESOURCE_TYPE_LABELS[rType]}
                       </span>
+                      {langueEditId === doc.id ? (
+                        <select
+                          autoFocus
+                          value={doc.langue ?? ""}
+                          onChange={e => handleChangeLangue(doc, e.target.value)}
+                          onBlur={() => setLangueEditId(null)}
+                          className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full border border-border bg-surface text-tx flex-shrink-0"
+                        >
+                          <option value="">Toutes langues</option>
+                          {LANGUES_NATIONALES.map(l => (
+                            <option key={l} value={l}>{langueLabel(l)}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <button
+                          onClick={() => setLangueEditId(doc.id)}
+                          title="Changer la langue"
+                          className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 bg-amber-50 text-amber-700 border border-amber-200 hover:opacity-80 transition-opacity"
+                        >
+                          {langueLabel(doc.langue)}
+                        </button>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-xs text-tx-muted truncate">{doc.original_filename}</span>

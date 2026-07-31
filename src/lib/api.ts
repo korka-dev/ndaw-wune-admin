@@ -351,16 +351,19 @@ export const classesApi = {
 
 export const ressourcesApi = {
   list: (params?: { limit?: number; skip?: number }) => api.get("/admin/ressources", { params }),
-  upload: (file: File, title?: string, description?: string, resource_type?: string) => {
+  upload: (file: File, title?: string, description?: string, resource_type?: string, langue?: string) => {
     const fd = new FormData();
     fd.append("file", file);
     if (title) fd.append("title", title);
     if (description) fd.append("description", description);
     if (resource_type) fd.append("resource_type", resource_type);
+    if (langue) fd.append("langue", langue);
     return api.post("/admin/ressources", fd, {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
+  update: (id: string, d: { title?: string; description?: string; langue?: string | null }) =>
+    api.patch(`/admin/ressources/${id}`, d),
   download: (id: string) =>
     api.get(`/admin/ressources/${id}/download`, { responseType: "blob" }),
   delete: (id: string) => api.delete(`/admin/ressources/${id}`),
