@@ -376,9 +376,10 @@ export const ressourcesApi = {
 
 export const evaluationSujetsApi = {
   list: () => api.get("/admin/evaluation-sujets"),
-  create: (d: { titre: string; description?: string; nb_eleves_par_classe: number }) =>
+  create: (d: { titre: string; description?: string; nb_eleves_par_classe: number; langue?: string }) =>
     api.post("/admin/evaluation-sujets", d),
   get: (id: string) => api.get(`/admin/evaluation-sujets/${id}`),
+  retirage: (id: string) => api.post(`/admin/evaluation-sujets/${id}/retirage`),
   delete: (id: string) => api.delete(`/admin/evaluation-sujets/${id}`),
   audioUrl: (filename: string) => `${API_URL}/app/supervisor/evaluation-audio/${filename}`,
 };

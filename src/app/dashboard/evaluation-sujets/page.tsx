@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
-import { evaluationSujetsApi } from "@/lib/api";
+import { evaluationSujetsApi, schoolsApi } from "@/lib/api";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -8,6 +8,7 @@ interface SujetOut {
   id: string;
   titre: string;
   description: string | null;
+  langue: string | null;
   nb_eleves_par_classe: number;
   session_id: string | null;
   nb_tirages: number;
@@ -209,11 +210,14 @@ export default function EvaluationSujetsPage() {
   const [titre, setTitre]           = useState("");
   const [description, setDescription] = useState("");
   const [nbEleves, setNbEleves]     = useState(5);
+  const [langue, setLangue]         = useState("");   // "" = toutes les langues
+  const [langues, setLangues]       = useState<string[]>([]);
   const [detailId, setDetailId]     = useState<string | null>(null);
   const [detail, setDetail]         = useState<SujetDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [deleteId, setDeleteId]     = useState<string | null>(null);
   const [deleting, setDeleting]     = useState(false);
+  const [retiringId, setRetiringId] = useState<string | null>(null);
 
   const fetchSujets = useCallback(async () => {
     try {
@@ -224,6 +228,18 @@ export default function EvaluationSujetsPage() {
   }, []);
 
   useEffect(() => { fetchSujets(); }, [fetchSujets]);
+
+  // Langues d'enseignement existantes (déduites des écoles) pour le sélecteur
+  useEffect(() => {
+    schoolsApi.list({ limit: 500 })
+      .then(({ data }) => {
+        const items = data?.items ?? data ?? [];
+        const set = new Set<string>();
+        for (const s of items) if (s.langue) set.add(String(s.langue).toLowerCase());
+        setLangues(Array.from(set).sort());
+      })
+      .catch(() => {});
+  }, []);
 
   const openDetail = async (id: string) => {
     setDetailId(id);
@@ -244,8 +260,9 @@ export default function EvaluationSujetsPage() {
         titre: titre.trim(),
         description: description.trim() || undefined,
         nb_eleves_par_classe: nbEleves,
+        langue: langue || undefined,
       });
-      setTitre(""); setDescription(""); setNbEleves(5); setShowForm(false);
+      setTitre(""); setDescription(""); setNbEleves(5); setLangue(""); setShowForm(false);
       await fetchSujets();
     } catch {
       alert("Erreur lors de la création du sujet.");
@@ -321,6 +338,21 @@ export default function EvaluationSujetsPage() {
                 />
               </div>
               <div>
+                <label className="text-xs font-semibold text-tx-muted mb-1 block">
+                  Langue d'enseignement <span className="text-tx-muted/60">(le sujet ne sera visible que par les superviseurs des écoles de cette langue)</span>
+                </label>
+                <select
+                  value={langue}
+                  onChange={e => setLangue(e.target.value)}
+                  className="w-full px-3 py-2.5 text-sm bg-bg border border-border rounded-xl text-tx focus:outline-none focus:border-brand/50"
+                >
+                  <option value="">Toutes les langues</option>
+                  {langues.map(l => (
+                    <option key={l} value={l}>{l.charAt(0).toUpperCase() + l.slice(1)}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="text-xs font-semibold text-tx-muted mb-1 block">Description</label>
                 <textarea
                   value={description}
@@ -389,6 +421,9 @@ export default function EvaluationSujetsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline gap-2 flex-wrap">
                       <h3 className="text-sm font-bold text-tx">{s.titre}</h3>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-brand-soft text-brand font-semibold">
+                        {s.langue ? s.langue.charAt(0).toUpperCase() + s.langue.slice(1) : "Toutes langues"}
+                      </span>
                       <span className="text-xs text-tx-muted">{fmtDate(s.created_at)}</span>
                     </div>
                     {s.description && (
@@ -421,6 +456,23 @@ export default function EvaluationSujetsPage() {
                       className="px-3 py-1.5 text-xs font-semibold text-brand bg-brand-soft rounded-lg hover:opacity-80 transition-opacity"
                     >
                       Voir les résultats
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (retiringId) return;
+                        setRetiringId(s.id);
+                        try {
+                          const { data } = await evaluationSujetsApi.retirage(s.id);
+                          setSujets(prev => prev.map(x => x.id === s.id ? data : x));
+                        } catch {
+                          alert("Erreur lors du retirage.");
+                        } finally { setRetiringId(null); }
+                      }}
+                      disabled={retiringId === s.id}
+                      title="Compléter le tirage avec les élèves importés après la création du sujet"
+                      className="px-3 py-1.5 text-xs font-semibold text-tx-muted border border-border rounded-lg hover:bg-surface-alt transition-colors disabled:opacity-50"
+                    >
+                      {retiringId === s.id ? "Tirage…" : "Relancer le tirage"}
                     </button>
                     <button
                       onClick={() => setDeleteId(s.id)}
