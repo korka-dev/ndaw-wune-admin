@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { rapportQuestionsApi, rapportDifficultesApi, rapportLibellesApi } from "@/lib/api";
+import {
+  rapportQuestionsApi,
+  rapportDifficultesApi,
+  rapportLibellesApi,
+  progressionConfigsApi,
+  schoolsApi,
+  sessionsApi,
+} from "@/lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -401,6 +408,9 @@ export default function RapportQuestionsPage() {
         </div>
       )}
 
+      {/* Étape 1/4 du rapport journalier : semaines & jours de progression */}
+      <ProgressionSection />
+
       {/* Libellés des champs fixes des rapports */}
       <LibellesSection />
 
@@ -557,6 +567,353 @@ export default function RapportQuestionsPage() {
             </div>
             <p className="text-sm text-tx-muted mb-5">
               La question sera définitivement supprimée et n'apparaîtra plus dans l'app mobile. Cette action est irréversible.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteId(null)}
+                disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl border border-border text-sm text-tx-muted font-medium hover:bg-surface-alt transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl bg-danger text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-60"
+              >
+                {deleting ? "Suppression…" : "Supprimer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Section : Semaines & jours de progression (étape 1/4 du rapport) ───────────
+// Pilote la première étape du rapport journalier du tuteur sur l'app mobile :
+// nombre de semaines proposées dans la grille et nombre de jours de cours.
+// Une configuration peut cibler une école, une session, les deux, ou servir de
+// repli global. Résolution côté backend : (école+session) → école → session →
+// défaut (10 semaines / 3 jours).
+
+type ProgressionConfig = {
+  id: string;
+  school_id: string | null;
+  session_id: string | null;
+  nb_semaines: number;
+  nb_jours: number;
+};
+
+type SchoolLite  = { id: string; name: string };
+type SessionLite = { id: string; name: string };
+
+const DEFAULT_NB_SEMAINES = 10;
+const DEFAULT_NB_JOURS    = 3;
+
+function ProgressionSection() {
+  const [items, setItems]       = useState<ProgressionConfig[]>([]);
+  const [schools, setSchools]   = useState<SchoolLite[]>([]);
+  const [sessions, setSessions] = useState<SessionLite[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing]   = useState<ProgressionConfig | null>(null);
+  const [saving, setSaving]     = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // Formulaire
+  const [schoolId, setSchoolId]       = useState("");
+  const [sessionId, setSessionId]     = useState("");
+  const [nbSemaines, setNbSemaines]   = useState(String(DEFAULT_NB_SEMAINES));
+  const [nbJours, setNbJours]         = useState(String(DEFAULT_NB_JOURS));
+
+  const fetchItems = useCallback(async () => {
+    try {
+      const [cfg, sch, ses] = await Promise.all([
+        progressionConfigsApi.list(),
+        schoolsApi.list({ limit: 10000 }),
+        sessionsApi.list(),
+      ]);
+      setItems(cfg.data ?? []);
+      setSchools(sch.data.items ?? []);
+      setSessions(ses.data.items ?? []);
+    } catch {
+      /* silencieux */
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchItems(); }, [fetchItems]);
+
+  const schoolName  = (id: string | null) => schools.find(s => s.id === id)?.name ?? "École inconnue";
+  const sessionName = (id: string | null) => sessions.find(s => s.id === id)?.name ?? "Session inconnue";
+
+  const portee = (c: ProgressionConfig) => {
+    if (c.school_id && c.session_id) return `${schoolName(c.school_id)} · ${sessionName(c.session_id)}`;
+    if (c.school_id)  return schoolName(c.school_id);
+    if (c.session_id) return sessionName(c.session_id);
+    return "Toutes les écoles et sessions";
+  };
+
+  const openCreate = () => {
+    setEditing(null);
+    setSchoolId(""); setSessionId("");
+    setNbSemaines(String(DEFAULT_NB_SEMAINES)); setNbJours(String(DEFAULT_NB_JOURS));
+    setShowForm(true);
+  };
+
+  const openEdit = (c: ProgressionConfig) => {
+    setEditing(c);
+    setSchoolId(c.school_id ?? ""); setSessionId(c.session_id ?? "");
+    setNbSemaines(String(c.nb_semaines)); setNbJours(String(c.nb_jours));
+    setShowForm(true);
+  };
+
+  const handleSave = async () => {
+    const sem = Number(nbSemaines);
+    const jrs = Number(nbJours);
+    if (!Number.isInteger(sem) || sem < 1) { alert("Le nombre de semaines doit être un entier supérieur à 0."); return; }
+    if (!Number.isInteger(jrs) || jrs < 1) { alert("Le nombre de jours doit être un entier supérieur à 0."); return; }
+
+    setSaving(true);
+    try {
+      const payload = {
+        school_id:  schoolId  || null,
+        session_id: sessionId || null,
+        nb_semaines: sem,
+        nb_jours:    jrs,
+      };
+      if (editing) {
+        await progressionConfigsApi.update(editing.id, payload);
+      } else {
+        await progressionConfigsApi.create(payload);
+      }
+      setShowForm(false);
+      await fetchItems();
+    } catch (e) {
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      alert(status === 409
+        ? "Une configuration existe déjà pour cette combinaison école / session."
+        : "Erreur lors de l'enregistrement.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    setDeleting(true);
+    try {
+      await progressionConfigsApi.delete(deleteId);
+      setItems(prev => prev.filter(c => c.id !== deleteId));
+    } catch {
+      alert("Erreur lors de la suppression.");
+    } finally {
+      setDeleting(false);
+      setDeleteId(null);
+    }
+  };
+
+  const itemToDelete = items.find(c => c.id === deleteId);
+
+  return (
+    <div className="mt-8">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-lg font-bold text-tx mb-0.5">Semaines &amp; jours de progression</h2>
+          <p className="text-tx-muted text-sm">
+            Étape 1 du rapport journalier du tuteur : nombre de semaines proposées dans la grille et
+            nombre de jours de cours. Configurable par école et/ou par session — sans configuration,
+            l&apos;app utilise {DEFAULT_NB_SEMAINES} semaines et {DEFAULT_NB_JOURS} jours.
+          </p>
+        </div>
+        <button
+          onClick={openCreate}
+          className="flex items-center gap-2 px-4 py-2.5 bg-brand text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity flex-shrink-0"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Ajouter une configuration
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="bg-surface border border-border rounded-2xl p-12 text-center">
+          <p className="text-tx-muted text-sm">Chargement…</p>
+        </div>
+      ) : items.length === 0 ? (
+        <div className="bg-surface border border-border rounded-2xl p-12 text-center">
+          <p className="text-tx-muted text-sm font-medium">Aucune configuration personnalisée</p>
+          <p className="text-tx-muted/60 text-xs mt-1">
+            L&apos;app mobile propose {DEFAULT_NB_SEMAINES} semaines et {DEFAULT_NB_JOURS} jours de cours par défaut.
+          </p>
+        </div>
+      ) : (
+        <div className="bg-surface border border-border rounded-2xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-border">
+            <span className="text-xs font-semibold text-tx-muted uppercase tracking-wide">
+              {items.length} configuration{items.length > 1 ? "s" : ""}
+            </span>
+          </div>
+          <div className="divide-y divide-border">
+            {items.map(c => (
+              <div key={c.id} className="flex items-center gap-4 px-4 py-3.5 hover:bg-surface-alt transition-colors">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-tx">{portee(c)}</span>
+                    {!c.school_id && !c.session_id && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-brand-soft text-brand font-medium">Repli global</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-tx-muted mt-0.5">
+                    {c.nb_semaines} semaine{c.nb_semaines > 1 ? "s" : ""}
+                    <span className="text-tx-muted/40 mx-1.5">·</span>
+                    {c.nb_jours} jour{c.nb_jours > 1 ? "s" : ""} de cours
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => openEdit(c)}
+                    title="Modifier"
+                    className="p-2 rounded-lg text-tx-muted hover:text-brand hover:bg-brand-soft transition-colors"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                      <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => setDeleteId(c.id)}
+                    title="Supprimer"
+                    className="p-2 rounded-lg text-tx-muted hover:text-danger hover:bg-red-50 transition-colors"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Modal formulaire */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <h2 className="text-base font-bold text-tx mb-4">
+              {editing ? "Modifier la configuration" : "Nouvelle configuration"}
+            </h2>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-tx-muted uppercase tracking-wide mb-1.5">
+                  École
+                </label>
+                <select
+                  value={schoolId}
+                  onChange={e => setSchoolId(e.target.value)}
+                  className="w-full px-3 py-2.5 text-sm bg-bg border border-border rounded-xl text-tx focus:outline-none focus:border-brand/50 transition-colors"
+                >
+                  <option value="">Toutes les écoles</option>
+                  {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-tx-muted uppercase tracking-wide mb-1.5">
+                  Session
+                </label>
+                <select
+                  value={sessionId}
+                  onChange={e => setSessionId(e.target.value)}
+                  className="w-full px-3 py-2.5 text-sm bg-bg border border-border rounded-xl text-tx focus:outline-none focus:border-brand/50 transition-colors"
+                >
+                  <option value="">Toutes les sessions</option>
+                  {sessions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-tx-muted uppercase tracking-wide mb-1.5">
+                    Nombre de semaines
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={nbSemaines}
+                    onChange={e => setNbSemaines(e.target.value)}
+                    className="w-full px-3 py-2.5 text-sm bg-bg border border-border rounded-xl text-tx focus:outline-none focus:border-brand/50 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-tx-muted uppercase tracking-wide mb-1.5">
+                    Jours de cours
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={nbJours}
+                    onChange={e => setNbJours(e.target.value)}
+                    className="w-full px-3 py-2.5 text-sm bg-bg border border-border rounded-xl text-tx focus:outline-none focus:border-brand/50 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <p className="text-xs text-tx-muted/80 leading-relaxed">
+                Laisser « Toutes les écoles » et « Toutes les sessions » crée le repli global appliqué
+                partout où aucune configuration plus précise n&apos;existe. Les tuteurs voient la nouvelle
+                valeur à leur prochaine synchronisation.
+              </p>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowForm(false)}
+                disabled={saving}
+                className="flex-1 py-2.5 rounded-xl border border-border text-sm text-tx-muted font-medium hover:bg-surface-alt transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 py-2.5 rounded-xl bg-brand text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-60"
+              >
+                {saving ? "Enregistrement…" : "Enregistrer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal confirmation suppression */}
+      {deleteId && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-danger">
+                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+                </svg>
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-tx">Supprimer cette configuration ?</p>
+                {itemToDelete && (
+                  <p className="text-xs text-tx-muted mt-0.5 truncate max-w-[200px]">{portee(itemToDelete)}</p>
+                )}
+              </div>
+            </div>
+            <p className="text-sm text-tx-muted mb-5">
+              Les tuteurs concernés retomberont sur la configuration plus générale
+              (ou {DEFAULT_NB_SEMAINES} semaines / {DEFAULT_NB_JOURS} jours par défaut).
             </p>
             <div className="flex gap-3">
               <button
