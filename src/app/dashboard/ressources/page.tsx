@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { ressourcesApi } from "@/lib/api";
+import { ressourcesApi, schoolsApi } from "@/lib/api";
 import { LANGUES_NATIONALES } from "@/lib/langues";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -129,6 +129,11 @@ export default function RessourcesPage() {
   const [uploadType, setUploadType]   = useState<ResourceType>("document");
   const [uploadLangue, setUploadLangue] = useState<string>("");
   const [langueEditId, setLangueEditId] = useState<string | null>(null);
+  // Langues proposées : celles réellement enseignées dans les écoles. Proposer
+  // une langue qu'aucune école n'utilise rendrait la ressource invisible pour
+  // tout le monde, sans aucun message. LANGUES_NATIONALES sert de repli si la
+  // liste des écoles ne peut pas être chargée.
+  const [langues, setLangues] = useState<string[]>(LANGUES_NATIONALES);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // ── Chargement ──────────────────────────────────────────────────────────────
@@ -144,6 +149,17 @@ export default function RessourcesPage() {
   }, []);
 
   useEffect(() => { fetchDocs(); }, [fetchDocs]);
+
+  useEffect(() => {
+    schoolsApi.list({ limit: 10000 })
+      .then(({ data }) => {
+        const items = data?.items ?? data ?? [];
+        const set = new Set<string>();
+        for (const s of items) if (s.langue) set.add(String(s.langue).trim().toLowerCase());
+        if (set.size > 0) setLangues(Array.from(set).sort());
+      })
+      .catch(() => { /* on garde la liste de repli */ });
+  }, []);
 
   // ── Upload ──────────────────────────────────────────────────────────────────
   const handleFiles = useCallback(async (files: FileList | File[]) => {
@@ -295,7 +311,7 @@ export default function RessourcesPage() {
           className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-border bg-surface text-tx focus:outline-none focus:border-brand/50"
         >
           <option value="">Toutes langues</option>
-          {LANGUES_NATIONALES.map(l => (
+          {langues.map(l => (
             <option key={l} value={l}>{langueLabel(l)}</option>
           ))}
         </select>
@@ -450,7 +466,7 @@ export default function RessourcesPage() {
                           className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full border border-border bg-surface text-tx flex-shrink-0"
                         >
                           <option value="">Toutes langues</option>
-                          {LANGUES_NATIONALES.map(l => (
+                          {langues.map(l => (
                             <option key={l} value={l}>{langueLabel(l)}</option>
                           ))}
                         </select>
