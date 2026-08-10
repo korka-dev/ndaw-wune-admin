@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { api } from "@/lib/api";
+import { getAccessToken } from "@/lib/cookies";
 
 export default function ChangePasswordPage() {
   const { logout } = useAuth();
@@ -17,7 +18,10 @@ export default function ChangePasswordPage() {
   const [success,  setSuccess]  = useState(false);
 
   useEffect(() => {
-    if (!localStorage.getItem("access_token")) router.replace("/login");
+    // Le token vit dans un cookie (lib/cookies.ts), plus dans localStorage
+    // depuis la migration de stockage — cette page en était restée à l'ancien
+    // système et renvoyait donc systématiquement vers /login.
+    if (!getAccessToken()) router.replace("/login");
   }, []);
 
   const isValid = newPwd.length > 0 && newPwd === confPwd;
