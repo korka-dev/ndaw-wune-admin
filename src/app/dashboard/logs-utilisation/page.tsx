@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { usageLogsApi } from "@/lib/api";
+import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 
 const PAGE_SIZE = 50;
@@ -47,6 +48,7 @@ export default function LogsUtilisationPage() {
   const [filterRole, setFilterRole] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [exporting, setExporting] = useState(false);
 
   const loadStats = () => {
     usageLogsApi
@@ -73,6 +75,20 @@ export default function LogsUtilisationPage() {
   useEffect(() => { setPage(1); loadLogs(1); }, [filterFeature, filterRole, dateFrom, dateTo]);
   useEffect(() => { loadLogs(page); }, [page]);
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const res = await usageLogsApi.exportCsv({
+        feature: filterFeature || undefined,
+        user_role: filterRole || undefined,
+        date_from: dateFrom || undefined,
+        date_to: dateTo || undefined,
+      });
+      downloadBlob(res.data, "logs_utilisation.csv");
+    } catch { /* silencieux */ }
+    finally { setExporting(false); }
+  };
+
   const maxCount = Math.max(1, ...(stats?.by_feature ?? []).map(f => f.count));
 
   return (
@@ -92,6 +108,14 @@ export default function LogsUtilisationPage() {
           <span className="text-tx-muted text-sm">→</span>
           <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
             className="px-3 py-2 border border-border rounded-xl text-sm bg-surface text-tx focus:outline-none focus:ring-2 focus:ring-brand/30" />
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="flex items-center gap-2 border border-border bg-surface text-tx px-3.5 py-2.5 rounded-xl text-sm font-semibold hover:bg-surface-alt transition-colors disabled:opacity-60"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+            {exporting ? "Export…" : "Exporter CSV"}
+          </button>
         </div>
       </div>
 

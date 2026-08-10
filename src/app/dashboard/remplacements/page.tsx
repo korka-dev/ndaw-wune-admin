@@ -9,7 +9,10 @@ type EleveRemplacement = {
   nouveau_eleve_nom: string;
   motif: string;
   teacher_id: string;
+  teacher_name: string | null;
   school_id: string | null;
+  school_name: string | null;
+  school_commune: string | null;
   classe: string;
   date_remplacement: string;
 };
@@ -71,10 +74,14 @@ export default function RemplacementsPage() {
             </span>
           </div>
 
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[900px]">
             <thead>
               <tr className="text-left text-xs font-semibold text-tx-muted uppercase tracking-wide border-b border-border">
                 <th className="px-4 py-2.5">Date</th>
+                <th className="px-4 py-2.5">Commune</th>
+                <th className="px-4 py-2.5">École</th>
+                <th className="px-4 py-2.5">Tuteur</th>
                 <th className="px-4 py-2.5">Classe</th>
                 <th className="px-4 py-2.5">Ancien élève</th>
                 <th className="px-4 py-2.5">Nouvel élève</th>
@@ -85,6 +92,9 @@ export default function RemplacementsPage() {
               {items.map(r => (
                 <tr key={r.id} className="border-b border-border last:border-0 hover:bg-surface-alt transition-colors">
                   <td className="px-4 py-3 text-tx-muted whitespace-nowrap">{formatDate(r.date_remplacement)}</td>
+                  <td className="px-4 py-3 text-tx-muted">{r.school_commune ?? "—"}</td>
+                  <td className="px-4 py-3 text-tx" title={r.school_name ?? undefined}>{r.school_name ?? "—"}</td>
+                  <td className="px-4 py-3 text-tx">{r.teacher_name ?? "—"}</td>
                   <td className="px-4 py-3 text-tx">{r.classe}</td>
                   <td className="px-4 py-3 text-tx-muted">{r.ancien_eleve_nom ?? "—"}</td>
                   <td className="px-4 py-3 font-medium text-tx">{r.nouveau_eleve_nom}</td>
@@ -93,6 +103,7 @@ export default function RemplacementsPage() {
               ))}
             </tbody>
           </table>
+          </div>
 
           <div className="flex items-center justify-between px-4 py-3 border-t border-border">
             <span className="text-xs text-tx-muted">

@@ -26,6 +26,8 @@ interface RemarqueItem {
   categorie: string;
   message: string;
   statut: string;
+  reponse_admin?: string | null;
+  reponse_admin_at?: string | null;
   created_at: string;
 }
 
@@ -37,6 +39,8 @@ export default function RemarquesPage() {
   const [filterStatut, setFilterStatut] = useState("");
   const [detail, setDetail] = useState<RemarqueItem | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [replyText, setReplyText] = useState("");
+  const [replying, setReplying] = useState(false);
 
   const load = (p = page) => {
     remarquesApi
@@ -60,6 +64,21 @@ export default function RemarquesPage() {
       load();
       setDetail(null);
     } finally { setUpdating(false); }
+  };
+
+  const openDetail = (r: RemarqueItem) => {
+    setDetail(r);
+    setReplyText(r.reponse_admin ?? "");
+  };
+
+  const sendReply = async () => {
+    if (!detail || !replyText.trim()) return;
+    setReplying(true);
+    try {
+      const { data } = await remarquesApi.reply(detail.id, replyText.trim());
+      setDetail(data);
+      load();
+    } finally { setReplying(false); }
   };
 
   return (
@@ -101,14 +120,14 @@ export default function RemarquesPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-surface-alt">
-              {["Utilisateur", "École", "Catégorie", "Message", "Statut", "Date", ""].map((h, i) => (
+              {["Utilisateur", "École", "Catégorie", "Message", "Statut", "Réponse", "Date", ""].map((h, i) => (
                 <th key={i} className="px-4 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {items.length === 0 ? (
-              <tr><td colSpan={7} className="px-5 py-10 text-center text-tx-muted">Aucune remarque.</td></tr>
+              <tr><td colSpan={8} className="px-5 py-10 text-center text-tx-muted">Aucune remarque.</td></tr>
             ) : items.map((r, i) => (
               <tr key={r.id} className={`border-t border-border hover:bg-surface-alt transition-colors ${i % 2 !== 0 ? "bg-surface-alt/40" : ""}`}>
                 <td className="px-4 py-3">
@@ -129,11 +148,16 @@ export default function RemarquesPage() {
                     {r.statut === "traite" ? "Traité" : "Nouveau"}
                   </span>
                 </td>
+                <td className="px-4 py-3">
+                  {r.reponse_admin
+                    ? <span className="inline-flex items-center gap-1 text-xs font-semibold text-success"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M20 6 9 17l-5-5"/></svg>Répondu</span>
+                    : <span className="text-xs text-tx-muted">—</span>}
+                </td>
                 <td className="px-4 py-3 text-tx-muted font-mono text-xs whitespace-nowrap">
                   {new Date(r.created_at).toLocaleDateString("fr-FR")}
                 </td>
                 <td className="px-4 py-3">
-                  <button onClick={() => setDetail(r)}
+                  <button onClick={() => openDetail(r)}
                     className="text-xs bg-primary-soft text-primary px-2.5 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors">
                     Voir
                   </button>
@@ -177,6 +201,30 @@ export default function RemarquesPage() {
               <div>
                 <div className="text-[11px] text-tx-muted mb-1">Message</div>
                 <div className="bg-surface-alt rounded-xl px-4 py-3 text-tx whitespace-pre-wrap">{detail.message}</div>
+              </div>
+              <div>
+                <div className="text-[11px] text-tx-muted mb-1 flex items-center justify-between">
+                  <span>Réponse à {detail.user_name}</span>
+                  {detail.reponse_admin_at && (
+                    <span className="text-tx-muted">Envoyée le {new Date(detail.reponse_admin_at).toLocaleString("fr-FR")}</span>
+                  )}
+                </div>
+                <textarea
+                  value={replyText}
+                  onChange={e => setReplyText(e.target.value)}
+                  rows={3}
+                  placeholder="Écrire une réponse…"
+                  className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx placeholder:text-tx-muted focus:outline-none focus:ring-2 focus:ring-brand/30 transition resize-none"
+                />
+                <div className="flex justify-end mt-2">
+                  <button
+                    onClick={sendReply}
+                    disabled={replying || !replyText.trim() || replyText.trim() === (detail.reponse_admin ?? "")}
+                    className="px-3.5 py-1.5 rounded-lg bg-brand hover:bg-brand-dark text-white text-xs font-semibold disabled:opacity-50 transition-colors"
+                  >
+                    {replying ? "Envoi…" : detail.reponse_admin ? "Mettre à jour la réponse" : "Envoyer la réponse"}
+                  </button>
+                </div>
               </div>
             </div>
             <div className="flex gap-3 mt-5 justify-end">

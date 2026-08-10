@@ -12,7 +12,7 @@ import {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type QuestionType = "texte_court" | "texte_long" | "nombre" | "oui_non" | "choix_unique" | "choix_multiple";
+type QuestionType = "texte_court" | "texte_long" | "nombre" | "date" | "oui_non" | "choix_unique" | "choix_multiple" | "selection_eleve" | "selection_tuteur";
 type QuestionCible = "tuteur" | "superviseur" | "tous";
 
 type Question = {
@@ -27,13 +27,20 @@ type Question = {
 };
 
 const TYPE_LABELS: Record<QuestionType, string> = {
-  texte_court:    "Texte court",
-  texte_long:     "Texte long",
-  nombre:         "Nombre",
-  oui_non:        "Oui / Non",
-  choix_unique:   "Choix unique",
-  choix_multiple: "Choix multiple",
+  texte_court:      "Texte court",
+  texte_long:       "Texte long",
+  nombre:           "Nombre",
+  date:             "Date",
+  oui_non:          "Oui / Non",
+  choix_unique:     "Choix unique",
+  choix_multiple:   "Choix multiple",
+  selection_eleve:  "Sélection d'élève(s) dans la liste",
+  selection_tuteur: "Sélection de tuteur(s) dans la liste",
 };
+
+// Types dont la liste de choix est résolue dynamiquement par l'app mobile
+// (élèves du tuteur / tuteurs supervisés) — pas d'options à saisir ici.
+const SELECTION_TYPES: QuestionType[] = ["selection_eleve", "selection_tuteur"];
 
 const CIBLE_LABELS: Record<QuestionCible, string> = {
   tuteur:      "Tuteur",
@@ -51,7 +58,8 @@ const CIBLE_FILTERS: { value: QuestionCible | "toutes"; label: string }[] = [
 const NEEDS_OPTIONS: QuestionType[] = ["choix_unique", "choix_multiple"];
 
 const VALID_TYPES: QuestionType[] = [
-  "texte_court", "texte_long", "nombre", "oui_non", "choix_unique", "choix_multiple",
+  "texte_court", "texte_long", "nombre", "date", "oui_non", "choix_unique", "choix_multiple",
+  "selection_eleve", "selection_tuteur",
 ];
 const VALID_CIBLES: QuestionCible[] = ["tuteur", "superviseur", "tous"];
 
@@ -454,6 +462,13 @@ export default function RapportQuestionsPage() {
                     <option key={val} value={val}>{lab}</option>
                   ))}
                 </select>
+                {SELECTION_TYPES.includes(type) && (
+                  <p className="mt-1.5 text-xs text-tx-muted leading-relaxed">
+                    {type === "selection_eleve"
+                      ? "Le tuteur verra la liste réelle de ses élèves au moment de répondre (pas d'options à saisir). Choisir « Tuteur » comme destinataire."
+                      : "Le superviseur verra la liste réelle des tuteurs qu'il supervise au moment de répondre (pas d'options à saisir). Choisir « Superviseur » comme destinataire."}
+                  </p>
+                )}
               </div>
 
               {/* Destinataire */}

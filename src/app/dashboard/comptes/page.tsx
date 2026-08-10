@@ -30,6 +30,7 @@ export default function ComptesPage() {
   const [modal,   setModal]   = useState<null | "create" | Compte>(null);
   const [form,    setForm]    = useState<typeof EMPTY>(EMPTY);
   const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState("");
   const [page,    setPage]    = useState(1);
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError,   setDataError]   = useState<string | null>(null);
@@ -44,19 +45,31 @@ export default function ComptesPage() {
   useEffect(() => { load(true); }, []);
 
   const save = async () => {
-    setLoading(true);
+    if (!form.name.trim()) { setError("Le nom est obligatoire."); return; }
+    if (!form.email.trim() && !form.phone.trim()) { setError("Un e-mail ou un numéro de téléphone est requis."); return; }
+    setLoading(true); setError("");
     try {
       // Convertir le rôle UI en rôle API avant envoi
-      const payload = { ...form, role: toApiRole(form.role) };
+      const payload = {
+        ...form,
+        email: form.email.trim() || null,
+        phone: form.phone.trim() || null,
+        password: form.password.trim() || null,
+        title: form.title.trim() || null,
+        role: toApiRole(form.role),
+      };
       if (modal === "create") await usersApi.create(payload);
       else await usersApi.update((modal as Compte).id, payload);
       load(false); setModal(null);
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? "Une erreur est survenue.");
     } finally { setLoading(false); }
   };
 
   const del = async (id: string) => {
     if (!confirm("Supprimer ce compte ?")) return;
-    await usersApi.delete(id); load(false);
+    try { await usersApi.delete(id); load(false); }
+    catch (e: any) { alert(e?.response?.data?.detail ?? "Suppression impossible."); }
   };
 
   const isAdmin = me?.role === "admin";
@@ -72,7 +85,7 @@ export default function ComptesPage() {
         </div>
         {isAdmin && (
           <button
-            onClick={() => { setForm(EMPTY); setModal("create"); }}
+            onClick={() => { setForm(EMPTY); setError(""); setModal("create"); }}
             className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -147,7 +160,7 @@ export default function ComptesPage() {
                   {isAdmin && (
                     <div className="flex gap-2">
                       <button
-                        onClick={() => { setForm({ ...EMPTY, ...u, password: "", role: (u.role as UIRole) ?? "superviseur" }); setModal(u); }}
+                        onClick={() => { setForm({ ...EMPTY, ...u, password: "", role: (u.role as UIRole) ?? "superviseur" }); setError(""); setModal(u); }}
                         className="text-xs bg-primary-soft text-primary px-2.5 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors"
                       >Modifier</button>
                       {u.id !== me?.id && (
@@ -177,6 +190,11 @@ export default function ComptesPage() {
             <h2 className="text-base font-bold text-tx mb-5">
               {modal === "create" ? "Nouveau compte" : "Modifier le compte"}
             </h2>
+            {error && (
+              <div className="bg-danger-soft text-danger rounded-xl px-4 py-2.5 text-sm mb-4 flex gap-2 items-start">
+                <span>⚠</span><span>{error}</span>
+              </div>
+            )}
             <div className="space-y-3">
               {([
                 ["Nom complet", "name"],

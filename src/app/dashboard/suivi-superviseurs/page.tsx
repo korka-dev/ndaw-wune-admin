@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import { suiviSuperviseurApi, sessionsApi } from "@/lib/api";
+import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 
 const PAGE_SIZE = 20;
@@ -183,7 +184,7 @@ function SuperviseurModal({
         </div>
 
         {/* ── Table enseignants ── */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto overflow-x-auto">
           {loading ? (
             <div className="flex items-center justify-center py-16 gap-3">
               <svg className="animate-spin w-5 h-5 text-brand" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
@@ -199,7 +200,7 @@ function SuperviseurModal({
               </p>
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[860px]">
               <thead className="sticky top-0 bg-surface-alt border-b border-border">
                 <tr>
                   {["Enseignant", "École / Classe", "Présence", "Dernière séance", "Heure", "Séances", "Rapport"].map(h => (
@@ -295,6 +296,7 @@ export default function SuiviSuperviseurPage() {
   const [search,       setSearch]       = useState("");
   const [loading,      setLoading]      = useState(false);
   const [page,         setPage]         = useState(1);
+  const [exporting,    setExporting]    = useState(false);
 
   /* Modal */
   const [modalSup,     setModalSup]     = useState<SuperviseurSuivi | null>(null);
@@ -322,6 +324,16 @@ export default function SuiviSuperviseurPage() {
   }, [sessId, search]);
 
   useEffect(() => { load(); }, [load]);
+
+  /* Export CSV */
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const res = await suiviSuperviseurApi.exportCsv({ session_id: sessId || undefined, search: search || undefined });
+      downloadBlob(res.data, "suivi_superviseurs.csv");
+    } catch { /* silencieux */ }
+    finally { setExporting(false); }
+  };
 
   /* Pagination */
   const paginated = superviseurs.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -357,6 +369,14 @@ export default function SuiviSuperviseurPage() {
               Vue d'ensemble des superviseurs et de la présence de leurs enseignants
             </p>
           </div>
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="flex items-center gap-2 border border-border bg-surface text-tx px-3.5 py-2.5 rounded-xl text-sm font-semibold hover:bg-surface-alt transition-colors disabled:opacity-60 flex-shrink-0"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+            {exporting ? "Export…" : "Exporter CSV"}
+          </button>
         </div>
 
         {/* Barre de contrôle */}

@@ -14,6 +14,7 @@ const ELEVE_EXPORT_FIELDS = [
   { key: "naiss",   label: "Date de naissance" },
   { key: "classe",  label: "Classe" },
   { key: "statut",  label: "Statut" },
+  { key: "type",    label: "Type (Titulaire/Remplaçant)" },
 ];
 
 interface Eleve {
@@ -26,6 +27,7 @@ interface Eleve {
   school_id?: string;
   session_id?: string;
   statut: string;
+  statut_selection?: string;
   school_name?: string;
   school_region?: string;
 }
@@ -610,8 +612,8 @@ export default function ElevesPage() {
         )}
 
         <div className={`overflow-x-auto overflow-y-auto flex-1 ${dataLoading ? "hidden" : ""}`}>
-          <table className="w-full text-sm table-fixed min-w-[1050px]">
-            <colgroup><col className="w-[44px]" /><col className="w-[20%]" /><col className="w-[8%]" /><col className="w-[20%]" /><col className="w-[16%]" /><col className="w-[10%]" /><col className="w-[20%]" /></colgroup>
+          <table className="w-full text-sm table-fixed min-w-[1150px]">
+            <colgroup><col className="w-[44px]" /><col className="w-[18%]" /><col className="w-[7%]" /><col className="w-[17%]" /><col className="w-[13%]" /><col className="w-[10%]" /><col className="w-[9%]" /><col className="w-[18%]" /></colgroup>
             <thead className="sticky top-0 z-10 bg-surface-alt shadow-sm">
               <tr className="border-b border-border bg-surface-alt">
                 <th className="px-3 py-3 text-center bg-surface-alt sticky top-0 z-10">
@@ -624,7 +626,7 @@ export default function ElevesPage() {
                     {somePageSel && !allPageSel && <span className="w-2 h-0.5 bg-brand rounded-full block" />}
                   </button>
                 </th>
-                {["Nom / Prénom", "Classe", "École", "IEF", "Statut", "Actions"].map(h => (
+                {["Nom / Prénom", "Classe", "École", "IEF", "Statut", "Type", "Actions"].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide first:text-center bg-surface-alt sticky top-0 z-10">{h}</th>
                 ))}
               </tr>
@@ -672,6 +674,13 @@ export default function ElevesPage() {
                         {e.statut}
                       </span>
                     </td>
+                    <td className="px-4 py-3.5 cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>
+                      {e.statut_selection
+                        ? <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${e.statut_selection === "Titulaire" ? "bg-primary-soft text-primary" : "bg-warn-soft text-warn"}`}>
+                            {e.statut_selection}
+                          </span>
+                        : <span className="text-tx-muted text-xs">—</span>}
+                    </td>
                     <td className="px-4 py-3.5" onClick={ev => ev.stopPropagation()}>
                       <div className="flex gap-2">
                         <button onClick={() => openEdit(e)} className="text-xs bg-primary-soft text-primary px-3 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors">Modifier</button>
@@ -682,7 +691,7 @@ export default function ElevesPage() {
                 );
               })}
               {filtered.length === 0 && (
-                <tr><td colSpan={7} className="px-5 py-16 text-center text-tx-muted text-sm">
+                <tr><td colSpan={8} className="px-5 py-16 text-center text-tx-muted text-sm">
                   {hasFilters ? "Aucun élève ne correspond aux filtres." : "Aucun élève pour l'instant."}
                 </td></tr>
               )}
@@ -718,6 +727,7 @@ export default function ElevesPage() {
               <div className="px-6 py-4 space-y-3">
                 {[
                   { label: "Sexe", value: e.genre ?? "—" },
+                  { label: "Type", value: e.statut_selection ?? "—" },
                   { label: "Date de naissance", value: e.date_naissance ? new Date(e.date_naissance).toLocaleDateString("fr-FR") : "—" },
                   { label: "École", value: e.school_name ?? schoolName(e.school_id) },
                   { label: "IEF", value: e.school_region ?? "—" },

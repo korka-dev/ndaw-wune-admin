@@ -170,6 +170,8 @@ export const suiviSuperviseurApi = {
     api.get("/admin/suivi-superviseurs", { params }),
   detail: (superviseur_id: string, params?: { session_id?: string }) =>
     api.get(`/admin/suivi-superviseurs/${superviseur_id}`, { params }),
+  exportCsv: (params?: { session_id?: string; search?: string }) =>
+    api.get("/admin/suivi-superviseurs/export/csv", { params, responseType: "blob" }),
 };
 
 export const suiviEvaluationsApi = {
@@ -413,6 +415,8 @@ export const usageLogsApi = {
     api.get("/admin/usage-logs", { params }),
   stats: (params?: { date_from?: string; date_to?: string }) =>
     api.get("/admin/usage-logs/stats", { params }),
+  exportCsv: (params?: { feature?: string; user_role?: string; date_from?: string; date_to?: string }) =>
+    api.get("/admin/usage-logs/export/csv", { params, responseType: "blob" }),
 };
 
 // ── Remarques des utilisateurs de l'app mobile ────────────────────────────────
@@ -421,6 +425,8 @@ export const remarquesApi = {
     api.get("/admin/remarques", { params }),
   setStatus: (id: string, statut: "nouveau" | "traite") =>
     api.patch(`/admin/remarques/${id}`, { statut }),
+  reply: (id: string, reponse_admin: string) =>
+    api.patch(`/admin/remarques/${id}`, { reponse_admin }),
 };
 
 // ── Dashboard stats (agrégations SQL, un seul appel) ─────────────────────────

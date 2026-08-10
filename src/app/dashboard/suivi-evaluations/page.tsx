@@ -18,7 +18,14 @@ interface EvaluationItem {
   created_at:     string;
 }
 
-interface SuperviseurOption { id: string; name: string }
+interface SuperviseurOption {
+  id: string;
+  name: string;
+  school_name?: string | null;
+  total: number;
+  evaluations_semaine: number;
+  last_eval_date?: string | null;
+}
 
 type Level = "supervisors" | "schools" | "students";
 
@@ -210,7 +217,7 @@ export default function SuiviEvaluationsPage() {
   const [activeSchool, setActiveSchool] = useState<string | null>(null);
 
   // Données niveau 1
-  const [superviseurs, setSuperviseurs] = useState<(SuperviseurOption & { total: number })[]>([]);
+  const [superviseurs, setSuperviseurs] = useState<SuperviseurOption[]>([]);
   const [loadingL1,    setLoadingL1]    = useState(true);
 
   // Données niveaux 2 & 3 — toutes les évals du superviseur actif
@@ -238,23 +245,13 @@ export default function SuiviEvaluationsPage() {
   }, []);
   const competenceLabel = (code: string) => competenceLabels[code] ?? code;
 
-  // ── Chargement initial : superviseurs + total par superviseur ──
+  // ── Chargement initial : tous les superviseurs (y compris ceux à 0 évaluation) ──
   useEffect(() => {
     setLoadingL1(true);
     suiviEvaluationsApi.superviseurs()
-      .then(async ({ data }) => {
+      .then(({ data }) => {
         const sups: SuperviseurOption[] = data ?? [];
-        const withCounts = await Promise.all(
-          sups.map(async s => {
-            try {
-              const r = await suiviEvaluationsApi.list({ superviseur_id: s.id, limit: 1, skip: 0 });
-              return { ...s, total: r.data.total ?? 0 };
-            } catch {
-              return { ...s, total: 0 };
-            }
-          })
-        );
-        setSuperviseurs(withCounts.sort((a, b) => b.total - a.total));
+        setSuperviseurs(sups.slice().sort((a, b) => b.total - a.total));
       })
       .catch(() => setSuperviseurs([]))
       .finally(() => setLoadingL1(false));
@@ -395,7 +392,7 @@ export default function SuiviEvaluationsPage() {
             </h1>
             <p className="text-sm text-tx-muted mt-0.5">
               {level === "supervisors" && !loadingL1 &&
-                `${superviseurs.length} superviseur${superviseurs.length !== 1 ? "s" : ""} · ${superviseurs.reduce((s, x) => s + x.total, 0).toLocaleString("fr-FR")} évaluations`}
+                `${superviseurs.length} superviseur${superviseurs.length !== 1 ? "s" : ""} · ${superviseurs.reduce((s, x) => s + x.total, 0).toLocaleString("fr-FR")} évaluations · ${superviseurs.filter(s => s.evaluations_semaine === 0).length} sans supervision cette semaine`}
               {level === "schools" && !loadingL2 &&
                 `${schools.length} école${schools.length !== 1 ? "s" : ""} · ${new Set(supEvals.map(e => e.eleve_id)).size} élèves · ${supStats.total} évaluations`}
               {level === "students" && schoolStats &&
@@ -428,7 +425,7 @@ export default function SuiviEvaluationsPage() {
                 <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
               </div>
               <div className="text-sm font-semibold text-tx mb-1">Aucun superviseur</div>
-              <div className="text-xs text-tx-muted max-w-[260px]">Les superviseurs apparaîtront ici une fois des évaluations soumises.</div>
+              <div className="text-xs text-tx-muted max-w-[260px]">Aucun superviseur enregistré pour l'instant.</div>
             </div>
           </div>
         ) : (
@@ -448,43 +445,60 @@ export default function SuiviEvaluationsPage() {
                 </div>
               </div>
             ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredSuperviseurs.map(sup => (
-              <button
-                key={sup.id}
-                onClick={() => handleSupClick(sup)}
-                className="bg-surface border border-border rounded-2xl p-5 text-left hover:border-brand/40 hover:shadow-sm transition-all group focus:outline-none"
-              >
-                {/* Avatar + nom */}
-                <div className="flex items-center gap-3 mb-5">
-                  <div className="w-11 h-11 rounded-xl bg-brand-soft text-brand flex items-center justify-center text-sm font-bold flex-shrink-0">
-                    {initials(sup.name)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-bold text-tx truncate">{sup.name}</div>
-                    <div className="text-xs text-tx-muted mt-0.5">Superviseur</div>
-                  </div>
-                  <ChevronRight className="text-tx-muted group-hover:text-brand transition-colors flex-shrink-0" />
-                </div>
-
-                {/* Compteur */}
-                <div className="text-3xl font-bold text-tx tracking-tight">{sup.total.toLocaleString("fr-FR")}</div>
-                <div className="text-xs text-tx-muted mt-0.5 mb-3">évaluation{sup.total !== 1 ? "s" : ""}</div>
-
-                {/* Barre placeholder (on n'a que le total à ce stade) */}
-                <div className="h-1.5 rounded-full overflow-hidden bg-border">
-                  <div
-                    className="h-full bg-brand rounded-full"
-                    style={{ width: sup.total > 0 ? "100%" : "0%" }}
-                  />
-                </div>
-
-                <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
-                  <span className="text-xs text-tx-muted">Voir les écoles supervisées</span>
-                  <span className="text-xs font-semibold text-brand group-hover:underline">Ouvrir →</span>
-                </div>
-              </button>
-            ))}
+          <div className="bg-surface border border-border rounded-2xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[820px]">
+                <thead>
+                  <tr className="border-b border-border bg-surface-alt">
+                    {["Superviseur", "École", "Total évaluations", "Cette semaine", "Dernière évaluation", ""].map(h => (
+                      <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredSuperviseurs.map((sup, i) => {
+                    const sansSupervision = sup.evaluations_semaine === 0;
+                    return (
+                      <tr
+                        key={sup.id}
+                        onClick={() => handleSupClick(sup)}
+                        className={`border-t border-border cursor-pointer transition-colors hover:bg-surface-alt ${i % 2 !== 0 ? "bg-surface-alt/30" : ""} ${sansSupervision ? "bg-warn-soft/40" : ""}`}
+                      >
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-9 h-9 rounded-xl bg-brand-soft text-brand flex items-center justify-center text-xs font-bold flex-shrink-0">
+                              {initials(sup.name)}
+                            </div>
+                            <span className="text-sm font-semibold text-tx truncate">{sup.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5 text-sm text-tx-muted truncate max-w-[200px]">{sup.school_name ?? "—"}</td>
+                        <td className="px-5 py-3.5 text-sm font-bold text-tx">{sup.total.toLocaleString("fr-FR")}</td>
+                        <td className="px-5 py-3.5">
+                          {sansSupervision ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-warn-soft text-warn">
+                              <KpiIcon name="alert" size={11} /> Aucune
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-success-soft text-success">
+                              {sup.evaluations_semaine}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 text-xs text-tx-muted whitespace-nowrap">
+                          {sup.last_eval_date ? fmtDate(sup.last_eval_date) : <span className="italic">Jamais</span>}
+                        </td>
+                        <td className="px-5 py-3.5 text-right">
+                          <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand">
+                            Voir <ChevronRight className="text-brand" />
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
             )}
           </>
