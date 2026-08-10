@@ -444,3 +444,15 @@ export const exportApi = {
   eleves: () => api.get("/admin/eleves/export/csv", { responseType: "blob" }),
 };
 
+// ── Import / Export global (écoles, superviseurs, tuteurs, classes, élèves) ────
+export const importExportApi = {
+  export: () => api.get("/admin/import-export/export", { responseType: "blob" }),
+  import: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return api.post("/admin/import-export/import", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+};
+
