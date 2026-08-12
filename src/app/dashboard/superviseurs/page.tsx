@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { superviseursApi, schoolsApi, teachersApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
+import { Carte, Donut } from "@/components/Charts";
 
 const PAGE_SIZE = 50;
 
@@ -276,6 +277,24 @@ export default function SuperviseursPage() {
           </button>
         </div>
       </div>
+
+      {/* Couverture — combien de superviseurs ont au moins un enseignant
+          assigné. C'est un point de vigilance connu du projet (cf. CLAUDE.md
+          §2) : le rattachement superviseur → enseignants est saisi à la main
+          et souvent absent. */}
+      {sups.length > 0 && (
+        <div className="mb-5 max-w-xs">
+          <Carte titre="Couverture des superviseurs">
+            <Donut
+              color="#2F7D4A"
+              pct={Math.round(
+                (sups.filter(s => (s.classes ?? []).length > 0).length / sups.length) * 100
+              )}
+              legende={`${sups.filter(s => (s.classes ?? []).length > 0).length} avec enseignant(s) sur ${sups.length}`}
+            />
+          </Carte>
+        </div>
+      )}
 
       {/* ── Barre de recherche + filtres ── */}
       <div className="flex gap-3 mb-5">

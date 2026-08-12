@@ -4,6 +4,7 @@ import { teachersApi, schoolsApi, exportApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 import ExportModal from "@/components/ExportModal";
+import { Carte, Donut } from "@/components/Charts";
 
 type ReimportResult = { updated: number; created: number; skipped: number; errors: string[] };
 
@@ -246,6 +247,19 @@ export default function TeachersPage() {
           </button>
         </div>
       </div>
+
+      {/* Statut — simple aperçu, calculé sur les enseignants déjà chargés */}
+      {teachers.length > 0 && (
+        <div className="mb-5 max-w-xs">
+          <Carte titre="Statut des comptes">
+            <Donut
+              color="#2F7D4A"
+              pct={Math.round((teachers.filter(t => t.status === "actif").length / teachers.length) * 100)}
+              legende={`${teachers.filter(t => t.status === "actif").length} actif${teachers.filter(t => t.status === "actif").length !== 1 ? "s" : ""} sur ${teachers.length}`}
+            />
+          </Carte>
+        </div>
+      )}
 
       {/* Barre de recherche + filtres */}
       <div className="flex gap-3 mb-5 flex-wrap">

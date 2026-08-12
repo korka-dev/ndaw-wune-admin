@@ -4,6 +4,7 @@ import { elevesApi, schoolsApi, sessionsApi, classesApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 import ExportModal from "@/components/ExportModal";
+import { Carte, Donut } from "@/components/Charts";
 
 const PAGE_SIZE = 50;
 
@@ -481,6 +482,32 @@ export default function ElevesPage() {
           </button>
         </div>
       </div>
+
+      {/* Répartition par genre + par type — simple aperçu, calculé sur les élèves déjà chargés */}
+      {eleves.length > 0 && (
+        <div className="mb-5 flex gap-5 flex-wrap">
+          <div className="max-w-xs">
+            <Carte titre="Répartition par genre">
+              <Donut
+                color="#C08A3E"
+                pct={Math.round((eleves.filter(e => e.genre === "Fille").length / eleves.length) * 100)}
+                legende={`${eleves.filter(e => e.genre === "Fille").length} filles · ${eleves.filter(e => e.genre === "Garçon").length} garçons`}
+              />
+            </Carte>
+          </div>
+          <div className="max-w-xs">
+            <Carte titre="Titulaires / Remplaçants">
+              <Donut
+                color="#4A90C2"
+                pct={Math.round(
+                  (eleves.filter(e => e.statut_selection === "Titulaire").length / eleves.length) * 100
+                )}
+                legende={`${eleves.filter(e => e.statut_selection === "Titulaire").length} titulaires · ${eleves.filter(e => e.statut_selection === "Remplaçant").length} remplaçants`}
+              />
+            </Carte>
+          </div>
+        </div>
+      )}
 
       {/* ── Filtres ── */}
       <div className="flex gap-3 mb-5 flex-wrap">

@@ -6,6 +6,7 @@ import Pagination from "@/components/Pagination";
 import { SENEGAL_REGIONS, getCommunesByRegion } from "@/lib/senegal-geo";
 import ExportModal from "@/components/ExportModal";
 import { LANGUES_NATIONALES } from "@/lib/langues";
+import { Carte, BarList } from "@/components/Charts";
 
 const SCHOOL_EXPORT_FIELDS = [
   { key: "nom",       label: "Nom de l'école" },
@@ -214,6 +215,27 @@ export default function EcolesPage() {
           </button>
         </div>
       </div>
+
+      {/* Répartition par IEF — simple aperçu, calculé sur les écoles déjà chargées */}
+      {!dataLoading && schools.length > 0 && (
+        <div className="mb-5 max-w-md">
+          <Carte titre="Écoles par IEF">
+            <BarList
+              color="#2F7D4A"
+              data={Object.entries(
+                schools.reduce<Record<string, number>>((acc, s) => {
+                  const k = s.region?.trim() || "Non renseigné";
+                  acc[k] = (acc[k] ?? 0) + 1;
+                  return acc;
+                }, {})
+              )
+                .map(([label, value]) => ({ label, value }))
+                .sort((a, b) => b.value - a.value)
+                .slice(0, 8)}
+            />
+          </Carte>
+        </div>
+      )}
 
       {/* Barre de recherche + filtres */}
       <div className="flex gap-3 mb-5">

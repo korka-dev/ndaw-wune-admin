@@ -4,6 +4,7 @@ import { classesApi, schoolsApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 import ExportModal from "@/components/ExportModal";
+import { Carte, BarList } from "@/components/Charts";
 
 type ReimportResult = { created: number; skipped: number; schools_created: number; errors: string[] };
 
@@ -220,6 +221,26 @@ export default function ClassesPage() {
           </button>
         </div>
       </div>
+
+      {/* Répartition par niveau — simple aperçu, calculé sur les classes déjà chargées */}
+      {classes.length > 0 && (
+        <div className="mb-5 max-w-md">
+          <Carte titre="Classes par niveau">
+            <BarList
+              color="#4A90C2"
+              data={Object.entries(
+                classes.reduce<Record<string, number>>((acc, c) => {
+                  const k = c.niveau?.trim() || "Non renseigné";
+                  acc[k] = (acc[k] ?? 0) + 1;
+                  return acc;
+                }, {})
+              )
+                .map(([label, value]) => ({ label, value }))
+                .sort((a, b) => b.value - a.value)}
+            />
+          </Carte>
+        </div>
+      )}
 
       {/* ── Filtres ── */}
       <div className="flex gap-3 mb-5 flex-wrap">

@@ -207,6 +207,15 @@ export const superviseursApi = {
   exportXlsx: (fields?: string) => api.get("/admin/superviseurs/export/xlsx", { params: fields ? { fields } : undefined, responseType: "blob" }),
 };
 
+export const comptesTerrainApi = {
+  // Liste unifiée tuteurs + superviseurs — les mots de passe ne sont jamais
+  // transmis : bcrypt les hache à sens unique, aucune route ne peut les lire.
+  list: (params?: { role?: "enseignant" | "superviseur"; search?: string; skip?: number; limit?: number }) =>
+    api.get("/admin/comptes-terrain", { params }),
+  resetPassword: (id: string, d: { new_password: string; force_change?: boolean }) =>
+    api.post(`/admin/comptes-terrain/${id}/reset-password`, d),
+};
+
 export const evaluateursApi = {
   list: (params?: { limit?: number; skip?: number }) => api.get("/admin/evaluateurs", { params }),
   create: (d: unknown) => api.post("/admin/evaluateurs", d),
@@ -240,6 +249,31 @@ export const rapportJournalierAdminApi = {
   }) =>
     api.get("/admin/rapports/journalier/export/csv", {
       params: params ?? {},
+      responseType: "blob",
+    }),
+  stats: (params?: {
+    teacher_id?: string;
+    role?: string;
+    search?: string;
+    date_from?: string;
+    date_to?: string;
+    ief?: string;
+  }) => api.get("/admin/rapports/journalier/stats", { params }),
+  photos: (params?: {
+    teacher_id?: string;
+    role?: string;
+    search?: string;
+    date_from?: string;
+    date_to?: string;
+    ief?: string;
+    skip?: number;
+    limit?: number;
+  }) => api.get("/admin/rapports/journalier/photos", { params }),
+  // Les photos sont servies en binaire, une par une : la liste ne les contient
+  // plus (un rapport pèse 1 à 3 Mo en base64). Le <img> ne pouvant pas porter
+  // l'en-tête d'authentification, on récupère un blob puis une object URL.
+  photo: (rapportId: string, index: number) =>
+    api.get(`/admin/rapports/journalier/${rapportId}/photo/${index}`, {
       responseType: "blob",
     }),
 };

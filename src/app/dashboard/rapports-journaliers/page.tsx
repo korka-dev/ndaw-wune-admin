@@ -4,6 +4,8 @@ import { rapportJournalierAdminApi, rapportQuestionsApi, rapportDifficulteResolu
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 import ExportModal from "@/components/ExportModal";
+import RapportPhoto from "@/components/RapportPhoto";
+import { LineChart, BarList, Donut, Carte, type Point } from "@/components/Charts";
 
 const PAGE_SIZE = 20;
 
@@ -52,11 +54,43 @@ interface RapportJournalier {
   has_observations: boolean;
   commentaires: string | null;
   soumis_en_offline: boolean;
-  photo_classe_url: string | null;
-  photos_classe_url: string | null;
   reponses_questions: string | null;
+  // Les photos ne transitent plus dans la liste (1 à 3 Mo par rapport en
+  // base64) : seul leur nombre est renvoyé, les images se chargent une par une.
+  nb_photos: number;
   created_at: string;
 }
+
+interface RapportStats {
+  total: number;
+  tuteurs_actifs: number;
+  absences_total: number;
+  absences_moyenne: number;
+  taux_directeur_venu: number;
+  taux_besoin_appui: number;
+  taux_observations: number;
+  taux_offline: number;
+  rapports_avec_photos: number;
+  photos_total: number;
+  par_mois: Point[];
+  par_ief: Point[];
+  top_ecoles: Point[];
+  difficultes: Point[];
+  par_jour: Point[];
+}
+
+interface PhotoItem {
+  id: string;
+  date_rapport: string;
+  nom_tuteur: string;
+  ecole: string;
+  ief: string;
+  commune: string;
+  nb_photos: number;
+}
+
+type Onglet = "liste" | "stats" | "photos";
+const PHOTOS_PAGE_SIZE = 12;
 
 interface RapportQuestionDef {
   id: string;
@@ -87,6 +121,24 @@ export default function RapportsJournaliersPage() {
   const [exporting, setExporting] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [page, setPage] = useState(1);
+
+  // Onglets
+  const [onglet, setOnglet] = useState<Onglet>("liste");
+
+  // Statistiques
+  const [stats, setStats] = useState<RapportStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+
+  // Galerie photos
+  const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  const [photosTotal, setPhotosTotal] = useState(0);
+  const [photosPage, setPhotosPage] = useState(1);
+  const [photosLoading, setPhotosLoading] = useState(false);
+
+  // Visionneuse plein écran
+  const [visionneuse, setVisionneuse] = useState<{
+    rapportId: string; index: number; nb: number; titre: string; sous: string;
+  } | null>(null);
 
   // Filtres
   const [search, setSearch] = useState("");
@@ -162,11 +214,43 @@ export default function RapportsJournaliersPage() {
     }
   }, [debouncedSearch, dateFrom, dateTo, roleFilter]);
 
+  const filtres = useCallback(() => {
+    const p: Record<string, unknown> = {};
+    if (debouncedSearch.trim()) p.search = debouncedSearch.trim();
+    if (dateFrom) p.date_from = dateFrom;
+    if (dateTo) p.date_to = dateTo;
+    if (roleFilter) p.role = roleFilter;
+    return p;
+  }, [debouncedSearch, dateFrom, dateTo, roleFilter]);
+
+  const fetchStats = useCallback(async () => {
+    setStatsLoading(true);
+    try {
+      const res = await rapportJournalierAdminApi.stats(filtres());
+      setStats(res.data);
+    } catch { setStats(null); }
+    finally { setStatsLoading(false); }
+  }, [filtres]);
+
+  const fetchPhotos = useCallback(async (p: number) => {
+    setPhotosLoading(true);
+    try {
+      const res = await rapportJournalierAdminApi.photos({
+        ...filtres(), skip: (p - 1) * PHOTOS_PAGE_SIZE, limit: PHOTOS_PAGE_SIZE,
+      });
+      setPhotos(res.data.items ?? []);
+      setPhotosTotal(res.data.total ?? 0);
+    } catch { setPhotos([]); setPhotosTotal(0); }
+    finally { setPhotosLoading(false); }
+  }, [filtres]);
+
   // Re-fetch when filters or page changes
-  useEffect(() => { fetchRapports(page); }, [fetchRapports, page]);
+  useEffect(() => { if (onglet === "liste") fetchRapports(page); }, [onglet, fetchRapports, page]);
+  useEffect(() => { if (onglet === "stats") fetchStats(); }, [onglet, fetchStats]);
+  useEffect(() => { if (onglet === "photos") fetchPhotos(photosPage); }, [onglet, fetchPhotos, photosPage]);
 
   // Reset to page 1 when filters change
-  useEffect(() => { setPage(1); }, [debouncedSearch, dateFrom, dateTo, roleFilter]);
+  useEffect(() => { setPage(1); setPhotosPage(1); }, [debouncedSearch, dateFrom, dateTo, roleFilter]);
 
   const handleExport = async (fields: string[]) => {
     setExporting(true);
@@ -212,6 +296,25 @@ export default function RapportsJournaliersPage() {
           )}
           {exporting ? "Export…" : "Exporter CSV"}
         </button>
+      </div>
+
+      {/* ── Onglets ─────────────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-1 bg-surface border border-border rounded-xl p-1 mb-5 w-fit">
+        {([
+          { key: "liste",  label: "Liste" },
+          { key: "stats",  label: "Statistiques" },
+          { key: "photos", label: "Photos" },
+        ] as const).map(o => (
+          <button
+            key={o.key}
+            onClick={() => setOnglet(o.key)}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+              onglet === o.key ? "bg-brand text-white" : "text-tx-muted hover:bg-surface-alt hover:text-tx"
+            }`}
+          >
+            {o.label}
+          </button>
+        ))}
       </div>
 
       {/* ── Filtres ─────────────────────────────────────────────────────────── */}
@@ -281,6 +384,7 @@ export default function RapportsJournaliersPage() {
       </div>
 
       {/* ── Tableau rapports ─────────────────────────────────────────────────── */}
+      {onglet === "liste" && (
       <div className="bg-surface rounded-2xl border border-border overflow-hidden flex-1">
         <table className="w-full text-sm table-fixed">
           <colgroup><col className="w-[12%]" /><col className="w-[18%]" /><col className="w-[22%]" /><col className="w-[14%]" /><col className="w-[12%]" /><col className="w-[16%]" /><col className="w-[6%]" /></colgroup>
@@ -367,6 +471,174 @@ export default function RapportsJournaliersPage() {
           </div>
         )}
       </div>
+      )}
+
+      {/* ── Statistiques ─────────────────────────────────────────────────────── */}
+      {onglet === "stats" && (
+        statsLoading || !stats ? (
+          <p className="text-tx-muted text-sm py-16 text-center">
+            {statsLoading ? "Calcul des statistiques…" : "Statistiques indisponibles."}
+          </p>
+        ) : stats.total === 0 ? (
+          <p className="text-tx-muted text-sm py-16 text-center">
+            Aucun rapport ne correspond aux filtres.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-5">
+
+            {/* Chiffres clés */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {[
+                { label: "Rapports", value: stats.total },
+                { label: "Tuteurs ayant saisi", value: stats.tuteurs_actifs },
+                { label: "Absences cumulées", value: stats.absences_total },
+                { label: "Absences par rapport", value: stats.absences_moyenne },
+                { label: "Rapports avec photo", value: stats.rapports_avec_photos },
+                { label: "Photos au total", value: stats.photos_total },
+              ].map(c => (
+                <div key={c.label} className="bg-surface border border-border rounded-2xl p-4 text-center">
+                  <p className="text-2xl font-bold text-tx leading-none">{c.value}</p>
+                  <p className="text-[11px] text-tx-muted mt-1.5 leading-tight">{c.label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Courbe + taux */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              <div className="lg:col-span-2">
+                <Carte titre="Rapports par mois" sous="Sur la période filtrée">
+                  <LineChart data={stats.par_mois} />
+                </Carte>
+              </div>
+              <Carte titre="Taux déclarés" sous="Part des rapports concernés">
+                <div className="grid grid-cols-2 gap-3">
+                  <Donut pct={stats.taux_directeur_venu} legende="Directeur venu" color="#2F7D4A" />
+                  <Donut pct={stats.taux_besoin_appui} legende="Besoin d'appui" color="#C08A3E" />
+                  <Donut pct={stats.taux_observations} legende="Observations" color="#4A90C2" />
+                  <Donut pct={stats.taux_offline} legende="Saisis hors-ligne" color="#8A6BB8" />
+                </div>
+              </Carte>
+            </div>
+
+            {/* Répartitions */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              <Carte titre="Difficultés les plus signalées" sous="10 premières">
+                <BarList data={stats.difficultes} color="#C08A3E" />
+              </Carte>
+              <Carte titre="Rapports par IEF">
+                <BarList data={stats.par_ief} color="#4A90C2" />
+              </Carte>
+              <Carte titre="Écoles les plus actives" sous="8 premières">
+                <BarList data={stats.top_ecoles} color="#2F7D4A" />
+              </Carte>
+              <Carte titre="Rapports par jour de cours">
+                <BarList data={stats.par_jour} color="#8A6BB8" />
+              </Carte>
+            </div>
+          </div>
+        )
+      )}
+
+      {/* ── Galerie photos ───────────────────────────────────────────────────── */}
+      {onglet === "photos" && (
+        <div className="flex flex-col gap-5">
+          {photosLoading ? (
+            <p className="text-tx-muted text-sm py-16 text-center">Chargement des photos…</p>
+          ) : photos.length === 0 ? (
+            <p className="text-tx-muted text-sm py-16 text-center">
+              Aucun rapport avec photo ne correspond aux filtres.
+            </p>
+          ) : (
+            <>
+              <p className="text-xs text-tx-muted">
+                {photosTotal} rapport{photosTotal !== 1 ? "s" : ""} avec photo.
+                Les images se chargent à mesure du défilement.
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                {photos.flatMap(p =>
+                  Array.from({ length: p.nb_photos }, (_, i) => (
+                    <figure key={`${p.id}-${i}`} className="bg-surface border border-border rounded-2xl overflow-hidden">
+                      <RapportPhoto
+                        rapportId={p.id}
+                        index={i}
+                        alt={`Classe de ${p.nom_tuteur} — ${p.ecole}`}
+                        className="aspect-square"
+                        onClick={() => setVisionneuse({
+                          rapportId: p.id, index: i, nb: p.nb_photos,
+                          titre: `${p.nom_tuteur} — ${p.ecole}`,
+                          sous: `${fmtDate(p.date_rapport)} · ${p.commune} · ${p.ief}`,
+                        })}
+                      />
+                      <figcaption className="px-3 py-2.5">
+                        <p className="text-xs font-semibold text-tx truncate">{p.nom_tuteur}</p>
+                        <p className="text-[11px] text-tx-muted truncate">{p.ecole}</p>
+                        <p className="text-[11px] text-tx-muted mt-0.5">{fmtDate(p.date_rapport)}</p>
+                      </figcaption>
+                    </figure>
+                  ))
+                )}
+              </div>
+              {photosTotal > PHOTOS_PAGE_SIZE && (
+                <div className="bg-surface rounded-2xl border border-border px-5">
+                  <Pagination page={photosPage} total={photosTotal}
+                    pageSize={PHOTOS_PAGE_SIZE} onChange={setPhotosPage} />
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Visionneuse plein écran ──────────────────────────────────────────── */}
+      {visionneuse && (
+        <div
+          className="fixed inset-0 bg-black/80 z-[60] flex flex-col items-center justify-center px-4 py-6"
+          onClick={e => { if (e.target === e.currentTarget) setVisionneuse(null); }}
+        >
+          <div className="flex items-center justify-between w-full max-w-4xl mb-3 gap-4">
+            <div className="min-w-0">
+              <p className="text-white font-semibold text-sm truncate">{visionneuse.titre}</p>
+              <p className="text-white/60 text-xs truncate">{visionneuse.sous}</p>
+            </div>
+            <button
+              onClick={() => setVisionneuse(null)}
+              className="w-9 h-9 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white flex-shrink-0"
+              aria-label="Fermer"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div className="relative w-full max-w-4xl flex-1 min-h-0 flex items-center justify-center">
+            <RapportPhoto
+              key={`${visionneuse.rapportId}-${visionneuse.index}`}
+              rapportId={visionneuse.rapportId}
+              index={visionneuse.index}
+              immediat
+              alt={visionneuse.titre}
+              className="max-h-[75vh] w-auto rounded-xl bg-transparent [&>img]:object-contain [&>img]:max-h-[75vh]"
+            />
+          </div>
+          {visionneuse.nb > 1 && (
+            <div className="flex items-center gap-3 mt-4">
+              <button
+                onClick={() => setVisionneuse(v => v && { ...v, index: (v.index - 1 + v.nb) % v.nb })}
+                className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm"
+              >
+                Précédente
+              </button>
+              <span className="text-white/70 text-xs">{visionneuse.index + 1} / {visionneuse.nb}</span>
+              <button
+                onClick={() => setVisionneuse(v => v && { ...v, index: (v.index + 1) % v.nb })}
+                className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm"
+              >
+                Suivante
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Modal détail rapport ────────────────────────────────────────────── */}
       {detail && (
@@ -399,32 +671,29 @@ export default function RapportsJournaliersPage() {
 
             <div className="px-6 py-5 space-y-5">
 
-              {/* Photos */}
-              {(() => {
-                let urls: string[] = [];
-                if (detail.photos_classe_url) {
-                  try { urls = JSON.parse(detail.photos_classe_url); } catch {}
-                }
-                if (urls.length === 0 && detail.photo_classe_url) {
-                  urls = [detail.photo_classe_url];
-                }
-                if (urls.length === 0) return null;
-                return (
-                  <Section title={`Photo${urls.length > 1 ? "s" : ""} de la classe (${urls.length})`}>
-                    <div className={`grid gap-2 ${urls.length === 1 ? "grid-cols-1" : "grid-cols-3"}`}>
-                      {urls.map((src, i) => (
-                        <a key={i} href={src} target="_blank" rel="noopener noreferrer" className="block">
-                          <img
-                            src={src}
-                            alt={`Photo ${i + 1}`}
-                            className={`w-full rounded-xl object-cover ${urls.length === 1 ? "max-h-64" : "aspect-square"} hover:opacity-90 transition-opacity cursor-zoom-in`}
-                          />
-                        </a>
-                      ))}
-                    </div>
-                  </Section>
-                );
-              })()}
+              {/* Photos — chargées une par une depuis le serveur, plus jamais
+                  transportées dans la réponse de liste. */}
+              {detail.nb_photos > 0 && (
+                <Section title={`Photo${detail.nb_photos > 1 ? "s" : ""} de la classe (${detail.nb_photos})`}>
+                  <div className={`grid gap-2 ${detail.nb_photos === 1 ? "grid-cols-1" : "grid-cols-3"}`}>
+                    {Array.from({ length: detail.nb_photos }, (_, i) => (
+                      <RapportPhoto
+                        key={i}
+                        rapportId={detail.id}
+                        index={i}
+                        immediat
+                        alt={`Photo ${i + 1} de la classe de ${detail.nom_tuteur}`}
+                        className={`rounded-xl ${detail.nb_photos === 1 ? "max-h-64 h-64" : "aspect-square"}`}
+                        onClick={() => setVisionneuse({
+                          rapportId: detail.id, index: i, nb: detail.nb_photos,
+                          titre: `${detail.nom_tuteur} — ${detail.ecole}`,
+                          sous: `${fmtDate(detail.date_rapport)} · ${detail.commune} · ${detail.ief}`,
+                        })}
+                      />
+                    ))}
+                  </div>
+                </Section>
+              )}
 
               {/* Informations générales */}
               <Section title="Informations générales">
