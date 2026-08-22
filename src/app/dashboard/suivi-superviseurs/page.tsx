@@ -3,8 +3,11 @@ import { useEffect, useState, useCallback } from "react";
 import { suiviSuperviseurApi, sessionsApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
+import { Donut, BarList } from "@/components/Charts";
+import { BIButton, BIModal, BIPanel } from "@/components/BIModal";
 
 const PAGE_SIZE = 20;
+const MODAL_PAGE_SIZE = 10;
 
 /* ══ Types ═══════════════════════════════════════════════════════ */
 interface TuteurEnAlerte {
@@ -91,11 +94,16 @@ function SuperviseurModal({
   onClose: () => void;
 }) {
   const [presenceFilter, setPresenceFilter] = useState<"all" | "present" | "en_cours" | "absent">("all");
+  const [modalPage, setModalPage] = useState(1);
 
   const teachers = (detail?.teachers ?? []).filter(t => {
     if (presenceFilter === "all") return true;
     return t.presence_status === presenceFilter;
   });
+
+  useEffect(() => { setModalPage(1); }, [presenceFilter, sup.superviseur_id]);
+
+  const paginatedTeachers = teachers.slice((modalPage - 1) * MODAL_PAGE_SIZE, modalPage * MODAL_PAGE_SIZE);
 
   const counts = detail ? {
     present:  detail.teachers.filter(t => t.presence_status === "present").length,
@@ -209,7 +217,7 @@ function SuperviseurModal({
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {teachers.map(t => (
+                {paginatedTeachers.map(t => (
                   <tr
                     key={t.teacher_id}
                     className={`transition-colors ${
@@ -283,6 +291,12 @@ function SuperviseurModal({
             </table>
           )}
         </div>
+
+        {!loading && teachers.length > 0 && (
+          <div className="border-t border-border px-6 flex-shrink-0">
+            <Pagination page={modalPage} total={teachers.length} pageSize={MODAL_PAGE_SIZE} onChange={setModalPage} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -297,6 +311,7 @@ export default function SuiviSuperviseurPage() {
   const [loading,      setLoading]      = useState(false);
   const [page,         setPage]         = useState(1);
   const [exporting,    setExporting]    = useState(false);
+  const [showBI,       setShowBI]       = useState(false);
 
   /* Modal */
   const [modalSup,     setModalSup]     = useState<SuperviseurSuivi | null>(null);
@@ -356,9 +371,23 @@ export default function SuiviSuperviseurPage() {
   const totalEnseignants = superviseurs.reduce((a, s) => a + s.total_assignes, 0);
   const totalPresents    = superviseurs.reduce((a, s) => a + s.presents + s.en_cours, 0);
   const totalAbsents     = superviseurs.reduce((a, s) => a + s.absents, 0);
+  const totalSuivi       = totalPresents + totalAbsents;
+  const supsEnAlerte     = superviseurs.filter(s => (s.tuteurs_en_alerte ?? []).length > 0).length;
+
+  const supsByCouverture = superviseurs
+    .slice()
+    .sort((a, b) => b.total_assignes - a.total_assignes)
+    .slice(0, 8)
+    .map(s => ({ label: s.name, value: s.total_assignes }));
+
+  const supsAbsentsTop = superviseurs
+    .filter(s => s.absents > 0)
+    .sort((a, b) => b.absents - a.absents)
+    .slice(0, 8)
+    .map(s => ({ label: s.name, value: s.absents }));
 
   return (
-    <div className="flex flex-col min-h-full px-7 pb-7">
+    <div className="flex flex-col min-h-full flex-shrink-0 px-7 pb-7">
 
       {/* ── En-tête ── */}
       <div className="sticky top-0 z-10 bg-bg pt-7 pb-4 mb-6 border-b border-border">
@@ -369,14 +398,17 @@ export default function SuiviSuperviseurPage() {
               Vue d'ensemble des superviseurs et de la présence de leurs enseignants
             </p>
           </div>
-          <button
-            onClick={handleExport}
-            disabled={exporting}
-            className="flex items-center gap-2 border border-border bg-surface text-tx px-3.5 py-2.5 rounded-xl text-sm font-semibold hover:bg-surface-alt transition-colors disabled:opacity-60 flex-shrink-0"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-            {exporting ? "Export…" : "Exporter CSV"}
-          </button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <BIButton onClick={() => setShowBI(true)} />
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              className="flex items-center gap-2 border border-border bg-surface text-tx px-3.5 py-2.5 rounded-xl text-sm font-semibold hover:bg-surface-alt transition-colors disabled:opacity-60"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+              {exporting ? "Export…" : "Exporter CSV"}
+            </button>
+          </div>
         </div>
 
         {/* Barre de contrôle */}
@@ -430,7 +462,7 @@ export default function SuiviSuperviseurPage() {
       </div>
 
       {/* ── Tableau ── */}
-      <div className="bg-surface border border-border rounded-2xl overflow-hidden flex-1">
+      <div className="bg-surface border border-border rounded-2xl overflow-hidden">
 
         {/* Header colonnes */}
         <div className="grid grid-cols-[2fr_1.5fr_1fr_1fr_1fr_80px] gap-x-4 px-5 py-3 bg-surface-alt border-b border-border text-xs font-semibold text-tx-muted uppercase tracking-wide">
@@ -543,6 +575,46 @@ export default function SuiviSuperviseurPage() {
           detail={modalDetail}
           loading={modalLoading}
           onClose={() => { setModalSup(null); setModalDetail(null); }}
+        />
+      )}
+
+      {/* ══ Modal BI ══ */}
+      {showBI && (
+        <BIModal
+          title="Analyse BI — Suivi des superviseurs"
+          subtitle={`${superviseurs.length} superviseur${superviseurs.length !== 1 ? "s" : ""} suivi${superviseurs.length !== 1 ? "s" : ""}`}
+          onClose={() => setShowBI(false)}
+          kpis={[
+            { label: "Superviseurs", value: superviseurs.length },
+            { label: "Enseignants assignés", value: totalEnseignants, color: "text-tx" },
+            { label: "Présents", value: totalPresents, color: "text-success" },
+            { label: "Absents", value: totalAbsents, color: "text-danger" },
+            { label: "Taux de présence", value: totalSuivi > 0 ? `${Math.round((totalPresents / totalSuivi) * 100)}%` : "—", color: "text-brand" },
+            { label: "Superviseurs en alerte", value: supsEnAlerte, color: "text-warn" },
+          ]}
+          tabs={[
+            {
+              id: "overview",
+              label: "Vue d'ensemble",
+              content: (
+                <div className="grid grid-cols-3 gap-4">
+                  <BIPanel title="Présence globale des enseignants">
+                    <Donut
+                      color="#2F7D4A"
+                      pct={totalSuivi > 0 ? Math.round((totalPresents / totalSuivi) * 100) : 0}
+                      legende={`${totalPresents} présents · ${totalAbsents} absents`}
+                    />
+                  </BIPanel>
+                  <BIPanel title="Couverture par superviseur" sub="enseignants assignés, top 8">
+                    <BarList color="#4A90C2" data={supsByCouverture} />
+                  </BIPanel>
+                  <BIPanel title="Superviseurs avec le plus d'absents" sub="top 8">
+                    <BarList color="#B23A3A" data={supsAbsentsTop} />
+                  </BIPanel>
+                </div>
+              ),
+            },
+          ]}
         />
       )}
     </div>

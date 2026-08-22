@@ -18,7 +18,25 @@ const FEATURE_LABELS: Record<string, string> = {
   difficultes: "Difficultés",
   remarques: "Remarques",
   profil: "Profil",
+  timer_start: "Timer — Démarrage",
+  timer_pause: "Timer — Pause",
+  timer_resume: "Timer — Reprise",
+  timer_stop: "Timer — Arrêt",
 };
+
+const TIMER_BADGE: Record<string, string> = {
+  timer_start:  "bg-success-soft text-success",
+  timer_pause:  "bg-warn-soft text-warn",
+  timer_resume: "bg-primary-soft text-primary",
+  timer_stop:   "bg-danger-soft text-danger",
+};
+
+function fmtDuration(seconds: number | null | undefined) {
+  if (seconds == null) return "—";
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}m ${String(s).padStart(2, "0")}s`;
+}
 
 const ROLE_LABELS: Record<string, string> = {
   enseignant: "Tuteur",
@@ -29,7 +47,11 @@ interface LogItem {
   id: string;
   user_name: string;
   user_role: string;
+  user_code?: string | null;
   feature: string;
+  seance_id?: string | null;
+  duration_seconds?: number | null;
+  seance_auto_closed?: boolean | null;
   created_at: string;
 }
 
@@ -92,7 +114,7 @@ export default function LogsUtilisationPage() {
   const maxCount = Math.max(1, ...(stats?.by_feature ?? []).map(f => f.count));
 
   return (
-    <div className="flex flex-col min-h-full px-7 pb-7">
+    <div className="flex flex-col min-h-full flex-shrink-0 px-7 pb-7">
       {/* En-tête */}
       <div className="sticky top-0 z-10 bg-bg flex items-center justify-between pt-7 pb-4 mb-6 border-b border-border">
         <div>
@@ -170,23 +192,39 @@ export default function LogsUtilisationPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-surface-alt">
-              {["Utilisateur", "Rôle", "Fonctionnalité", "Date"].map(h => (
+              {["Utilisateur", "Code acteur", "Rôle", "Fonctionnalité", "Séance", "Durée", "Date"].map(h => (
                 <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {logs.length === 0 ? (
-              <tr><td colSpan={4} className="px-5 py-10 text-center text-tx-muted">Aucun événement.</td></tr>
+              <tr><td colSpan={7} className="px-5 py-10 text-center text-tx-muted">Aucun événement.</td></tr>
             ) : logs.map((l, i) => (
               <tr key={l.id} className={`border-t border-border ${i % 2 !== 0 ? "bg-surface-alt/40" : ""}`}>
                 <td className="px-5 py-3 font-medium text-tx">{l.user_name}</td>
+                <td className="px-5 py-3 text-tx-muted font-mono text-xs">{l.user_code || "—"}</td>
                 <td className="px-5 py-3">
                   <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${l.user_role === "superviseur" ? "bg-primary-soft text-primary" : "bg-brand-soft text-brand"}`}>
                     {ROLE_LABELS[l.user_role] ?? l.user_role}
                   </span>
                 </td>
-                <td className="px-5 py-3 text-tx">{FEATURE_LABELS[l.feature] ?? l.feature}</td>
+                <td className="px-5 py-3 text-tx">
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${TIMER_BADGE[l.feature] ?? "bg-surface-alt text-tx-muted"}`}>
+                    {FEATURE_LABELS[l.feature] ?? l.feature}
+                  </span>
+                  {l.seance_auto_closed && (
+                    <span className="ml-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-danger-soft text-danger" title="Séance restée ouverte plus de 4h, clôturée automatiquement">
+                      Non clôturée
+                    </span>
+                  )}
+                </td>
+                <td className="px-5 py-3 text-tx-muted font-mono text-[11px]">
+                  {l.seance_id ? l.seance_id.slice(0, 8) : "—"}
+                </td>
+                <td className="px-5 py-3 text-tx-muted font-mono text-xs">
+                  {fmtDuration(l.duration_seconds)}
+                </td>
                 <td className="px-5 py-3 text-tx-muted font-mono text-xs">
                   {new Date(l.created_at).toLocaleString("fr-FR")}
                 </td>

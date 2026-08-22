@@ -427,11 +427,13 @@ export const evaluationDocsApi = {
     langue: string; titre: string;
     lettres: string[]; syllabes: string[]; mots: string[]; operations: string[];
     is_active: boolean;
+    semaine_debut?: number | null; semaine_fin?: number | null;
   })                                  => api.post("/admin/evaluation-docs", d),
   update: (id: string, d: Partial<{
     langue: string; titre: string;
     lettres: string[]; syllabes: string[]; mots: string[]; operations: string[];
     is_active: boolean;
+    semaine_debut: number | null; semaine_fin: number | null; clear_semaines: boolean;
   }>)                                 => api.patch(`/admin/evaluation-docs/${id}`, d),
   delete: (id: string)                => api.delete(`/admin/evaluation-docs/${id}`),
   upload: (file: File)                => {

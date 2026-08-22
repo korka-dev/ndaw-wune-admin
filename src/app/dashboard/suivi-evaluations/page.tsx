@@ -1,6 +1,13 @@
 "use client";
 import { useEffect, useState, useMemo } from "react";
-import { suiviEvaluationsApi, evaluationCompetencesApi } from "@/lib/api";
+import { suiviEvaluationsApi, evaluationCompetencesApi, dashboardApi } from "@/lib/api";
+import Pagination from "@/components/Pagination";
+import { Donut, BarList, LineChart } from "@/components/Charts";
+import { BIButton, BIModal, BIPanel } from "@/components/BIModal";
+
+const PAGE_SIZE_L1 = 20;
+const PAGE_SIZE_L2 = 12;
+const PAGE_SIZE_L3 = 15;
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface EvaluationItem {
@@ -232,6 +239,22 @@ export default function SuiviEvaluationsPage() {
   // Modal détail
   const [detail, setDetail] = useState<EvaluationItem | null>(null);
 
+  // Pagination par niveau
+  const [pageL1, setPageL1] = useState(1);
+  const [pageL2, setPageL2] = useState(1);
+  const [pageL3, setPageL3] = useState(1);
+
+  // BI
+  const [showBI, setShowBI] = useState(false);
+  const [biStats, setBiStats] = useState<any>(null);
+  const [biLoading, setBiLoading] = useState(false);
+  const loadBI = () => {
+    setShowBI(true);
+    if (biStats) return;
+    setBiLoading(true);
+    dashboardApi.stats().then(r => setBiStats(r.data)).catch(() => {}).finally(() => setBiLoading(false));
+  };
+
   // Libellés des compétences (configurées par l'admin), pour affichage lisible
   const [competenceLabels, setCompetenceLabels] = useState<Record<string, string>>({});
   useEffect(() => {
@@ -342,6 +365,14 @@ export default function SuiviEvaluationsPage() {
     );
   }, [students, searchL3]);
 
+  useEffect(() => { setPageL1(1); }, [searchL1]);
+  useEffect(() => { setPageL2(1); }, [searchL2, activeSup]);
+  useEffect(() => { setPageL3(1); }, [searchL3, activeSchool]);
+
+  const paginatedSuperviseurs = filteredSuperviseurs.slice((pageL1 - 1) * PAGE_SIZE_L1, pageL1 * PAGE_SIZE_L1);
+  const paginatedSchools      = filteredSchools.slice((pageL2 - 1) * PAGE_SIZE_L2, pageL2 * PAGE_SIZE_L2);
+  const paginatedStudents     = filteredStudents.slice((pageL3 - 1) * PAGE_SIZE_L3, pageL3 * PAGE_SIZE_L3);
+
   // Totaux contextuels pour le sous-titre
   const supStats    = useMemo(() => computeStats(supEvals), [supEvals]);
   const schoolStats = useMemo(() => {
@@ -351,7 +382,7 @@ export default function SuiviEvaluationsPage() {
 
   // ── Rendu ──────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col min-h-full px-7 pb-8">
+    <div className="flex flex-col min-h-full flex-shrink-0 px-7 pb-8">
 
       {/* ── En-tête sticky ──────────────────────────────────────────────────── */}
       <div className="sticky top-0 z-10 bg-bg pt-7 pb-4 mb-6 border-b border-border">
@@ -401,17 +432,20 @@ export default function SuiviEvaluationsPage() {
             </p>
           </div>
 
-          {level !== "supervisors" && (
-            <button
-              onClick={() => goTo(level === "students" ? "schools" : "supervisors")}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-border text-sm text-tx-muted hover:bg-surface-alt transition-colors flex-shrink-0"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <path d="M19 12H5M12 5l-7 7 7 7"/>
-              </svg>
-              {level === "students" ? "Retour aux écoles" : "Retour aux superviseurs"}
-            </button>
-          )}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <BIButton onClick={loadBI} />
+            {level !== "supervisors" && (
+              <button
+                onClick={() => goTo(level === "students" ? "schools" : "supervisors")}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-border text-sm text-tx-muted hover:bg-surface-alt transition-colors"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M19 12H5M12 5l-7 7 7 7"/>
+                </svg>
+                {level === "students" ? "Retour aux écoles" : "Retour aux superviseurs"}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -456,7 +490,7 @@ export default function SuiviEvaluationsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredSuperviseurs.map((sup, i) => {
+                  {paginatedSuperviseurs.map((sup, i) => {
                     const sansSupervision = sup.evaluations_semaine === 0;
                     return (
                       <tr
@@ -499,6 +533,9 @@ export default function SuiviEvaluationsPage() {
                 </tbody>
               </table>
             </div>
+            <div className="border-t border-border px-5">
+              <Pagination page={pageL1} total={filteredSuperviseurs.length} pageSize={PAGE_SIZE_L1} onChange={setPageL1} />
+            </div>
           </div>
             )}
           </>
@@ -532,8 +569,9 @@ export default function SuiviEvaluationsPage() {
                 </div>
               </div>
             ) : (
+          <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredSchools.map(school => (
+            {paginatedSchools.map(school => (
               <button
                 key={school.name}
                 onClick={() => { setActiveSchool(school.name); setLevel("students"); }}
@@ -564,6 +602,10 @@ export default function SuiviEvaluationsPage() {
               </button>
             ))}
           </div>
+          <div className="mt-2">
+            <Pagination page={pageL2} total={filteredSchools.length} pageSize={PAGE_SIZE_L2} onChange={setPageL2} />
+          </div>
+          </>
             )}
           </>
         )
@@ -595,8 +637,9 @@ export default function SuiviEvaluationsPage() {
                 </div>
               </div>
             ) : (
+          <>
           <div className="flex flex-col gap-3">
-            {filteredStudents.map(student => {
+            {paginatedStudents.map(student => {
               const stats = computeStats(student.evals);
               const ini   = initials(student.eleve);
               return (
@@ -662,6 +705,10 @@ export default function SuiviEvaluationsPage() {
               );
             })}
           </div>
+          <div className="mt-2">
+            <Pagination page={pageL3} total={filteredStudents.length} pageSize={PAGE_SIZE_L3} onChange={setPageL3} />
+          </div>
+          </>
             )}
           </>
         )
@@ -753,6 +800,86 @@ export default function SuiviEvaluationsPage() {
             })()}
           </div>
         </div>
+      )}
+
+      {/* ── Modal BI ── */}
+      {showBI && (
+        <BIModal
+          title="Analyse BI — Suivi des évaluations"
+          subtitle={biStats ? `${(biStats.evaluations_total ?? 0).toLocaleString("fr-FR")} évaluations · ${biStats.evaluations_coverage_pct ?? 0}% des élèves couverts` : undefined}
+          onClose={() => setShowBI(false)}
+          kpis={biStats ? [
+            { label: "Évaluations", value: (biStats.evaluations_total ?? 0).toLocaleString("fr-FR") },
+            { label: "Couverture élèves", value: `${biStats.evaluations_coverage_pct ?? 0}%`, color: "text-brand" },
+            { label: "Superviseurs actifs", value: biStats.superviseurs_actifs_semaine ?? 0, sub: "cette semaine", color: "text-success" },
+            { label: "Superviseurs", value: superviseurs.length },
+            { label: "Sans supervision", value: superviseurs.filter(s => s.evaluations_semaine === 0).length, color: "text-warn" },
+          ] : []}
+          tabs={[
+            {
+              id: "overview",
+              label: "Vue d'ensemble",
+              content: biLoading ? (
+                <div className="flex items-center justify-center py-20 text-sm text-tx-muted">Chargement…</div>
+              ) : !biStats ? (
+                <div className="flex items-center justify-center py-20 text-sm text-tx-muted">Aucune donnée disponible.</div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-3 gap-4">
+                    <BIPanel title="Évaluations par semaine" sub="8 dernières semaines" className="col-span-2">
+                      {(biStats.evaluations_by_week ?? []).some((p: any) => p.value > 0)
+                        ? <LineChart data={biStats.evaluations_by_week ?? []} color="#7B4F9E" />
+                        : <div className="flex items-center justify-center h-24 text-xs text-tx-muted">Aucune évaluation enregistrée</div>
+                      }
+                    </BIPanel>
+                    <BIPanel title="Résultats globaux">
+                      <Donut
+                        color="#2F7D4A"
+                        pct={(() => {
+                          const rows: { label: string; value: number }[] = biStats.evaluations_by_resultat ?? [];
+                          const total = rows.reduce((a, r) => a + r.value, 0);
+                          const acquis = rows.find(r => r.label === "acquis")?.value ?? 0;
+                          return total > 0 ? Math.round((acquis / total) * 100) : 0;
+                        })()}
+                        legende="acquis sur le total des évaluations"
+                      />
+                    </BIPanel>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <BIPanel title="Compétences à renforcer" sub="résultats « à aider », top 6">
+                      {(biStats.evaluations_a_aider_by_competence ?? []).length > 0
+                        ? <BarList color="#B23A3A" data={biStats.evaluations_a_aider_by_competence} />
+                        : <p className="text-xs text-tx-muted text-center py-4">Aucune donnée</p>
+                      }
+                    </BIPanel>
+                    <BIPanel title="Activité des superviseurs" sub="les moins actifs cette semaine en premier">
+                      {(biStats.superviseurs_eval_activity ?? []).length > 0 ? (
+                        <div className="space-y-2">
+                          {(biStats.superviseurs_eval_activity ?? []).map((sup: any) => {
+                            const statut = sup.jours_depuis_dernier === null
+                              ? { label: "Jamais évalué", cls: "bg-danger-soft text-danger border-danger/20" }
+                              : sup.evaluations_semaine === 0
+                              ? { label: `Inactif · ${sup.jours_depuis_dernier}j`, cls: "bg-warn-soft text-warn border-warn/20" }
+                              : { label: "Actif", cls: "bg-success-soft text-success border-success/20" };
+                            return (
+                              <div key={sup.name} className="flex items-center justify-between gap-3 text-xs py-1.5 border-b border-border/50 last:border-0">
+                                <span className="font-medium text-tx truncate flex-1">{sup.name}</span>
+                                <span className="text-tx-muted whitespace-nowrap">{sup.total} au total</span>
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border whitespace-nowrap ${statut.cls}`}>
+                                  {statut.label}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : <p className="text-xs text-tx-muted text-center py-4">Aucun superviseur</p>}
+                    </BIPanel>
+                  </div>
+                </>
+              ),
+            },
+          ]}
+        />
       )}
     </div>
   );

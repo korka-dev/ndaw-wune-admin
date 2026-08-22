@@ -8,15 +8,17 @@ const LANGUES = ["Seereer", "Pulaar", "Wolof"] as const;
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface EvalDoc {
-  id:         string;
-  langue:     string;
-  titre:      string;
-  lettres:    string[];
-  syllabes:   string[];
-  mots:       string[];
-  operations: string[];
-  is_active:  boolean;
-  created_at: string;
+  id:            string;
+  langue:        string;
+  titre:         string;
+  lettres:       string[];
+  syllabes:      string[];
+  mots:          string[];
+  operations:    string[];
+  is_active:     boolean;
+  semaine_debut: number | null;
+  semaine_fin:   number | null;
+  created_at:    string;
 }
 
 // ── Helper : édition d'une liste de tokens ─────────────────────────────────
@@ -65,14 +67,27 @@ function DocModal({
   const [mots,       setMots]       = useState<string[]>(editing?.mots       ?? []);
   const [operations, setOperations] = useState<string[]>(editing?.operations ?? []);
   const [isActive,   setIsActive]   = useState(editing?.is_active  ?? true);
+  const [semaineDebut, setSemaineDebut] = useState<string>(editing?.semaine_debut != null ? String(editing.semaine_debut) : "");
+  const [semaineFin,   setSemaineFin]   = useState<string>(editing?.semaine_fin   != null ? String(editing.semaine_fin)   : "");
+  const [semaineError, setSemaineError] = useState("");
   const [saving,     setSaving]     = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!langue.trim() || !titre.trim()) return;
+    const debut = semaineDebut ? parseInt(semaineDebut, 10) : null;
+    const fin   = semaineFin   ? parseInt(semaineFin, 10)   : null;
+    if (debut != null && fin != null && fin < debut) {
+      setSemaineError("La semaine de fin doit être supérieure ou égale à la semaine de début.");
+      return;
+    }
+    setSemaineError("");
     setSaving(true);
     try {
-      await onSave({ langue: langue.trim(), titre: titre.trim(), lettres, syllabes, mots, operations, is_active: isActive });
+      await onSave({
+        langue: langue.trim(), titre: titre.trim(), lettres, syllabes, mots, operations, is_active: isActive,
+        semaine_debut: debut, semaine_fin: fin,
+      });
       onClose();
     } catch {
       alert("Erreur lors de l'enregistrement.");
@@ -176,6 +191,42 @@ function DocModal({
             </div>
           </div>
 
+          {/* Plage de semaines */}
+          <div className="border border-border rounded-xl p-4 space-y-2">
+            <div className="flex items-center gap-2 mb-1">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brand">
+                <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              <span className="text-sm font-bold text-tx">Semaines du programme</span>
+            </div>
+            <p className="text-[11px] text-tx-muted/70">
+              Optionnel — restreint ce dossier à une plage de semaines (ex : semaines 1 à 3 pour un niveau plus simple). Laissez vide pour qu'il s'applique à toutes les semaines.
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-semibold text-tx-muted mb-1 block">Semaine de début</label>
+                <input
+                  type="number" min={1} max={52}
+                  value={semaineDebut}
+                  onChange={e => setSemaineDebut(e.target.value)}
+                  placeholder="Ex : 1"
+                  className="w-full px-3 py-2 text-sm bg-bg border border-border rounded-xl text-tx placeholder:text-tx-muted focus:outline-none focus:border-brand/50"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-tx-muted mb-1 block">Semaine de fin</label>
+                <input
+                  type="number" min={1} max={52}
+                  value={semaineFin}
+                  onChange={e => setSemaineFin(e.target.value)}
+                  placeholder="Ex : 3"
+                  className="w-full px-3 py-2 text-sm bg-bg border border-border rounded-xl text-tx placeholder:text-tx-muted focus:outline-none focus:border-brand/50"
+                />
+              </div>
+            </div>
+            {semaineError && <p className="text-xs text-danger">{semaineError}</p>}
+          </div>
+
           {/* Actif */}
           <label className="flex items-center gap-3 cursor-pointer select-none">
             <div
@@ -217,6 +268,7 @@ export default function EvaluationDocsPage() {
   const [toggling,    setToggling]    = useState<string | null>(null);
   const [uploading,   setUploading]   = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [filterSemaine, setFilterSemaine] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchDocs = useCallback(async () => {
@@ -279,6 +331,29 @@ export default function EvaluationDocsPage() {
   const openEdit = (doc: EvalDoc) => { setEditing(doc); setShowForm(true); };
   const openNew  = () => { setEditing(null); setShowForm(true); };
   const closeForm = () => { setShowForm(false); setEditing(null); };
+
+  const semainesDisponibles = Array.from(
+    new Set(
+      docs.flatMap(d => {
+        if (d.semaine_debut == null && d.semaine_fin == null) return [];
+        const from = d.semaine_debut ?? d.semaine_fin!;
+        const to   = d.semaine_fin   ?? d.semaine_debut!;
+        return Array.from({ length: to - from + 1 }, (_, i) => from + i);
+      })
+    )
+  ).sort((a, b) => a - b);
+
+  const filteredDocs = !filterSemaine
+    ? docs
+    : filterSemaine === "toutes"
+    ? docs.filter(d => d.semaine_debut == null && d.semaine_fin == null)
+    : docs.filter(d => {
+        const s = parseInt(filterSemaine, 10);
+        if (d.semaine_debut == null && d.semaine_fin == null) return false;
+        const from = d.semaine_debut ?? d.semaine_fin!;
+        const to   = d.semaine_fin   ?? d.semaine_debut!;
+        return s >= from && s <= to;
+      });
 
   return (
     <div className="p-7">
@@ -346,6 +421,24 @@ export default function EvaluationDocsPage() {
         </div>
       )}
 
+      {/* Filtre par semaine */}
+      {!loading && docs.length > 0 && semainesDisponibles.length > 0 && (
+        <div className="mb-4 flex items-center gap-2">
+          <span className="text-xs font-semibold text-tx-muted">Filtrer par semaine :</span>
+          <select
+            value={filterSemaine}
+            onChange={e => setFilterSemaine(e.target.value)}
+            className="px-3 py-2 text-sm bg-surface border border-border rounded-xl text-tx focus:outline-none focus:border-brand/50 cursor-pointer"
+          >
+            <option value="">Toutes</option>
+            {semainesDisponibles.map(s => (
+              <option key={s} value={s}>Semaine {s}</option>
+            ))}
+            <option value="toutes">Sans semaine assignée</option>
+          </select>
+        </div>
+      )}
+
       {/* Contenu */}
       {loading ? (
         <div className="bg-surface border border-border rounded-2xl p-12 text-center">
@@ -360,9 +453,13 @@ export default function EvaluationDocsPage() {
           <p className="text-tx-muted text-sm font-medium">Aucun dossier d'évaluation</p>
           <p className="text-tx-muted/60 text-xs mt-1">Créez un dossier pour chaque langue utilisée dans le programme.</p>
         </div>
+      ) : filteredDocs.length === 0 ? (
+        <div className="bg-surface border border-border rounded-2xl p-12 text-center">
+          <p className="text-tx-muted text-sm font-medium">Aucun dossier pour ce filtre</p>
+        </div>
       ) : (
         <div className="space-y-3">
-          {docs.map(doc => (
+          {filteredDocs.map(doc => (
             <div
               key={doc.id}
               className={`bg-surface border rounded-2xl p-5 transition-colors group ${doc.is_active ? "border-border hover:border-brand/30" : "border-border/50 opacity-60"}`}
@@ -383,6 +480,15 @@ export default function EvaluationDocsPage() {
                         : "bg-surface-alt text-tx-muted border-border"
                     }`}>
                       {doc.is_active ? "Actif" : "Inactif"}
+                    </span>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full border bg-brand-soft text-brand border-brand/20">
+                      {doc.semaine_debut != null || doc.semaine_fin != null
+                        ? doc.semaine_debut === doc.semaine_fin || doc.semaine_fin == null
+                          ? `Semaine ${doc.semaine_debut ?? doc.semaine_fin}`
+                          : doc.semaine_debut == null
+                          ? `Jusqu'à semaine ${doc.semaine_fin}`
+                          : `Semaines ${doc.semaine_debut}–${doc.semaine_fin}`
+                        : "Toutes les semaines"}
                     </span>
                   </div>
 

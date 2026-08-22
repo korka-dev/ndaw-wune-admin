@@ -4,7 +4,8 @@ import { teachersApi, schoolsApi, exportApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 import ExportModal from "@/components/ExportModal";
-import { Carte, Donut } from "@/components/Charts";
+import { Donut, BarList } from "@/components/Charts";
+import { BIButton, BIModal, BIPanel, KpiCard } from "@/components/BIModal";
 
 type ReimportResult = { updated: number; created: number; skipped: number; errors: string[] };
 
@@ -77,6 +78,7 @@ export default function TeachersPage() {
   const [reimportLoading, setReimportLoading] = useState(false);
   const [reimportResult, setReimportResult] = useState<ReimportResult | null>(null);
   const [reimportError, setReimportError] = useState<string | null>(null);
+  const [showBI, setShowBI] = useState(false);
   const reimportRef = useRef<HTMLInputElement>(null);
 
   const load = () => {
@@ -90,6 +92,22 @@ export default function TeachersPage() {
   // Valeurs uniques pour les filtres IEF et Classe
   const allIefs    = Array.from(new Set(teachers.map(t => t.school?.region).filter(Boolean))).sort() as string[];
   const allClasses = Array.from(new Set(teachers.flatMap(t => t.classes ?? []))).sort();
+
+  const teachersBySchool = Object.entries(
+    teachers.reduce<Record<string, number>>((acc, t) => {
+      const k = t.school?.name?.trim() || "Non renseignée";
+      acc[k] = (acc[k] ?? 0) + 1;
+      return acc;
+    }, {})
+  ).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 8);
+
+  const teachersByIef = Object.entries(
+    teachers.reduce<Record<string, number>>((acc, t) => {
+      const k = t.school?.region?.trim() || "Non renseigné";
+      acc[k] = (acc[k] ?? 0) + 1;
+      return acc;
+    }, {})
+  ).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
 
   const hasFilters = !!(search || filterSchool || filterIef || filterClasse || filterStatus);
   const filtered = teachers.filter(t => {
@@ -195,7 +213,7 @@ export default function TeachersPage() {
     ? (modal as { kind: string; teacher: Teacher }).teacher : null;
 
   return (
-    <div className="flex flex-col min-h-full px-7 pb-7">
+    <div className="flex flex-col min-h-full flex-shrink-0 px-7 pb-7">
       <div className="sticky top-0 z-10 bg-bg flex items-center justify-between pt-7 pb-4 mb-6 border-b border-border">
         <div>
           <h1 className="text-xl font-bold text-tx">Gestion Enseignants</h1>
@@ -206,6 +224,7 @@ export default function TeachersPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <BIButton onClick={() => setShowBI(true)} />
           {/* Exporter Excel */}
           <button
             onClick={() => setShowExportModal(true)}
@@ -248,16 +267,22 @@ export default function TeachersPage() {
         </div>
       </div>
 
-      {/* Statut — simple aperçu, calculé sur les enseignants déjà chargés */}
+      {/* KPIs — remplace l'ancien anneau de statut */}
       {teachers.length > 0 && (
-        <div className="mb-5 max-w-xs">
-          <Carte titre="Statut des comptes">
-            <Donut
-              color="#2F7D4A"
-              pct={Math.round((teachers.filter(t => t.status === "actif").length / teachers.length) * 100)}
-              legende={`${teachers.filter(t => t.status === "actif").length} actif${teachers.filter(t => t.status === "actif").length !== 1 ? "s" : ""} sur ${teachers.length}`}
-            />
-          </Carte>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+          <KpiCard label="Enseignants" value={teachers.length} color="text-tx" />
+          <KpiCard
+            label="Actifs"
+            value={teachers.filter(t => t.status === "actif").length}
+            sub={`sur ${teachers.length}`}
+            color="text-success"
+          />
+          <KpiCard
+            label="Taux d'activité"
+            value={`${Math.round((teachers.filter(t => t.status === "actif").length / teachers.length) * 100)}%`}
+            color="text-brand"
+          />
+          <KpiCard label="Écoles couvertes" value={new Set(teachers.map(t => t.school_id ?? t.school?.id).filter(Boolean)).size} color="text-purple-600" />
         </div>
       )}
 
@@ -981,6 +1006,44 @@ export default function TeachersPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Modal BI ── */}
+      {showBI && (
+        <BIModal
+          title="Analyse BI — Enseignants"
+          subtitle={`${teachers.length} enseignant${teachers.length !== 1 ? "s" : ""} au total`}
+          onClose={() => setShowBI(false)}
+          kpis={[
+            { label: "Enseignants", value: teachers.length },
+            { label: "Actifs", value: teachers.filter(t => t.status === "actif").length, color: "text-success" },
+            { label: "Taux d'activité", value: `${teachers.length ? Math.round((teachers.filter(t => t.status === "actif").length / teachers.length) * 100) : 0}%`, color: "text-brand" },
+            { label: "Écoles couvertes", value: new Set(teachers.map(t => t.school_id ?? t.school?.id).filter(Boolean)).size, color: "text-purple-600" },
+          ]}
+          tabs={[
+            {
+              id: "overview",
+              label: "Vue d'ensemble",
+              content: (
+                <div className="grid grid-cols-3 gap-4">
+                  <BIPanel title="Statut des comptes">
+                    <Donut
+                      color="#2F7D4A"
+                      pct={teachers.length ? Math.round((teachers.filter(t => t.status === "actif").length / teachers.length) * 100) : 0}
+                      legende={`${teachers.filter(t => t.status === "actif").length} actifs sur ${teachers.length}`}
+                    />
+                  </BIPanel>
+                  <BIPanel title="Enseignants par école" sub="top 8">
+                    <BarList color="#4A90C2" data={teachersBySchool} />
+                  </BIPanel>
+                  <BIPanel title="Enseignants par IEF">
+                    <BarList color="#7B4F9E" data={teachersByIef} />
+                  </BIPanel>
+                </div>
+              ),
+            },
+          ]}
+        />
       )}
     </div>
   );

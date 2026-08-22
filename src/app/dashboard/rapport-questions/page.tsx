@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef, forwardRef, useImperativeHandle } from "react";
 import {
   rapportQuestionsApi,
   rapportDifficultesApi,
@@ -70,6 +70,10 @@ type Difficulte = {
   ordre: number;
 };
 
+export interface ProgressionSectionHandle {
+  openCreate: () => void;
+}
+
 // ── Composant principal ────────────────────────────────────────────────────────
 
 export default function RapportQuestionsPage() {
@@ -82,6 +86,7 @@ export default function RapportQuestionsPage() {
   const [deleting, setDeleting]   = useState(false);
   const [importing, setImporting] = useState(false);
   const [cibleFilter, setCibleFilter] = useState<QuestionCible | "toutes">("toutes");
+  const progressionRef = useRef<ProgressionSectionHandle>(null);
 
   // Formulaire
   const [label, setLabel]       = useState("");
@@ -295,6 +300,15 @@ export default function RapportQuestionsPage() {
             </svg>
             Ajouter une question
           </button>
+          <button
+            onClick={() => progressionRef.current?.openCreate()}
+            className="flex items-center gap-2 px-4 py-2.5 bg-brand text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Ajouter une configuration
+          </button>
         </div>
       </div>
 
@@ -417,7 +431,7 @@ export default function RapportQuestionsPage() {
       )}
 
       {/* Étape 1/4 du rapport journalier : semaines & jours de progression */}
-      <ProgressionSection />
+      <ProgressionSection ref={progressionRef} />
 
       {/* Libellés des champs fixes des rapports */}
       <LibellesSection />
@@ -627,7 +641,7 @@ type SessionLite = { id: string; name: string };
 const DEFAULT_NB_SEMAINES = 10;
 const DEFAULT_NB_JOURS    = 3;
 
-function ProgressionSection() {
+const ProgressionSection = forwardRef<ProgressionSectionHandle>(function ProgressionSection(_props, ref) {
   const [items, setItems]       = useState<ProgressionConfig[]>([]);
   const [schools, setSchools]   = useState<SchoolLite[]>([]);
   const [sessions, setSessions] = useState<SessionLite[]>([]);
@@ -679,6 +693,8 @@ function ProgressionSection() {
     setNbSemaines(String(DEFAULT_NB_SEMAINES)); setNbJours(String(DEFAULT_NB_JOURS));
     setShowForm(true);
   };
+
+  useImperativeHandle(ref, () => ({ openCreate }));
 
   const openEdit = (c: ProgressionConfig) => {
     setEditing(c);
@@ -736,24 +752,13 @@ function ProgressionSection() {
 
   return (
     <div className="mt-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-lg font-bold text-tx mb-0.5">Semaines &amp; jours de progression</h2>
-          <p className="text-tx-muted text-sm">
-            Étape 1 du rapport journalier du tuteur : nombre de semaines proposées dans la grille et
-            nombre de jours de cours. Configurable par école et/ou par session — sans configuration,
-            l&apos;app utilise {DEFAULT_NB_SEMAINES} semaines et {DEFAULT_NB_JOURS} jours.
-          </p>
-        </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2.5 bg-brand text-white rounded-xl text-sm font-semibold hover:opacity-90 transition-opacity flex-shrink-0"
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          Ajouter une configuration
-        </button>
+      <div className="mb-6">
+        <h2 className="text-lg font-bold text-tx mb-0.5">Semaines &amp; jours de progression</h2>
+        <p className="text-tx-muted text-sm">
+          Étape 1 du rapport journalier du tuteur : nombre de semaines proposées dans la grille et
+          nombre de jours de cours. Configurable par école et/ou par session — sans configuration,
+          l&apos;app utilise {DEFAULT_NB_SEMAINES} semaines et {DEFAULT_NB_JOURS} jours.
+        </p>
       </div>
 
       {loading ? (
@@ -951,7 +956,8 @@ function ProgressionSection() {
       )}
     </div>
   );
-}
+});
+ProgressionSection.displayName = "ProgressionSection";
 
 // ── Section : Libellés des champs fixes des rapports ───────────────────────────
 // Contrairement aux questions complémentaires, l'ensemble des clés est fixe

@@ -4,7 +4,8 @@ import { elevesApi, schoolsApi, sessionsApi, classesApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 import ExportModal from "@/components/ExportModal";
-import { Carte, Donut } from "@/components/Charts";
+import { Donut, BarList } from "@/components/Charts";
+import { BIButton, BIModal, BIPanel, KpiCard } from "@/components/BIModal";
 
 const PAGE_SIZE = 50;
 
@@ -241,6 +242,7 @@ export default function ElevesPage() {
   const [reimportLoading, setReimportLoading] = useState(false);
   const [reimportResult, setReimportResult] = useState<ReimportResult | null>(null);
   const [reimportError, setReimportError] = useState<string | null>(null);
+  const [showBI, setShowBI] = useState(false);
   const reimportRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
   const [filterSchool, setFilterSchool] = useState("");
@@ -278,6 +280,22 @@ export default function ElevesPage() {
   // Listes dérivées filtrées par IEF
   const iefs = [...new Set(schools.map(s => s.region).filter(Boolean))].sort() as string[];
   const schoolsByIef = filterIef ? schools.filter(s => s.region === filterIef) : schools;
+
+  const elevesByClasse = Object.entries(
+    eleves.reduce<Record<string, number>>((acc, e) => {
+      const k = e.classe?.trim() || "Non renseignée";
+      acc[k] = (acc[k] ?? 0) + 1;
+      return acc;
+    }, {})
+  ).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 8);
+
+  const elevesByEcole = Object.entries(
+    eleves.reduce<Record<string, number>>((acc, e) => {
+      const k = e.school_name?.trim() || "Non renseignée";
+      acc[k] = (acc[k] ?? 0) + 1;
+      return acc;
+    }, {})
+  ).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 8);
 
   const hasFilters = !!(search || filterSchool || filterClasse || filterSession || filterSexe || filterIef);
 
@@ -440,7 +458,7 @@ export default function ElevesPage() {
   };
 
   return (
-    <div className="flex flex-col h-full px-7 pb-7">
+    <div className="flex flex-col h-full flex-shrink-0 px-7 pb-7">
       {/* ── Header ── */}
       <div className="sticky top-0 z-10 bg-bg flex items-center justify-between pt-7 pb-4 mb-6 border-b border-border">
         <div>
@@ -452,6 +470,7 @@ export default function ElevesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <BIButton onClick={() => setShowBI(true)} />
           <input ref={reimportRef} type="file" accept=".xlsx" className="hidden" onChange={handleReiimport} />
           <button
             onClick={() => reimportRef.current?.click()}
@@ -483,29 +502,14 @@ export default function ElevesPage() {
         </div>
       </div>
 
-      {/* Répartition par genre + par type — simple aperçu, calculé sur les élèves déjà chargés */}
+      {/* KPIs — remplace les anciens anneaux de genre et de statut */}
       {eleves.length > 0 && (
-        <div className="mb-5 flex gap-5 flex-wrap">
-          <div className="max-w-xs">
-            <Carte titre="Répartition par genre">
-              <Donut
-                color="#C08A3E"
-                pct={Math.round((eleves.filter(e => e.genre === "Fille").length / eleves.length) * 100)}
-                legende={`${eleves.filter(e => e.genre === "Fille").length} filles · ${eleves.filter(e => e.genre === "Garçon").length} garçons`}
-              />
-            </Carte>
-          </div>
-          <div className="max-w-xs">
-            <Carte titre="Titulaires / Remplaçants">
-              <Donut
-                color="#4A90C2"
-                pct={Math.round(
-                  (eleves.filter(e => e.statut_selection === "Titulaire").length / eleves.length) * 100
-                )}
-                legende={`${eleves.filter(e => e.statut_selection === "Titulaire").length} titulaires · ${eleves.filter(e => e.statut_selection === "Remplaçant").length} remplaçants`}
-              />
-            </Carte>
-          </div>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-5">
+          <KpiCard label="Élèves" value={eleves.length} color="text-tx" />
+          <KpiCard label="Filles" value={eleves.filter(e => e.genre === "Fille").length} color="text-warn" />
+          <KpiCard label="Garçons" value={eleves.filter(e => e.genre === "Garçon").length} color="text-primary" />
+          <KpiCard label="Titulaires" value={eleves.filter(e => e.statut_selection === "Titulaire").length} color="text-success" />
+          <KpiCard label="Remplaçants" value={eleves.filter(e => e.statut_selection === "Remplaçant").length} color="text-danger" />
         </div>
       )}
 
@@ -903,6 +907,60 @@ export default function ElevesPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Modal BI ── */}
+      {showBI && (
+        <BIModal
+          title="Analyse BI — Élèves"
+          subtitle={`${eleves.length} élève${eleves.length !== 1 ? "s" : ""} au total`}
+          onClose={() => setShowBI(false)}
+          kpis={[
+            { label: "Élèves", value: eleves.length },
+            { label: "Filles", value: eleves.filter(e => e.genre === "Fille").length, color: "text-warn" },
+            { label: "Garçons", value: eleves.filter(e => e.genre === "Garçon").length, color: "text-primary" },
+            { label: "Titulaires", value: eleves.filter(e => e.statut_selection === "Titulaire").length, color: "text-success" },
+            { label: "Remplaçants", value: eleves.filter(e => e.statut_selection === "Remplaçant").length, color: "text-danger" },
+          ]}
+          tabs={[
+            {
+              id: "profil",
+              label: "Profil",
+              content: (
+                <div className="grid grid-cols-2 gap-4">
+                  <BIPanel title="Répartition par genre">
+                    <Donut
+                      color="#C08A3E"
+                      pct={eleves.length ? Math.round((eleves.filter(e => e.genre === "Fille").length / eleves.length) * 100) : 0}
+                      legende={`${eleves.filter(e => e.genre === "Fille").length} filles · ${eleves.filter(e => e.genre === "Garçon").length} garçons`}
+                    />
+                  </BIPanel>
+                  <BIPanel title="Titulaires / Remplaçants">
+                    <Donut
+                      color="#4A90C2"
+                      pct={eleves.length ? Math.round((eleves.filter(e => e.statut_selection === "Titulaire").length / eleves.length) * 100) : 0}
+                      legende={`${eleves.filter(e => e.statut_selection === "Titulaire").length} titulaires · ${eleves.filter(e => e.statut_selection === "Remplaçant").length} remplaçants`}
+                    />
+                  </BIPanel>
+                </div>
+              ),
+            },
+            {
+              id: "repartition",
+              label: "Répartition",
+              content: (
+                <div className="grid grid-cols-2 gap-4">
+                  <BIPanel title="Élèves par classe" sub="top 8">
+                    <BarList color="#7B4F9E" data={elevesByClasse} />
+                  </BIPanel>
+                  <BIPanel title="Élèves par école" sub="top 8">
+                    <BarList color="#2F7D4A" data={elevesByEcole} />
+                  </BIPanel>
+                </div>
+              ),
+            },
+          ]}
+        />
       )}
     </div>
   );

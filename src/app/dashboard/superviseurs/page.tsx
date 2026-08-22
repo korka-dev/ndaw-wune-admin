@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { superviseursApi, schoolsApi, teachersApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
-import { Carte, Donut } from "@/components/Charts";
+import { Donut, BarList } from "@/components/Charts";
+import { BIButton, BIModal, BIPanel, KpiCard } from "@/components/BIModal";
 
 const PAGE_SIZE = 50;
 
@@ -52,6 +53,7 @@ export default function SuperviseursPage() {
   const [dataError, setDataError] = useState<string | null>(null);
   const [exporting, setExporting] = useState<"csv" | "xlsx" | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
+  const [showBI, setShowBI] = useState(false);
 
   /* auto-focus premier champ à l'ouverture du modal */
   const firstFieldRef = useRef<HTMLInputElement>(null);
@@ -205,12 +207,20 @@ export default function SuperviseursPage() {
   };
   const closeModal = () => setModal(null);
 
+  const supsBySchool = Object.entries(
+    sups.reduce<Record<string, number>>((acc, s) => {
+      const k = schoolName(s);
+      acc[k] = (acc[k] ?? 0) + 1;
+      return acc;
+    }, {})
+  ).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 8);
+
   const isFormOpen = modal === "create" || (modal !== null && typeof modal === "object" && (modal as any).kind === "edit");
   const formTitle = modal === "create" ? "Nouveau superviseur" : "Modifier le superviseur";
   const managedSup = modal && typeof modal === "object" && (modal as any).kind === "manage" ? (modal as any).sup as Superviseur : null;
 
   return (
-    <div className="flex flex-col min-h-full px-7 pb-7">
+    <div className="flex flex-col min-h-full flex-shrink-0 px-7 pb-7">
 
       {/* ── Header ── */}
       <div className="sticky top-0 z-10 bg-bg flex items-center justify-between pt-7 pb-4 mb-6 border-b border-border">
@@ -223,6 +233,7 @@ export default function SuperviseursPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <BIButton onClick={() => setShowBI(true)} />
           {/* Export — bouton unique avec dropdown */}
           <div ref={exportRef} className="relative">
             <button
@@ -278,21 +289,29 @@ export default function SuperviseursPage() {
         </div>
       </div>
 
-      {/* Couverture — combien de superviseurs ont au moins un enseignant
-          assigné. C'est un point de vigilance connu du projet (cf. CLAUDE.md
-          §2) : le rattachement superviseur → enseignants est saisi à la main
-          et souvent absent. */}
+      {/* KPIs — remplace l'ancien anneau de couverture. Le rattachement
+          superviseur → enseignants est saisi à la main et souvent absent
+          (point de vigilance connu du projet, cf. CLAUDE.md §2). */}
       {sups.length > 0 && (
-        <div className="mb-5 max-w-xs">
-          <Carte titre="Couverture des superviseurs">
-            <Donut
-              color="#2F7D4A"
-              pct={Math.round(
-                (sups.filter(s => (s.classes ?? []).length > 0).length / sups.length) * 100
-              )}
-              legende={`${sups.filter(s => (s.classes ?? []).length > 0).length} avec enseignant(s) sur ${sups.length}`}
-            />
-          </Carte>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+          <KpiCard label="Superviseurs" value={sups.length} color="text-tx" />
+          <KpiCard
+            label="Avec enseignant(s)"
+            value={sups.filter(s => (s.classes ?? []).length > 0).length}
+            sub={`sur ${sups.length}`}
+            color="text-success"
+          />
+          <KpiCard
+            label="Couverture"
+            value={`${Math.round((sups.filter(s => (s.classes ?? []).length > 0).length / sups.length) * 100)}%`}
+            color="text-brand"
+          />
+          <KpiCard
+            label="Actifs"
+            value={sups.filter(s => s.status === "actif").length}
+            sub={`sur ${sups.length}`}
+            color="text-success"
+          />
         </div>
       )}
 
@@ -976,6 +995,50 @@ export default function SuperviseursPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Modal BI ── */}
+      {showBI && (
+        <BIModal
+          title="Analyse BI — Superviseurs"
+          subtitle={`${sups.length} superviseur${sups.length !== 1 ? "s" : ""} au total`}
+          onClose={() => setShowBI(false)}
+          kpis={[
+            { label: "Superviseurs", value: sups.length },
+            { label: "Avec enseignant(s)", value: sups.filter(s => (s.classes ?? []).length > 0).length, color: "text-success" },
+            { label: "Couverture", value: `${sups.length ? Math.round((sups.filter(s => (s.classes ?? []).length > 0).length / sups.length) * 100) : 0}%`, color: "text-brand" },
+            { label: "Actifs", value: sups.filter(s => s.status === "actif").length, color: "text-success" },
+            { label: "Inactifs", value: sups.filter(s => s.status !== "actif").length, color: "text-danger" },
+            { label: "Écoles couvertes", value: new Set(sups.map(s => s.school_id).filter(Boolean)).size, color: "text-purple-600" },
+          ]}
+          tabs={[
+            {
+              id: "overview",
+              label: "Vue d'ensemble",
+              content: (
+                <div className="grid grid-cols-3 gap-4">
+                  <BIPanel title="Couverture des superviseurs" sub="Avec enseignant(s) assigné(s)">
+                    <Donut
+                      color="#2F7D4A"
+                      pct={sups.length ? Math.round((sups.filter(s => (s.classes ?? []).length > 0).length / sups.length) * 100) : 0}
+                      legende={`${sups.filter(s => (s.classes ?? []).length > 0).length} avec enseignant(s) sur ${sups.length}`}
+                    />
+                  </BIPanel>
+                  <BIPanel title="Statut des comptes">
+                    <Donut
+                      color="#4A90C2"
+                      pct={sups.length ? Math.round((sups.filter(s => s.status === "actif").length / sups.length) * 100) : 0}
+                      legende={`${sups.filter(s => s.status === "actif").length} actifs sur ${sups.length}`}
+                    />
+                  </BIPanel>
+                  <BIPanel title="Superviseurs par école" sub="top 8" className="col-span-1">
+                    <BarList color="#7B4F9E" data={supsBySchool} />
+                  </BIPanel>
+                </div>
+              ),
+            },
+          ]}
+        />
       )}
     </div>
   );

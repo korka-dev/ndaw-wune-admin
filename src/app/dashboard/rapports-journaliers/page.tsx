@@ -268,7 +268,7 @@ export default function RapportsJournaliersPage() {
   };
 
   return (
-    <div className="flex flex-col min-h-full px-7 pb-7">
+    <div className="flex flex-col min-h-full flex-shrink-0 px-7 pb-7">
 
       {/* ── En-tête sticky ─────────────────────────────────────────────────── */}
       <div className="sticky top-0 z-10 bg-bg flex items-center justify-between pt-7 pb-4 mb-6 border-b border-border">
@@ -278,70 +278,51 @@ export default function RapportsJournaliersPage() {
             {loading ? "Chargement…" : `${total} rapport${total !== 1 ? "s" : ""} au total`}
           </p>
         </div>
-        <button
-          onClick={() => setShowExportModal(true)}
-          disabled={exporting}
-          className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50"
-        >
-          {exporting ? (
-            <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-            </svg>
-          ) : (
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-          )}
-          {exporting ? "Export…" : "Exporter CSV"}
-        </button>
-      </div>
+        <div className="flex items-center gap-3">
+          {/* Onglets */}
+          <div className="flex items-center gap-1 bg-surface border border-border rounded-xl p-1">
+            {([
+              { key: "liste",  label: "Liste" },
+              { key: "stats",  label: "Statistiques" },
+              { key: "photos", label: "Photos" },
+            ] as const).map(o => (
+              <button
+                key={o.key}
+                onClick={() => setOnglet(o.key)}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                  onglet === o.key ? "bg-brand text-white" : "text-tx-muted hover:bg-surface-alt hover:text-tx"
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
 
-      {/* ── Onglets ─────────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1 bg-surface border border-border rounded-xl p-1 mb-5 w-fit">
-        {([
-          { key: "liste",  label: "Liste" },
-          { key: "stats",  label: "Statistiques" },
-          { key: "photos", label: "Photos" },
-        ] as const).map(o => (
           <button
-            key={o.key}
-            onClick={() => setOnglet(o.key)}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-              onglet === o.key ? "bg-brand text-white" : "text-tx-muted hover:bg-surface-alt hover:text-tx"
-            }`}
+            onClick={() => setShowExportModal(true)}
+            disabled={exporting}
+            className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 flex-shrink-0"
           >
-            {o.label}
+            {exporting ? (
+              <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+              </svg>
+            ) : (
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+            )}
+            {exporting ? "Export…" : "Exporter CSV"}
           </button>
-        ))}
+        </div>
       </div>
 
       {/* ── Filtres ─────────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap gap-3 mb-5">
-        {/* Filtre par rôle de l'auteur (enseignant / superviseur) */}
-        <div className="flex items-center gap-1 bg-surface border border-border rounded-xl p-1">
-          {([
-            { key: "", label: "Tous" },
-            { key: "enseignant", label: "Enseignants" },
-            { key: "superviseur", label: "Superviseurs" },
-          ] as const).map(opt => (
-            <button
-              key={opt.key || "all"}
-              onClick={() => setRoleFilter(opt.key)}
-              className={`px-3.5 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                roleFilter === opt.key
-                  ? "bg-brand text-white"
-                  : "text-tx-muted hover:bg-surface-alt hover:text-tx"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Recherche texte */}
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
+      <div className="flex items-center gap-3 mb-5">
+        {/* Recherche texte — occupe toute la largeur disponible, à gauche */}
+        <div className="relative flex-1">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
             className="absolute left-3.5 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
             <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.35-4.35" />
@@ -363,24 +344,45 @@ export default function RapportsJournaliersPage() {
         {/* Date from */}
         <input
           type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-          className="bg-surface border border-border rounded-xl px-3 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition"
+          className="bg-surface border border-border rounded-xl px-3 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition flex-shrink-0"
         />
 
         {/* Date to */}
         <input
           type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-          className="bg-surface border border-border rounded-xl px-3 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition"
+          className="bg-surface border border-border rounded-xl px-3 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition flex-shrink-0"
         />
 
         {/* Clear filters */}
         {(search || dateFrom || dateTo || roleFilter) && (
           <button
             onClick={() => { setSearch(""); setDebouncedSearch(""); setDateFrom(""); setDateTo(""); setRoleFilter(""); }}
-            className="px-4 py-2.5 rounded-xl text-sm text-tx-muted border border-border hover:bg-surface-alt transition-colors"
+            className="px-4 py-2.5 rounded-xl text-sm text-tx-muted border border-border hover:bg-surface-alt transition-colors flex-shrink-0"
           >
             Effacer filtres
           </button>
         )}
+
+        {/* Filtre par rôle de l'auteur — à droite */}
+        <div className="flex items-center gap-1 bg-surface border border-border rounded-xl p-1 flex-shrink-0">
+          {([
+            { key: "", label: "Tous" },
+            { key: "enseignant", label: "Enseignants" },
+            { key: "superviseur", label: "Superviseurs" },
+          ] as const).map(opt => (
+            <button
+              key={opt.key || "all"}
+              onClick={() => setRoleFilter(opt.key)}
+              className={`px-3.5 py-2 rounded-lg text-sm font-semibold transition-colors whitespace-nowrap ${
+                roleFilter === opt.key
+                  ? "bg-brand text-white"
+                  : "text-tx-muted hover:bg-surface-alt hover:text-tx"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ── Tableau rapports ─────────────────────────────────────────────────── */}

@@ -839,7 +839,7 @@ export default function SuiviSeancesPage() {
   ];
 
   return (
-    <div className="flex flex-col min-h-full px-7 pb-7">
+    <div className="flex flex-col min-h-full flex-shrink-0 px-7 pb-7">
 
       {/* ── En-tête ── */}
       <div className="sticky top-0 z-10 bg-bg pt-7 pb-4 mb-6 border-b border-border">

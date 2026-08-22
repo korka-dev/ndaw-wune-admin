@@ -4,7 +4,8 @@ import { classesApi, schoolsApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 import ExportModal from "@/components/ExportModal";
-import { Carte, BarList } from "@/components/Charts";
+import { BarList } from "@/components/Charts";
+import { BIButton, BIModal, BIPanel, KpiCard } from "@/components/BIModal";
 
 type ReimportResult = { created: number; skipped: number; schools_created: number; errors: string[] };
 
@@ -60,6 +61,7 @@ export default function ClassesPage() {
   const [reimportLoading, setReimportLoading] = useState(false);
   const [reimportResult, setReimportResult] = useState<ReimportResult | null>(null);
   const [reimportError, setReimportError] = useState<string | null>(null);
+  const [showBI, setShowBI] = useState(false);
   const reimportRef = useRef<HTMLInputElement>(null);
 
   const handleReiimport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -122,6 +124,22 @@ export default function ClassesPage() {
   // Grouper pour l'affichage par école
   const schoolMap = Object.fromEntries(schools.map(s => [s.id, s.name]));
 
+  const byNiveau = Object.entries(
+    classes.reduce<Record<string, number>>((acc, c) => {
+      const k = c.niveau?.trim() || "Non renseigné";
+      acc[k] = (acc[k] ?? 0) + 1;
+      return acc;
+    }, {})
+  ).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+
+  const bySchool = Object.entries(
+    classes.reduce<Record<string, number>>((acc, c) => {
+      const k = c.school?.name?.trim() || schoolMap[c.school_id] || "Non renseignée";
+      acc[k] = (acc[k] ?? 0) + 1;
+      return acc;
+    }, {})
+  ).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 8);
+
   const save = async () => {
     setSaveError(null);
     if (!form.name.trim()) { setSaveError("Le nom de la classe est requis."); return; }
@@ -167,7 +185,7 @@ export default function ClassesPage() {
   };
 
   return (
-    <div className="flex flex-col min-h-full px-7 pb-7">
+    <div className="flex flex-col min-h-full flex-shrink-0 px-7 pb-7">
       {/* ── Header ── */}
       <div className="sticky top-0 z-10 bg-bg flex items-center justify-between pt-7 pb-4 mb-6 border-b border-border">
         <div>
@@ -192,6 +210,7 @@ export default function ClassesPage() {
             </svg>
             {exporting ? "Export…" : "Exporter Excel"}
           </button>
+          <BIButton onClick={() => setShowBI(true)} />
           {/* Réimporter */}
           <button
             onClick={() => reimportRef.current?.click()}
@@ -222,23 +241,13 @@ export default function ClassesPage() {
         </div>
       </div>
 
-      {/* Répartition par niveau — simple aperçu, calculé sur les classes déjà chargées */}
+      {/* KPIs — remplace l'ancien graphique en barres affiché par défaut */}
       {classes.length > 0 && (
-        <div className="mb-5 max-w-md">
-          <Carte titre="Classes par niveau">
-            <BarList
-              color="#4A90C2"
-              data={Object.entries(
-                classes.reduce<Record<string, number>>((acc, c) => {
-                  const k = c.niveau?.trim() || "Non renseigné";
-                  acc[k] = (acc[k] ?? 0) + 1;
-                  return acc;
-                }, {})
-              )
-                .map(([label, value]) => ({ label, value }))
-                .sort((a, b) => b.value - a.value)}
-            />
-          </Carte>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+          <KpiCard label="Classes" value={classes.length} color="text-tx" />
+          <KpiCard label="Niveaux" value={byNiveau.length} color="text-success" />
+          <KpiCard label="Écoles avec classes" value={new Set(classes.map(c => c.school_id)).size} color="text-brand" />
+          <KpiCard label="Niveau principal" value={byNiveau[0]?.value ?? 0} sub={byNiveau[0]?.label} color="text-purple-600" />
         </div>
       )}
 
@@ -605,6 +614,36 @@ export default function ClassesPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Modal BI ── */}
+      {showBI && (
+        <BIModal
+          title="Analyse BI — Classes"
+          subtitle={`${classes.length} classe${classes.length !== 1 ? "s" : ""} au total`}
+          onClose={() => setShowBI(false)}
+          kpis={[
+            { label: "Classes", value: classes.length },
+            { label: "Niveaux", value: byNiveau.length, color: "text-success" },
+            { label: "Écoles avec classes", value: new Set(classes.map(c => c.school_id)).size, color: "text-brand" },
+          ]}
+          tabs={[
+            {
+              id: "overview",
+              label: "Vue d'ensemble",
+              content: (
+                <div className="grid grid-cols-2 gap-4">
+                  <BIPanel title="Classes par niveau">
+                    <BarList color="#4A90C2" data={byNiveau} />
+                  </BIPanel>
+                  <BIPanel title="Classes par école" sub="top 8">
+                    <BarList color="#2F7D4A" data={bySchool} />
+                  </BIPanel>
+                </div>
+              ),
+            },
+          ]}
+        />
       )}
     </div>
   );

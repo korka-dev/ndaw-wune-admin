@@ -6,7 +6,8 @@ import Pagination from "@/components/Pagination";
 import { SENEGAL_REGIONS, getCommunesByRegion } from "@/lib/senegal-geo";
 import ExportModal from "@/components/ExportModal";
 import { LANGUES_NATIONALES } from "@/lib/langues";
-import { Carte, BarList } from "@/components/Charts";
+import { BarList } from "@/components/Charts";
+import { BIButton, BIModal, BIPanel, KpiCard } from "@/components/BIModal";
 
 const SCHOOL_EXPORT_FIELDS = [
   { key: "nom",       label: "Nom de l'école" },
@@ -57,6 +58,7 @@ export default function EcolesPage() {
   const [reimportLoading, setReimportLoading] = useState(false);
   const [reimportResult, setReimportResult] = useState<ReimportResult | null>(null);
   const [reimportError, setReimportError] = useState<string | null>(null);
+  const [showBI, setShowBI] = useState(false);
   const reimportRef = useRef<HTMLInputElement>(null);
 
   const load = (isFirstLoad = false) => {
@@ -77,6 +79,30 @@ export default function EcolesPage() {
   const cities = Array.from(
     new Set(schools.map(s => s.city).filter(Boolean))
   ) as string[];
+
+  const byRegion = Object.entries(
+    schools.reduce<Record<string, number>>((acc, s) => {
+      const k = s.region?.trim() || "Non renseigné";
+      acc[k] = (acc[k] ?? 0) + 1;
+      return acc;
+    }, {})
+  ).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+
+  const byCommune = Object.entries(
+    schools.reduce<Record<string, number>>((acc, s) => {
+      const k = s.city?.trim() || "Non renseigné";
+      acc[k] = (acc[k] ?? 0) + 1;
+      return acc;
+    }, {})
+  ).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 8);
+
+  const byLangue = Object.entries(
+    schools.reduce<Record<string, number>>((acc, s) => {
+      const k = s.langue?.trim() || "Non renseignée";
+      acc[k] = (acc[k] ?? 0) + 1;
+      return acc;
+    }, {})
+  ).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
 
   const filtered = schools.filter(s => {
     const matchSearch = [s.name, s.region, s.city, s.director].some(v =>
@@ -180,6 +206,7 @@ export default function EcolesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <BIButton onClick={() => setShowBI(true)} />
           {/* Réimporter */}
           <input ref={reimportRef} type="file" accept=".xlsx" className="hidden" onChange={handleReiimport} />
           <button
@@ -216,24 +243,13 @@ export default function EcolesPage() {
         </div>
       </div>
 
-      {/* Répartition par IEF — simple aperçu, calculé sur les écoles déjà chargées */}
+      {/* KPIs — remplace l'ancien graphique en barres affiché par défaut */}
       {!dataLoading && schools.length > 0 && (
-        <div className="mb-5 max-w-md">
-          <Carte titre="Écoles par IEF">
-            <BarList
-              color="#2F7D4A"
-              data={Object.entries(
-                schools.reduce<Record<string, number>>((acc, s) => {
-                  const k = s.region?.trim() || "Non renseigné";
-                  acc[k] = (acc[k] ?? 0) + 1;
-                  return acc;
-                }, {})
-              )
-                .map(([label, value]) => ({ label, value }))
-                .sort((a, b) => b.value - a.value)
-                .slice(0, 8)}
-            />
-          </Carte>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+          <KpiCard label="Écoles" value={schools.length} color="text-tx" />
+          <KpiCard label="Régions (IEF)" value={regions.length} color="text-success" />
+          <KpiCard label="Communes" value={cities.length} color="text-brand" />
+          <KpiCard label="IEF principal" value={byRegion[0]?.value ?? 0} sub={byRegion[0]?.label} color="text-purple-600" />
         </div>
       )}
 
@@ -650,6 +666,40 @@ export default function EcolesPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Modal BI ── */}
+      {showBI && (
+        <BIModal
+          title="Analyse BI — Écoles"
+          subtitle={`${schools.length} école${schools.length !== 1 ? "s" : ""} au total`}
+          onClose={() => setShowBI(false)}
+          kpis={[
+            { label: "Écoles", value: schools.length },
+            { label: "Régions (IEF)", value: regions.length, color: "text-success" },
+            { label: "Communes", value: cities.length, color: "text-brand" },
+            { label: "Langues", value: byLangue.length, color: "text-purple-600" },
+          ]}
+          tabs={[
+            {
+              id: "overview",
+              label: "Vue d'ensemble",
+              content: (
+                <div className="grid grid-cols-3 gap-4">
+                  <BIPanel title="Écoles par IEF" sub="toutes régions" className="col-span-1">
+                    <BarList color="#2F7D4A" data={byRegion.slice(0, 8)} />
+                  </BIPanel>
+                  <BIPanel title="Écoles par commune" sub="top 8">
+                    <BarList color="#4A90C2" data={byCommune} />
+                  </BIPanel>
+                  <BIPanel title="Écoles par langue">
+                    <BarList color="#C68B1A" data={byLangue} />
+                  </BIPanel>
+                </div>
+              ),
+            },
+          ]}
+        />
       )}
     </div>
   );
