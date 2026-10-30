@@ -1,0 +1,39 @@
+# ==============================================================================
+#  NDAW WUNE — Config Caddy pour le Dashboard Admin (Next.js)
+#
+#  Le conteneur Docker sert Next.js sur 127.0.0.1:3000 (voir docker-compose.yml).
+#  Caddy fait le SSL (automatique via Let's Encrypt) et le reverse proxy.
+#
+#  Installé automatiquement par deploy_docker.sh : copié dans
+#  /etc/caddy/sites/ndawwune-admin.caddy (le domaine suit NEXT_PUBLIC_APP_ORIGIN
+#  de .env.production), le Caddyfile principal faisant
+#  `import /etc/caddy/sites/*.caddy` — le même Caddy sert aussi l'API.
+#
+#  nginx-admin.conf reste disponible si le VPS utilise Nginx à la place.
+# ==============================================================================
+
+admin.ndawwune.cloud {
+    # Taille max pour les imports (CSV, XLSX)
+    request_body {
+        max_size 50MB
+    }
+
+    # Assets Next.js : noms hashés → cache navigateur 1 an
+    @static path /_next/static/*
+    header @static Cache-Control "public, max-age=31536000, immutable"
+
+    reverse_proxy 127.0.0.1:3000 {
+        transport http {
+            read_timeout  60s
+            write_timeout 60s
+        }
+    }
+
+    encode gzip
+
+    header {
+        X-Frame-Options        "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy        "strict-origin-when-cross-origin"
+    }
+}

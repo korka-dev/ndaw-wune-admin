@@ -2,13 +2,18 @@
 # ==============================================================================
 #  NDAW WUNE — Déploiement Admin Dashboard avec Docker
 #
-#  Usage (sur le VPS, depuis le dossier admin/) :
-#    chmod +x deploy_docker.sh && ./deploy_docker.sh
+#  Première installation sur le VPS (après l'API, qui installe Docker et Caddy) :
+#    git clone https://github.com/korka-dev/ndaw-wune-admin.git /opt/ndawwune/admin
+#    cd /opt/ndawwune/admin
+#    sudo bash deploy_docker.sh
 #
-#  Prérequis :
-#    - Docker + Docker Compose installés
-#    - Fichier .env.production créé (cp .env.production.example .env.production)
-#    - Nginx configuré avec nginx-admin.conf
+#  Le même script sert aux mises à jour (git pull + rebuild).
+#
+#  - .env.production est créé depuis .env.production.example s'il manque
+#    (domaines *.ndawwune.cloud par défaut).
+#  - Si Caddy est installé, le site est publié en HTTPS via
+#    /etc/caddy/sites/ndawwune-admin.caddy ; sinon, si Nginx est présent,
+#    il est simplement rechargé (config : nginx-admin.conf).
 # ==============================================================================
 
 set -euo pipefail
@@ -37,7 +42,12 @@ if ! docker compose version &>/dev/null; then
 fi
 
 if [ ! -f ".env.production" ]; then
-  error ".env.production introuvable !\n\n   Créez-le :\n     cp .env.production.example .env.production\n     nano .env.production\n\n   Renseignez NEXT_PUBLIC_API_URL avec l'URL publique du backend."
+  # API_DOMAIN / ADMIN_DOMAIN (optionnels) remplacent les domaines *.ndawwune.cloud
+  # de l'exemple : API_DOMAIN=api.exemple.com ADMIN_DOMAIN=admin.exemple.com bash deploy_docker.sh
+  sed -e "s#api\.ndawwune\.cloud#${API_DOMAIN:-api.ndawwune.cloud}#g" \
+      -e "s#admin\.ndawwune\.cloud#${ADMIN_DOMAIN:-admin.ndawwune.cloud}#g" \
+      .env.production.example > .env.production
+  warn ".env.production créé — vérifiez les domaines : $(grep -v '^#' .env.production | xargs)"
 fi
 
 # Charger et valider l'env
@@ -111,14 +121,39 @@ for i in $(seq 1 10); do
   sleep 3
 done
 
-# ── Rechargement Nginx ────────────────────────────────────────────────────────
-if command -v nginx &>/dev/null; then
-  if sudo nginx -t 2>/dev/null; then
-    sudo systemctl reload nginx
+# ── Reverse proxy HTTPS ───────────────────────────────────────────────────────
+SUDO=""; [ "$EUID" -eq 0 ] || SUDO="sudo"
+ADMIN_DOMAIN="${NEXT_PUBLIC_APP_ORIGIN:-admin.ndawwune.cloud}"
+
+if command -v caddy &>/dev/null; then
+  # Même organisation que l'API (backend/deploy_vps.sh) : le Caddyfile
+  # principal importe /etc/caddy/sites/*.caddy.
+  $SUDO mkdir -p /etc/caddy/sites
+  if [ ! -f /etc/caddy/Caddyfile ] || grep -q "/usr/share/caddy" /etc/caddy/Caddyfile; then
+    echo "import /etc/caddy/sites/*.caddy" | $SUDO tee /etc/caddy/Caddyfile >/dev/null
+  elif ! grep -q "import /etc/caddy/sites/\*.caddy" /etc/caddy/Caddyfile; then
+    echo -e "\nimport /etc/caddy/sites/*.caddy" | $SUDO tee -a /etc/caddy/Caddyfile >/dev/null
+  fi
+
+  sed "s/admin\.ndawwune\.cloud/${ADMIN_DOMAIN}/g" Caddyfile.admin | $SUDO tee /etc/caddy/sites/ndawwune-admin.caddy >/dev/null
+
+  if $SUDO caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1; then
+    $SUDO systemctl reload caddy
+    success "Caddy configuré pour https://${ADMIN_DOMAIN}"
+  else
+    $SUDO caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile || true
+    warn "Config Caddy invalide (${ADMIN_DOMAIN} est peut-être déjà défini dans /etc/caddy/Caddyfile) — Caddy non rechargé."
+  fi
+elif command -v nginx &>/dev/null; then
+  if $SUDO nginx -t 2>/dev/null; then
+    $SUDO systemctl reload nginx
     success "Nginx rechargé."
   else
     warn "Config Nginx invalide — rechargez manuellement après correction."
   fi
+else
+  warn "Ni Caddy ni Nginx trouvés : le dashboard n'est accessible que sur 127.0.0.1:3000."
+  warn "Lancez d'abord deploy_vps.sh de l'API (il installe Caddy), puis relancez ce script."
 fi
 
 echo ""
@@ -126,7 +161,7 @@ docker ps --filter "name=ndawwune-admin" --format "table {{.Names}}\t{{.Status}}
 echo ""
 
 header "Déploiement terminé !"
-success "Dashboard Admin disponible sur https://admin.ndawwune.cloud"
+success "Dashboard Admin disponible sur https://${ADMIN_DOMAIN}"
 echo ""
 log "Commandes utiles :"
 echo "  docker logs -f ndawwune-admin          # logs en temps réel"

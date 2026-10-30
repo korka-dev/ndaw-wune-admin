@@ -38,3 +38,5 @@ yarn-error.log*
 next-env.d.ts
 
 # End of https://www.toptal.com/developers/gitignore/api/nextjs
+# Variables de production (créées sur le VPS par deploy_docker.sh)
+.env.production
