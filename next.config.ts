@@ -9,6 +9,7 @@ if (process.env.NEXT_PUBLIC_APP_ORIGIN) {
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  poweredByHeader: false,
   experimental: {
     serverActions: { allowedOrigins },
   },
