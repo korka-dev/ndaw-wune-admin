@@ -80,13 +80,19 @@ export default function PlanningPage() {
 
   /* ── Export CSV ── */
   const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const handleExportCsv = async () => {
     setExporting(true);
+    setExportError(null);
     try {
-      const res = await exportApi.planning();
+      const res = await exportApi.planning({
+        session_id: sessId || undefined,
+        semaine: filterSemaine !== "" ? Number(filterSemaine) : undefined,
+      });
       downloadBlob(res.data, "planning.csv");
-    } catch { /* silencieux */ }
-    finally { setExporting(false); }
+    } catch {
+      setExportError("L'export du planning a échoué. Réessayez dans un instant.");
+    } finally { setExporting(false); }
   };
 
   /* ── Import CSV ── */
@@ -254,6 +260,7 @@ export default function PlanningPage() {
               : `${segs.length} créneau${segs.length !== 1 ? "x" : ""} · ${activeDays.length} jour${activeDays.length !== 1 ? "s" : ""}`}
             {sessName && <span className="ml-2 text-brand font-medium">· {sessName}</span>}
           </p>
+          {exportError && <p className="text-danger text-sm mt-1" role="alert">{exportError}</p>}
         </div>
         <div className="flex items-center gap-2">
           {/* Exporter CSV */}

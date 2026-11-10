@@ -4,7 +4,6 @@ import { authApi } from "./api";
 import {
   setAccessToken,
   setRefreshToken,
-  getRefreshToken,
   removeAccessToken,
   clearAuthCookies,
 } from "./cookies";
@@ -65,8 +64,14 @@ export const useAuth = create<AuthStore>((set) => ({
   logout: async () => {
     // Révoquer le token d'accès ET le refresh token côté serveur (best-effort)
     try {
-      const refreshToken = await getRefreshToken().catch(() => null);
-      await authApi.logout(refreshToken);
+      const { getAccessToken } = await import("./cookies");
+      const token = getAccessToken();
+      // La route serveur lit le refresh token dans le cookie httpOnly,
+      // le révoque avec l'access token puis supprime le cookie.
+      await fetch("/api/auth/logout", {
+        method:  "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
     } catch {}
     // Supprimer les cookies
     await clearAuthCookies();

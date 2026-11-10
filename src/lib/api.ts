@@ -1,9 +1,7 @@
 import axios from "axios";
 import {
   getAccessToken,
-  setAccessToken,
-  setRefreshToken,
-  getRefreshToken,
+  refreshSession,
   clearAuthCookies,
 } from "./cookies";
 
@@ -25,31 +23,40 @@ api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config;
-    if (error.response?.status === 401 && !original._retry) {
+
+    // Compte pas encore activé : le serveur impose le changement du mot de passe temporaire
+    if (
+      error.response?.status === 403 &&
+      error.response?.data?.detail === "PASSWORD_CHANGE_REQUIRED" &&
+      typeof window !== "undefined" &&
+      window.location.pathname !== "/change-password"
+    ) {
+      window.location.href = "/change-password";
+      return Promise.reject(error);
+    }
+
+    // Une erreur 401 sur la connexion elle-même (identifiants faux) n'est pas
+    // une session expirée : pas de renouvellement ni de redirection.
+    const url: string = original?.url ?? "";
+    const isAuthCall = url.includes("/auth/login") || url.includes("/auth/refresh");
+
+    if (error.response?.status === 401 && original && !isAuthCall && !original._retry) {
       original._retry = true;
-      // Lire le refresh token via la route API Next.js (cookie httpOnly)
-      const refresh = await getRefreshToken();
-      if (refresh) {
-        try {
-          const { data } = await axios.post(`${API_URL}/auth/refresh`, {
-            refresh_token: refresh,
-          });
-          // Stocker les nouveaux tokens dans les cookies
-          setAccessToken(data.access_token);
-          await setRefreshToken(data.refresh_token);
-          original.headers.Authorization = `Bearer ${data.access_token}`;
-          return api(original);
-        } catch {
-          await clearAuthCookies();
-          if (typeof window !== "undefined") {
-            window.location.href = "/login";
-          }
-        }
-      } else {
+      // Renouvellement côté serveur (cookie httpOnly) — partagé entre requêtes concurrentes
+      const outcome = await refreshSession();
+      if ("accessToken" in outcome) {
+        original.headers.Authorization = `Bearer ${outcome.accessToken}`;
+        return api(original);
+      }
+      if ("fatal" in outcome && outcome.fatal) {
+        // Session réellement invalide : retour à la connexion
+        await clearAuthCookies();
         if (typeof window !== "undefined") {
           window.location.href = "/login";
         }
       }
+      // Incident temporaire (API injoignable, 5xx) : on ne déconnecte pas et on
+      // ne perd pas la saisie en cours — l'erreur remonte à l'écran appelant.
     }
     return Promise.reject(error);
   }
@@ -476,7 +483,8 @@ export const exportApi = {
   teachersXlsx: (fields?: string) => api.get("/admin/teachers/export/xlsx", { params: fields ? { fields } : undefined, responseType: "blob" }),
   schools: () => api.get("/admin/schools/export/csv", { responseType: "blob" }),
   schoolsXlsx: (fields?: string) => api.get("/admin/schools/export/xlsx", { params: fields ? { fields } : undefined, responseType: "blob" }),
-  planning: () => api.get("/admin/planning/export/csv", { responseType: "blob" }),
+  planning: (params?: { session_id?: string; semaine?: number }) =>
+    api.get("/admin/planning/export/csv", { params, responseType: "blob" }),
   eleves: () => api.get("/admin/eleves/export/csv", { responseType: "blob" }),
 };
 

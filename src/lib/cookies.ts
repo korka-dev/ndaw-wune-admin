@@ -107,18 +107,37 @@ export async function setRefreshToken(token: string): Promise<void> {
   }
 }
 
+export type RefreshOutcome =
+  | { ok: true;  accessToken: string }
+  | { ok: false; fatal: boolean };   // fatal = session invalide → reconnexion ; sinon incident temporaire
+
 /**
- * Récupère le refresh token via la route API Next.js (/api/auth/get-refresh).
- * La route peut lire le cookie httpOnly côté serveur.
+ * Renouvelle la session via la route serveur /api/auth/refresh.
+ * Le refresh token reste dans le cookie httpOnly : il n'est jamais lu ni
+ * renvoyé au JavaScript. Un seul renouvellement à la fois, partagé par toutes
+ * les requêtes qui reçoivent un 401 en même temps.
  */
-export async function getRefreshToken(): Promise<string | null> {
-  try {
-    const res  = await fetch("/api/auth/get-refresh");
-    const data = await res.json();
-    return data.refresh_token ?? null;
-  } catch {
-    return null;
-  }
+let _refreshInFlight: Promise<RefreshOutcome> | null = null;
+
+export function refreshSession(): Promise<RefreshOutcome> {
+  if (_refreshInFlight) return _refreshInFlight;
+  _refreshInFlight = (async (): Promise<RefreshOutcome> => {
+    try {
+      const res = await fetch("/api/auth/refresh", { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        setAccessToken(data.access_token);
+        return { ok: true, accessToken: data.access_token };
+      }
+      return { ok: false, fatal: res.status === 401 };
+    } catch {
+      return { ok: false, fatal: false };   // réseau coupé : on ne déconnecte pas
+    } finally {
+      // libérer après la résolution
+      setTimeout(() => { _refreshInFlight = null; }, 0);
+    }
+  })();
+  return _refreshInFlight;
 }
 
 /** Supprime tous les cookies d'auth (access + refresh). */
