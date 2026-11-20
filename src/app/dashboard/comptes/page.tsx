@@ -34,6 +34,13 @@ export default function ComptesPage() {
   const [page,    setPage]    = useState(1);
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError,   setDataError]   = useState<string | null>(null);
+  // Réinitialisation de mot de passe (APP-02) : route dédiée, jamais via « Modifier ».
+  const [resetTarget, setResetTarget] = useState<Compte | null>(null);
+  const [resetPwd,    setResetPwd]    = useState("");
+  const [resetForce,  setResetForce]  = useState(true);
+  const [resetError,  setResetError]  = useState("");
+  const [resetDone,   setResetDone]   = useState("");
+  const [resetting,   setResetting]   = useState(false);
 
   const load = (isFirstLoad = false) => {
     if (isFirstLoad) { setDataLoading(true); setDataError(null); }
@@ -54,7 +61,8 @@ export default function ComptesPage() {
         ...form,
         email: form.email.trim() || null,
         phone: form.phone.trim() || null,
-        password: form.password.trim() || null,
+        // Le mot de passe n'est envoyé qu'à la création (APP-02).
+        password: modal === "create" ? (form.password.trim() || null) : undefined,
         title: form.title.trim() || null,
         role: toApiRole(form.role),
       };
@@ -64,6 +72,24 @@ export default function ComptesPage() {
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? "Une erreur est survenue.");
     } finally { setLoading(false); }
+  };
+
+  const openReset = (u: Compte) => {
+    setResetTarget(u); setResetPwd(""); setResetForce(true); setResetError(""); setResetDone("");
+  };
+
+  const doReset = async () => {
+    if (!resetTarget) return;
+    if (resetPwd.trim().length < 8) { setResetError("Au moins 8 caractères."); return; }
+    setResetting(true); setResetError("");
+    try {
+      await usersApi.resetPassword(resetTarget.id, { new_password: resetPwd.trim(), force_change: resetForce });
+      setResetDone(`Mot de passe de ${resetTarget.name} réinitialisé. Ses sessions ouvertes sont fermées.`);
+      setResetTarget(null);
+    } catch (e: any) {
+      const d = e?.response?.data?.detail;
+      setResetError(typeof d === "string" ? d : "Réinitialisation impossible. Réessayez.");
+    } finally { setResetting(false); }
   };
 
   const del = async (id: string) => {
@@ -165,6 +191,12 @@ export default function ComptesPage() {
                       >Modifier</button>
                       {u.id !== me?.id && (
                         <button
+                          onClick={() => openReset(u)}
+                          className="text-xs bg-surface-alt text-tx px-2.5 py-1 rounded-lg font-medium hover:bg-brand hover:text-white transition-colors"
+                        >Mot de passe</button>
+                      )}
+                      {u.id !== me?.id && (
+                        <button
                           onClick={() => del(u.id)}
                           className="text-xs bg-danger-soft text-danger px-2.5 py-1 rounded-lg font-medium hover:bg-danger hover:text-white transition-colors"
                         >Supprimer</button>
@@ -183,6 +215,44 @@ export default function ComptesPage() {
           <Pagination page={page} total={items.length} pageSize={PAGE_SIZE} onChange={setPage} />
         </div>
       </div>
+
+      {resetDone && (
+        <div role="status" className="fixed bottom-6 right-6 z-50 bg-success-soft text-success rounded-xl px-4 py-3 text-sm shadow-lg flex gap-3 items-start">
+          <span>{resetDone}</span>
+          <button onClick={() => setResetDone("")} className="font-bold" aria-label="Fermer">×</button>
+        </div>
+      )}
+
+      {resetTarget && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-md">
+            <h2 className="text-base font-bold text-tx mb-1">Nouveau mot de passe</h2>
+            <p className="text-xs text-tx-muted mb-4">{resetTarget.name} — ses sessions ouvertes seront fermées.</p>
+            {resetError && (
+              <div role="alert" className="bg-danger-soft text-danger rounded-xl px-4 py-2.5 text-sm mb-4">{resetError}</div>
+            )}
+            <label className="block text-sm font-medium text-tx mb-1" htmlFor="reset-pwd">Mot de passe (8 caractères minimum)</label>
+            <input
+              id="reset-pwd"
+              type="password"
+              autoComplete="new-password"
+              value={resetPwd}
+              onChange={e => setResetPwd(e.target.value)}
+              className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 transition"
+            />
+            <label className="flex items-center gap-2 mt-3 text-sm text-tx">
+              <input type="checkbox" checked={resetForce} onChange={e => setResetForce(e.target.checked)} />
+              Imposer le changement à la prochaine connexion
+            </label>
+            <div className="flex gap-3 mt-5 justify-end">
+              <button onClick={() => setResetTarget(null)} className="px-4 py-2 rounded-xl border border-border text-sm text-tx-muted hover:bg-surface-alt transition-colors">Annuler</button>
+              <button onClick={doReset} disabled={resetting} className="px-4 py-2 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold disabled:opacity-60 transition-colors">
+                {resetting ? "Enregistrement…" : "Réinitialiser"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {modal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">

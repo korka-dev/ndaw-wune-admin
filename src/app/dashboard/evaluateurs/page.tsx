@@ -49,7 +49,7 @@ export default function EvaluateursPage() {
     setLoading(true);
     try {
       if (modal === "create") {
-        await evaluateursApi.create({ ...form, password: "P@sser123", role: "evaluateur" });
+        await evaluateursApi.create({ ...form, role: "evaluateur" }); // mot de passe temporaire = DEFAULT_USER_PASSWORD du serveur (APP-08)
       } else if (modal && typeof modal === "object" && modal.kind === "edit") {
         await evaluateursApi.update(modal.ev.id, form);
       }

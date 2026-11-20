@@ -7,7 +7,7 @@ type AuditLog = {
   id: string;
   user_name: string;
   user_role: string;
-  action: "create" | "update" | "delete";
+  action: "create" | "update" | "delete" | "read";
   entity: string;
   method: string;
   path: string;
@@ -19,17 +19,21 @@ const ACTION_LABELS: Record<string, string> = {
   create: "Création",
   update: "Modification",
   delete: "Suppression",
+  read: "Consultation",
 };
 
 const ACTION_STYLES: Record<string, string> = {
   create: "bg-success-soft text-success",
   update: "bg-brand-soft text-brand",
   delete: "bg-danger-soft text-danger",
+  read: "bg-surface-alt text-tx-muted",
 };
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Administrateur",
   coordonnateur: "Coordonnateur",
+  superviseur: "Superviseur",
+  enseignant: "Tuteur",
 };
 
 const PAGE_SIZE = 30;

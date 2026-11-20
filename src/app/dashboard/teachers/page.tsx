@@ -178,7 +178,7 @@ export default function TeachersPage() {
         classes:   form.classes?.length ? form.classes : undefined,
       };
       if (modal === "create") {
-        await teachersApi.create({ ...payload, password: "P@sser123", role: "enseignant" });
+        await teachersApi.create({ ...payload, role: "enseignant" }); // mot de passe temporaire = DEFAULT_USER_PASSWORD du serveur (APP-08)
       } else if (modal && typeof modal === "object" && modal.kind === "edit") {
         await teachersApi.update(modal.teacher.id, payload);
       }

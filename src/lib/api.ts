@@ -75,8 +75,6 @@ export const authApi = {
     api.post("/auth/logout", refresh_token ? { refresh_token } : {}),
   changePassword: (new_password: string) =>
     api.post("/auth/change-password", { new_password }),
-  resetPassword: (identifier: string, new_password: string, confirm_password: string) =>
-    api.post("/auth/reset-password", { identifier, new_password, confirm_password }),
 };
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
@@ -200,6 +198,9 @@ export const usersApi = {
   create: (d: unknown) => api.post("/admin/users", d),
   update: (id: string, d: unknown) => api.patch(`/admin/users/${id}`, d),
   delete: (id: string) => api.delete(`/admin/users/${id}`),
+  /** Nouveau mot de passe pour un compte admin/coordonnateur (sessions invalidées). */
+  resetPassword: (id: string, d: { new_password: string; force_change?: boolean }) =>
+    api.post(`/admin/users/${id}/reset-password`, d),
 };
 
 export const superviseursApi = {

@@ -1,62 +1,28 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { authApi } from "@/lib/api";
 
 /* ── Icônes inline ──────────────────────────────────────────────────────────── */
-const IcoPhone = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.22 1.18 2 2 0 012.18 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.09a16 16 0 006 6l.54-.54a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 14.92z"/>
-  </svg>
-);
 const IcoLock = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
   </svg>
 );
-const IcoCheck = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M5 12l5 5 9-11"/>
-  </svg>
-);
 
-/* ── Page principale ────────────────────────────────────────────────────────── */
+/* ── Page principale ──────────────────────────────────────────────────────────
+ * La réinitialisation en libre-service est fermée (rapport V2, APP-01) : elle
+ * changeait le mot de passe de n'importe quel compte à partir du seul
+ * identifiant. Un mot de passe oublié est réinitialisé par un administrateur
+ * (menu Comptes → Réinitialiser), ce qui invalide aussi les anciennes sessions.
+ */
 export default function ForgotPasswordPage() {
-  const router  = useRouter();
   const [visible, setVisible] = useState(false);
-
-  const [identifier,  setIdentifier]  = useState("");
-  const [newPwd,      setNewPwd]      = useState("");
-  const [confirmPwd,  setConfirmPwd]  = useState("");
-  const [showPwd,     setShowPwd]     = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [loading,     setLoading]     = useState(false);
-  const [error,       setError]       = useState("");
 
   // Mount animation
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 60);
     return () => clearTimeout(t);
   }, []);
-
-  const passwordsMatch = newPwd.length > 0 && newPwd === confirmPwd;
-  const canSubmit      = identifier.trim().length > 0 && passwordsMatch;
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      await authApi.resetPassword(identifier.trim(), newPwd, confirmPwd);
-      router.push("/login?reset=ok");
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail;
-      setError(detail ?? "Une erreur est survenue. Vérifiez vos informations et réessayez.");
-    } finally {
-      setLoading(false);
-    }
-  }
 
   const cardAnim = {
     opacity: visible ? 1 : 0,
@@ -80,119 +46,31 @@ export default function ForgotPasswordPage() {
           <div className="w-14 h-14 rounded-full border-2 border-white/40 bg-white/20 flex items-center justify-center mx-auto mb-3">
             <IcoLock />
           </div>
-          <h1 className="text-xl font-bold text-white mb-1">Réinitialiser le mot de passe</h1>
+          <h1 className="text-xl font-bold text-white mb-1">Mot de passe oublié</h1>
           <p className="text-white/70 text-xs">
-            Entrez votre identifiant et choisissez un nouveau mot de passe
+            La réinitialisation passe par un administrateur
           </p>
         </div>
 
         {/* Body */}
         <div className="px-8 py-7">
-          <form onSubmit={handleSubmit} className="space-y-5">
-
-            {/* Erreur globale */}
-            {error && (
-              <div className="bg-danger-soft text-danger rounded-xl px-4 py-3 text-sm flex gap-2 items-start">
-                <span className="mt-0.5">⚠</span><span>{error}</span>
-              </div>
-            )}
-
-            {/* Identifiant */}
-            <div>
-              <label className="block text-sm font-medium text-tx mb-1.5">
-                Téléphone ou e-mail
-              </label>
-              <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-tx-muted">
-                  <IcoPhone />
-                </span>
-                <input
-                  type="text"
-                  value={identifier}
-                  onChange={e => setIdentifier(e.target.value)}
-                  required
-                  autoComplete="username"
-                  placeholder="77 000 00 00 ou votre@email.com"
-                  className="w-full bg-surface-alt rounded-xl pl-11 pr-4 py-3 text-sm text-tx placeholder:text-tx-dim focus:outline-none focus:ring-2 focus:ring-brand/40 border border-transparent focus:border-brand/30 transition"
-                />
-              </div>
-            </div>
-
-            {/* Nouveau mot de passe */}
-            <div>
-              <label className="block text-sm font-medium text-tx mb-1.5">Nouveau mot de passe</label>
-              <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-tx-muted"><IcoLock /></span>
-                <input
-                  type={showPwd ? "text" : "password"}
-                  value={newPwd}
-                  onChange={e => setNewPwd(e.target.value)}
-                  required
-                  autoComplete="new-password"
-                  placeholder="••••••••"
-                  className="w-full bg-surface-alt rounded-xl pl-11 pr-16 py-3 text-sm text-tx placeholder:text-tx-dim focus:outline-none focus:ring-2 focus:ring-brand/40 border border-transparent focus:border-brand/30 transition"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPwd(v => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-tx-muted hover:text-tx transition"
-                >
-                  {showPwd ? "Masquer" : "Voir"}
-                </button>
-              </div>
-
-            </div>
-
-            {/* Confirmer le mot de passe */}
-            <div>
-              <label className="block text-sm font-medium text-tx mb-1.5">Confirmer le mot de passe</label>
-              <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-tx-muted"><IcoLock /></span>
-                <input
-                  type={showConfirm ? "text" : "password"}
-                  value={confirmPwd}
-                  onChange={e => setConfirmPwd(e.target.value)}
-                  required
-                  autoComplete="new-password"
-                  placeholder="••••••••"
-                  className={`w-full bg-surface-alt rounded-xl pl-11 pr-16 py-3 text-sm text-tx placeholder:text-tx-dim focus:outline-none focus:ring-2 border transition
-                    ${confirmPwd && confirmPwd !== newPwd
-                      ? "border-danger/40 focus:ring-danger/30"
-                      : "border-transparent focus:ring-brand/40 focus:border-brand/30"
-                    }`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirm(v => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-tx-muted hover:text-tx transition"
-                >
-                  {showConfirm ? "Masquer" : "Voir"}
-                </button>
-              </div>
-              {confirmPwd && passwordsMatch && (
-                <p className="text-[11px] text-success flex items-center gap-1 mt-1.5">
-                  <IcoCheck /> Les mots de passe correspondent
-                </p>
-              )}
-              {confirmPwd && !passwordsMatch && (
-                <p className="text-[11px] text-danger mt-1.5">
-                  Les mots de passe ne correspondent pas.
-                </p>
-              )}
-            </div>
-
-            {/* Bouton */}
-            <button
-              type="submit"
-              disabled={loading || !canSubmit}
-              className="w-full bg-brand hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-xl transition-colors text-sm flex items-center justify-center gap-2"
+          <div className="space-y-4 text-sm text-tx">
+            <p>
+              Pour des raisons de sécurité, le mot de passe ne peut plus être
+              réinitialisé depuis cette page.
+            </p>
+            <p>
+              Contactez un administrateur de la plateforme : il vous attribuera un
+              mot de passe temporaire, que vous devrez changer à la prochaine
+              connexion.
+            </p>
+            <Link
+              href="/login"
+              className="w-full bg-brand hover:bg-brand-dark text-white font-bold py-3.5 rounded-xl transition-colors text-sm flex items-center justify-center"
             >
-              {loading
-                ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>Réinitialisation…</>
-                : "Réinitialiser le mot de passe"
-              }
-            </button>
-          </form>
+              Retour à la connexion
+            </Link>
+          </div>
         </div>
       </div>
 
