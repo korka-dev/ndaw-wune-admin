@@ -1,0 +1,30 @@
+# Barrière de livraison du dashboard (rapport V2, APP-44 / APP-12).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_API_URL: https://api.example.invalid/api/v1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Typage
+        run: npx tsc --noEmit -p .
+      - name: Build de production
+        run: npm run build
+      - name: Audit des dépendances (bloquant à partir de « high »)
+        run: npm audit --audit-level=high

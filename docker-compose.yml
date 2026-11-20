@@ -33,6 +33,9 @@ services:
 
     environment:
       NODE_ENV: production
+      # Lue AU DÉMARRAGE par les routes serveur /api/auth/* (connexion,
+      # renouvellement, déconnexion). Repli sur NEXT_PUBLIC_API_URL si vide.
+      API_URL: ${API_URL:-}
 
     # Logs Docker structurés
     logging:

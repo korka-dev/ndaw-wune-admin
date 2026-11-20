@@ -16,10 +16,7 @@
  */
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-
-const COOKIE_NAME  = "ndawwune_rt_http";
-const MAX_AGE_SECS = 30 * 24 * 60 * 60;
-const API_URL      = process.env.NEXT_PUBLIC_API_URL;
+import { REFRESH_COOKIE as COOKIE_NAME, apiUrl, refreshCookieOptions } from "@/lib/server/session";
 
 export async function POST(): Promise<NextResponse> {
   const cookieStore = await cookies();
@@ -30,7 +27,7 @@ export async function POST(): Promise<NextResponse> {
 
   let upstream: Response;
   try {
-    upstream = await fetch(`${API_URL}/auth/refresh`, {
+    upstream = await fetch(`${apiUrl()}/auth/refresh`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ refresh_token: refreshToken }),
@@ -50,13 +47,7 @@ export async function POST(): Promise<NextResponse> {
   }
 
   const data = await upstream.json();
-  cookieStore.set(COOKIE_NAME, data.refresh_token, {
-    httpOnly: true,
-    secure:   process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    maxAge:   MAX_AGE_SECS,
-    path:     "/",
-  });
+  cookieStore.set(COOKIE_NAME, data.refresh_token, refreshCookieOptions);
   return NextResponse.json({
     access_token:         data.access_token,
     must_change_password: data.must_change_password ?? false,

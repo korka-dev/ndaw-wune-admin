@@ -98,7 +98,7 @@ function NavIcon({ name }: { name: IconName }) {
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { user, fetchMe, logout } = useAuth();
+  const { user, fetchMe, logout, serverUnavailable } = useAuth();
   const router   = useRouter();
   const pathname = usePathname();
   const [showLogout, setShowLogout] = useState(false);
@@ -116,7 +116,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     fetchMe().then(() => {
       const state = useAuth.getState();
-      if (!state.user) { router.replace("/login"); return; }
+      // Panne temporaire (APP-41) : ne pas renvoyer vers /login, la session est conservée.
+      if (!state.user) { if (!state.serverUnavailable) router.replace("/login"); return; }
       if (state.mustChangePassword || state.user.must_change_password) {
         router.replace("/change-password");
       }
@@ -138,7 +139,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!user) return (
     <div className="min-h-screen bg-bg flex items-center justify-center">
-      <div className="text-tx-muted text-sm">Chargement…</div>
+      {serverUnavailable ? (
+        <div className="max-w-sm text-center space-y-3 px-4">
+          <div className="text-sm font-semibold text-tx">Serveur momentanément indisponible</div>
+          <div className="text-xs text-tx-muted">
+            Votre session est conservée. Réessayez dans quelques instants.
+          </div>
+          <button
+            onClick={() => fetchMe().then(() => {
+              const s = useAuth.getState();
+              if (!s.user && !s.serverUnavailable) router.replace("/login");
+            })}
+            className="text-sm font-semibold text-brand hover:underline"
+          >
+            Réessayer
+          </button>
+        </div>
+      ) : (
+        <div className="text-tx-muted text-sm">Chargement…</div>
+      )}
     </div>
   );
 

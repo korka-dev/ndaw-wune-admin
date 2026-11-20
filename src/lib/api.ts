@@ -57,6 +57,8 @@ api.interceptors.response.use(
       }
       // Incident temporaire (API injoignable, 5xx) : on ne déconnecte pas et on
       // ne perd pas la saisie en cours — l'erreur remonte à l'écran appelant.
+      // Marqueur lu par fetchMe (APP-41) : ce 401 ne prouve pas une session invalide.
+      else error.refreshUnavailable = true;
     }
     return Promise.reject(error);
   }
@@ -64,15 +66,8 @@ api.interceptors.response.use(
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const authApi = {
-  login: (identifier: string, password: string) =>
-    api.post("/auth/login", { identifier, password }),
+  // Connexion : voir serverLogin() (route serveur /api/auth/login, APP-09).
   me: () => api.get("/auth/me"),
-  refresh: (refresh_token: string) =>
-    api.post("/auth/refresh", { refresh_token }),
-  /** Envoie aussi le refresh_token pour qu'il soit révoqué côté serveur, pas
-   *  seulement le token d'accès — sinon un refresh token volé survivrait au logout. */
-  logout: (refresh_token?: string | null) =>
-    api.post("/auth/logout", refresh_token ? { refresh_token } : {}),
   changePassword: (new_password: string) =>
     api.post("/auth/change-password", { new_password }),
 };

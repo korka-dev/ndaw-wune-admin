@@ -10,12 +10,9 @@
  *                     Le vrai fix (accès non lisible en JS) demanderait de faire
  *                     passer tous les appels API par des routes serveur Next.js
  *                     (proxy), pas juste un changement de cookie.
- *   - refresh_token → cookie httpOnly via la route API /api/auth/set-refresh.
- *                     JS ne peut pas le lire → XSS ne peut pas l'exfiltrer.
- *                     AUCUN repli en cookie JS-lisible si cette route échoue —
- *                     dans ce cas la session ne survit simplement pas au
- *                     rechargement (ré-authentification requise), plutôt que
- *                     d'exposer un refresh token de 30 jours en clair.
+ *   - refresh_token → cookie httpOnly posé côté serveur par /api/auth/login et
+ *                     /api/auth/refresh (APP-09). Il ne transite jamais par
+ *                     une réponse lisible par JavaScript.
  *
  * Les tokens ne sont PLUS stockés dans localStorage.
  */
@@ -87,24 +84,31 @@ export function removeAccessToken(): void {
 }
 
 /**
- * Stocke le refresh token via la route API Next.js (/api/auth/set-refresh).
- * La route crée un cookie httpOnly → JS ne peut pas lire le refresh token.
+ * Connexion par la route serveur Next.js /api/auth/login (rapport V2, APP-09).
+ * La route pose elle-même le refresh token en cookie httpOnly : il n'apparaît
+ * dans aucune réponse lisible par JavaScript. Seul l'access token est renvoyé.
  *
- * Volontairement AUCUN repli en cookie JS-lisible si la requête échoue : un
- * refresh token de 30 jours exposé à un XSS serait bien pire qu'une session
- * qui ne survit pas à un rechargement de page en cas d'échec réseau rare.
+ * En cas d'échec, l'erreur reproduit la forme d'une erreur axios
+ * (`err.response.status`, `err.response.data.detail`) pour les écrans existants.
  */
-export async function setRefreshToken(token: string): Promise<void> {
+export async function serverLogin(
+  identifier: string,
+  password: string,
+): Promise<{ access_token: string; must_change_password: boolean }> {
+  let res: Response;
   try {
-    const res = await fetch("/api/auth/set-refresh", {
+    res = await fetch("/api/auth/login", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ refresh_token: token }),
+      body:    JSON.stringify({ identifier, password }),
     });
-    if (!res.ok) throw new Error(`set-refresh a échoué (${res.status})`);
-  } catch (e) {
-    console.error("[Auth] Impossible de stocker le refresh token de façon sécurisée :", e);
+  } catch {
+    throw { response: { status: 0, data: { detail: "Serveur injoignable. Vérifiez votre connexion." } } };
   }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw { response: { status: res.status, data } };
+  setAccessToken(data.access_token);
+  return data;
 }
 
 export type RefreshOutcome =

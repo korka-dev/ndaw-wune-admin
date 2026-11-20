@@ -8,9 +8,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-
-const COOKIE_NAME = "ndawwune_rt_http";
-const API_URL     = process.env.NEXT_PUBLIC_API_URL;
+import { REFRESH_COOKIE as COOKIE_NAME, apiUrl } from "@/lib/server/session";
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const cookieStore  = await cookies();
@@ -19,7 +17,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   if (authorization) {
     try {
-      await fetch(`${API_URL}/auth/logout`, {
+      await fetch(`${apiUrl()}/auth/logout`, {
         method:  "POST",
         headers: { "Content-Type": "application/json", Authorization: authorization },
         body:    JSON.stringify(refreshToken ? { refresh_token: refreshToken } : {}),

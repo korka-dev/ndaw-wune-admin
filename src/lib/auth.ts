@@ -2,9 +2,9 @@
 import { create } from "zustand";
 import { authApi } from "./api";
 import {
-  setAccessToken,
-  setRefreshToken,
-  removeAccessToken,
+  serverLogin,
+  getAccessToken,
+  refreshSession,
   clearAuthCookies,
 } from "./cookies";
 
@@ -24,6 +24,9 @@ interface AuthStore {
   user:               User | null;
   loading:            boolean;
   mustChangePassword: boolean;
+  /** Serveur injoignable ou renouvellement impossible pour une raison
+   *  temporaire (APP-41) : la session est conservée, on affiche un bandeau. */
+  serverUnavailable:  boolean;
   login:             (identifier: string, password: string) => Promise<{ mustChangePassword: boolean }>;
   logout:            () => Promise<void>;
   fetchMe:           () => Promise<void>;
@@ -34,17 +37,15 @@ export const useAuth = create<AuthStore>((set) => ({
   user:               null,
   loading:            false,
   mustChangePassword: false,
+  serverUnavailable:  false,
 
   clearPasswordFlag: () => set({ mustChangePassword: false }),
 
   login: async (identifier, password) => {
     set({ loading: true });
     try {
-      const { data } = await authApi.login(identifier, password);
-
-      // Stocker les tokens dans des cookies (plus dans localStorage)
-      setAccessToken(data.access_token);
-      await setRefreshToken(data.refresh_token);  // cookie httpOnly via route API
+      // Route serveur : le refresh token reste dans un cookie httpOnly (APP-09)
+      const data = await serverLogin(identifier, password);
 
       const mustChange = data.must_change_password ?? false;
       set({ mustChangePassword: mustChange, loading: false });
@@ -64,7 +65,6 @@ export const useAuth = create<AuthStore>((set) => ({
   logout: async () => {
     // Révoquer le token d'accès ET le refresh token côté serveur (best-effort)
     try {
-      const { getAccessToken } = await import("./cookies");
       const token = getAccessToken();
       // La route serveur lit le refresh token dans le cookie httpOnly,
       // le révoque avec l'access token puis supprime le cookie.
@@ -82,16 +82,35 @@ export const useAuth = create<AuthStore>((set) => ({
   },
 
   fetchMe: async () => {
-    // Vérifier qu'on a un access token avant d'appeler /me
-    const { getAccessToken } = await import("./cookies");
-    const token = getAccessToken();
-    if (!token) return;
+    // APP-41 : seul un refus explicite de la session (401) déconnecte.
+    // Une panne réseau, un 5xx ou Redis indisponible (503 au renouvellement)
+    // laissent la session intacte et affichent un bandeau.
+    if (!getAccessToken()) {
+      // Access token expiré (cookie de 60 min) : tenter le cookie httpOnly.
+      const outcome = await refreshSession();
+      if (!("accessToken" in outcome)) {
+        if (outcome.fatal) {
+          await clearAuthCookies();
+          set({ user: null, serverUnavailable: false });
+        } else {
+          set({ serverUnavailable: true });
+        }
+        return;
+      }
+    }
     try {
+      // L'intercepteur axios renouvelle déjà le jeton sur 401 et redirige
+      // vers /login si la session est réellement invalide.
       const { data } = await authApi.me();
-      set({ user: data, mustChangePassword: data.must_change_password ?? false });
-    } catch {
-      await clearAuthCookies();
-      set({ user: null });
+      set({ user: data, mustChangePassword: data.must_change_password ?? false, serverUnavailable: false });
+    } catch (e: any) {
+      const status = e?.response?.status;
+      if (status === 401 && !e?.refreshUnavailable) {
+        await clearAuthCookies();
+        set({ user: null, serverUnavailable: false });
+      } else {
+        set({ serverUnavailable: true });
+      }
     }
   },
 }));
