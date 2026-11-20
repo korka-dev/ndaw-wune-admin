@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { evaluationSujetsApi, schoolsApi } from "@/lib/api";
 
-import { notifyError } from "@/lib/notify";
+import { errorDetail, notifyError } from "@/lib/notify";
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface SujetOut {
@@ -277,8 +277,9 @@ export default function EvaluationSujetsPage() {
       await evaluationSujetsApi.delete(deleteId);
       setSujets(prev => prev.filter(s => s.id !== deleteId));
       setDeleteId(null);
-    } catch {
-      alert("Erreur lors de la suppression.");
+    } catch (e) {
+      // 409 si des tirages existent déjà : le sujet porte un historique (APP-15).
+      alert(errorDetail(e) ?? "Erreur lors de la suppression.");
     } finally { setDeleting(false); }
   };
 

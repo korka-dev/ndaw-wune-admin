@@ -2,8 +2,17 @@
 import { useRef, useState } from "react";
 import { importExportApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
+import { errorDetail } from "@/lib/notify";
 
+// Rapport V2, APP-25 : import partiel ligne par ligne ; les compteurs ne
+// reflètent que des lignes réellement enregistrées. Un aperçu (dry_run) est
+// toujours présenté avant confirmation.
 type ImportSummary = {
+  dry_run: boolean;
+  lignes_lues: number;
+  lignes_validees: number;
+  lignes_en_erreur: number;
+  erreurs_tronquees: number;
   ecoles_creees: number;
   superviseurs_crees: number;
   tuteurs_crees: number;
@@ -19,15 +28,18 @@ export default function ImportExportPage() {
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<ImportSummary | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [pending, setPending] = useState<File | null>(null);   // fichier en attente de confirmation
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleExport = async () => {
     setExporting(true);
+    setExportError(null);
     try {
       const res = await importExportApi.export();
       downloadBlob(res.data, "export_ndawwune.xlsx");
-    } catch {
-      alert("Erreur lors de l'export.");
+    } catch (err) {
+      setExportError(`Export impossible${errorDetail(err) ? ` : ${errorDetail(err)}` : ""}. Réessayez.`);
     } finally {
       setExporting(false);
     }
@@ -37,15 +49,21 @@ export default function ImportExportPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
+    await run(file, true);
+  };
+
+  /** Étape 1 : aperçu (rien n'est enregistré). Étape 2 : confirmation. */
+  const run = async (file: File, dryRun: boolean) => {
     setImporting(true);
     setResult(null);
     setImportError(null);
     try {
-      const { data } = await importExportApi.import(file);
+      const { data } = await importExportApi.import(file, dryRun);
       setResult(data);
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail;
-      setImportError(typeof detail === "string" ? detail : "Erreur lors de l'import.");
+      setPending(dryRun && data.lignes_validees > 0 ? file : null);
+    } catch (err) {
+      setPending(null);
+      setImportError(errorDetail(err) ?? "Erreur lors de l'import. Aucune donnée n'a été modifiée.");
     } finally {
       setImporting(false);
     }
@@ -120,10 +138,18 @@ export default function ImportExportPage() {
             ) : (
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
             )}
-            {importing ? "Import en cours…" : "Choisir un fichier Excel"}
+            {importing ? "Analyse en cours…" : "Choisir un fichier Excel"}
           </button>
+          <p className="text-xs text-tx-muted mt-3">
+            Le fichier est d&apos;abord analysé sans rien enregistrer : vous voyez exactement ce qui
+            sera créé et les lignes refusées, puis vous confirmez.
+          </p>
         </div>
       </div>
+
+      {exportError && (
+        <div className="mt-6 px-4 py-3 bg-danger-soft border border-danger/20 rounded-xl text-sm text-danger">{exportError}</div>
+      )}
 
       {/* ── Résultat de l'import ── */}
       {importError && (
@@ -135,7 +161,13 @@ export default function ImportExportPage() {
 
       {result && (
         <div className="mt-6 bg-surface border border-border rounded-2xl p-6">
-          <h3 className="text-sm font-bold text-tx mb-4">Résultat de l&apos;import</h3>
+          <h3 className="text-sm font-bold text-tx mb-1">
+            {result.dry_run ? "Aperçu de l'import — rien n'a encore été enregistré" : "Import enregistré"}
+          </h3>
+          <p className="text-xs text-tx-muted mb-4">
+            {result.lignes_lues} ligne(s) lue(s) · {result.lignes_validees} {result.dry_run ? "importable(s)" : "enregistrée(s)"} ·{" "}
+            {result.lignes_en_erreur} refusée(s){result.lignes_en_erreur > 0 ? " (non importées, détail ci-dessous)" : ""}
+          </p>
           <div className="grid grid-cols-3 sm:grid-cols-7 gap-3 mb-4">
             {[
               { label: "Écoles créées", value: result.ecoles_creees },
@@ -155,11 +187,36 @@ export default function ImportExportPage() {
           {result.erreurs.length > 0 && (
             <div className="bg-danger/10 rounded-xl p-3 max-h-48 overflow-y-auto">
               <p className="text-xs font-semibold text-danger mb-1.5">
-                {result.erreurs.length} ligne{result.erreurs.length > 1 ? "s" : ""} ignorée{result.erreurs.length > 1 ? "s" : ""} (erreur)
+                {result.lignes_en_erreur} ligne{result.lignes_en_erreur > 1 ? "s" : ""} refusée{result.lignes_en_erreur > 1 ? "s" : ""}
               </p>
               {result.erreurs.map((e, i) => (
                 <p key={i} className="text-xs text-danger mb-0.5">{e}</p>
               ))}
+              {result.erreurs_tronquees > 0 && (
+                <p className="text-xs text-danger mt-1">… et {result.erreurs_tronquees} autre(s).</p>
+              )}
+            </div>
+          )}
+          {result.dry_run && (
+            <div className="flex flex-wrap items-center gap-3 mt-4">
+              {pending ? (
+                <button
+                  onClick={() => run(pending, false)}
+                  disabled={importing}
+                  className="bg-primary hover:opacity-90 text-white px-4 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-60"
+                >
+                  {importing ? "Import en cours…" : `Confirmer l'import de ${result.lignes_validees} ligne(s)`}
+                </button>
+              ) : (
+                <p className="text-sm text-tx-muted">Aucune ligne importable : corrigez le fichier puis réessayez.</p>
+              )}
+              <button
+                onClick={() => { setPending(null); setResult(null); }}
+                disabled={importing}
+                className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-border text-tx"
+              >
+                Annuler
+              </button>
             </div>
           )}
         </div>

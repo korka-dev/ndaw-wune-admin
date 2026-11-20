@@ -8,6 +8,7 @@ import { Donut, BarList } from "@/components/Charts";
 import { BIButton, BIModal, BIPanel, KpiCard } from "@/components/BIModal";
 
 import { notifyError } from "@/lib/notify";
+import { useArchive, ArchiveNotice, ShowArchivedToggle, ArchivedBadge, RestoreButton, ArchiveConsequences } from "@/components/ArchiveControls";
 type ReimportResult = { updated: number; created: number; skipped: number; errors: string[] };
 
 const TEACHER_EXPORT_FIELDS = [
@@ -34,6 +35,7 @@ interface Teacher {
   niveau?: string[];
   classes?: string[];
   app_access?: string;
+  archived_at?: string | null;
 }
 interface School { id: string; name: string; }
 const EMPTY_T = { name: "", phone: "", title: "", school_id: "", niveau: [] as string[], classes: [] as string[], app_access: "full" };
@@ -80,14 +82,23 @@ export default function TeachersPage() {
   const [reimportResult, setReimportResult] = useState<ReimportResult | null>(null);
   const [reimportError, setReimportError] = useState<string | null>(null);
   const [showBI, setShowBI] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const reimportRef = useRef<HTMLInputElement>(null);
 
   const load = () => {
     // limit=10000 pour charger tous les enseignants sans pagination
-    teachersApi.list({ limit: 10000 }).then(r => setTeachers(r.data.items ?? [])).catch(() => { });
-    schoolsApi.list({ limit: 10000 }).then(r => setSchools(r.data.items ?? [])).catch(() => { });
+    teachersApi.list({ limit: 10000, ...(showArchived ? { archives: true } : {}) }).then(r => setTeachers(r.data.items ?? []))
+      .catch((e) => notifyError("Le chargement des enseignants a échoué. Rechargez la page ou réessayez plus tard.", e));
+    schoolsApi.list({ limit: 10000 }).then(r => setSchools(r.data.items ?? []))
+      .catch((e) => notifyError("Le chargement des écoles a échoué. Rechargez la page ou réessayez plus tard.", e));
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [showArchived]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const arch = useArchive({
+    archive: (id) => teachersApi.delete(id),
+    restore: (id) => teachersApi.restore(id),
+    reload:  () => load(),
+  });
   useEffect(() => { setPage(1); }, [search, filterSchool, filterIef, filterClasse, filterStatus]);
 
   // Valeurs uniques pour les filtres IEF et Classe
@@ -204,7 +215,7 @@ export default function TeachersPage() {
 
   const doDelete = async (t: Teacher) => {
     setLoading(true);
-    try { await teachersApi.delete(t.id); load(); setModal(null); }
+    try { if (await arch.archive(t.id)) setModal(null); }
     finally { setLoading(false); }
   };
 
@@ -358,6 +369,9 @@ export default function TeachersPage() {
             Réinitialiser
           </button>
         )}
+        <div className="flex items-center">
+          <ShowArchivedToggle checked={showArchived} onChange={v => { setShowArchived(v); setPage(1); }} />
+        </div>
       </div>
 
       <div className="bg-surface rounded-2xl border border-border overflow-hidden flex-1 flex flex-col">
@@ -388,6 +402,7 @@ export default function TeachersPage() {
                       <div className="min-w-0">
                         <div className="font-semibold text-tx truncate">{t.name}</div>
                         {t.title && <div className="text-xs text-tx-muted truncate">{t.title}</div>}
+                        {t.archived_at && <div className="mt-1"><ArchivedBadge at={t.archived_at} /></div>}
                       </div>
                     </div>
                   </td>
@@ -442,10 +457,12 @@ export default function TeachersPage() {
 
                   {/* Actions */}
                   <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
+                    {t.archived_at ? <RestoreButton onClick={() => arch.restore(t.id)} /> : (
                     <button onClick={() => setModal({ kind: "manage", teacher: t })}
                       className="text-xs bg-primary-soft text-primary px-3 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors">
                       Gérer
                     </button>
+                    )}
                   </td>
                 </tr>
               );
@@ -536,10 +553,17 @@ export default function TeachersPage() {
                 className="flex-1 py-2.5 rounded-xl border border-border text-sm text-tx-muted font-medium hover:bg-surface-alt transition-colors">
                 Fermer
               </button>
+              {modal.teacher.archived_at ? (
+                <button onClick={async () => { if (await arch.restore(modal.teacher.id)) setModal(null); }}
+                  className="flex-1 py-2.5 rounded-xl bg-success text-white text-sm font-semibold hover:opacity-90 transition-opacity">
+                  Restaurer
+                </button>
+              ) : (
               <button onClick={() => setModal({ kind: "manage", teacher: modal.teacher })}
                 className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:opacity-90 transition-opacity">
                 Gérer
               </button>
+              )}
             </div>
           </div>
         </div>
@@ -609,7 +633,7 @@ export default function TeachersPage() {
                 onClick={() => setModal({ kind: "delete", teacher: modal.teacher })}
                 className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-surface-alt hover:bg-danger-soft text-tx hover:text-danger text-sm font-medium transition-colors text-left">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>
-                Supprimer l'enseignant
+                Archiver l'enseignant
               </button>
             </div>
             <button onClick={() => setModal(null)} className="mt-4 w-full px-4 py-2 rounded-xl border border-border text-sm text-tx-muted hover:bg-surface-alt transition-colors">Annuler</button>
@@ -876,7 +900,9 @@ export default function TeachersPage() {
         </div>
       )}
 
-      {/* ── Modal Confirmation Suppression ────────────────────────────── */}
+      <ArchiveNotice message={arch.notice} onClose={() => arch.setNotice("")} />
+
+      {/* ── Modal Confirmation Archivage ──────────────────────────────── */}
       {modal && typeof modal === "object" && "kind" in modal && modal.kind === "delete" && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-sm">
@@ -885,17 +911,18 @@ export default function TeachersPage() {
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-danger"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>
               </div>
               <div>
-                <h2 className="text-base font-bold text-tx">Supprimer l'enseignant</h2>
-                <p className="text-sm text-tx-muted mt-1">
-                  Êtes-vous sûr de vouloir supprimer <span className="font-semibold text-tx">{modal.teacher.name}</span> ? Cette action est irréversible.
+                <h2 className="text-base font-bold text-tx">Archiver l'enseignant</h2>
+                <p className="text-sm text-tx-muted mt-1 mb-2">
+                  Archiver <span className="font-semibold text-tx">{modal.teacher.name}</span> ?
                 </p>
+                <ArchiveConsequences user />
               </div>
             </div>
             <div className="flex gap-3 justify-end">
               <button onClick={() => setModal(null)} className="px-4 py-2 rounded-xl border border-border text-sm text-tx-muted hover:bg-surface-alt transition-colors">Annuler</button>
               <button onClick={() => doDelete(modal.teacher)} disabled={loading}
                 className="px-4 py-2 rounded-xl bg-danger hover:bg-danger/90 text-white text-sm font-semibold disabled:opacity-60 transition-colors">
-                {loading ? "Suppression…" : "Supprimer"}
+                {loading ? "Archivage…" : "Archiver"}
               </button>
             </div>
           </div>

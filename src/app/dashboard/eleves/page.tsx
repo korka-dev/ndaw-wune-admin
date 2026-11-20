@@ -8,6 +8,7 @@ import { Donut, BarList } from "@/components/Charts";
 import { BIButton, BIModal, BIPanel, KpiCard } from "@/components/BIModal";
 
 import { notifyError } from "@/lib/notify";
+import { useArchive, ArchiveNotice, ShowArchivedToggle, ArchivedBadge, RestoreButton, ArchiveConsequences } from "@/components/ArchiveControls";
 const PAGE_SIZE = 50;
 
 const ELEVE_EXPORT_FIELDS = [
@@ -33,6 +34,7 @@ interface Eleve {
   statut_selection?: string;
   school_name?: string;
   school_region?: string;
+  archived_at?: string | null;
 }
 interface School { id: string; name: string; region?: string; }
 interface Session { id: string; name: string; status: string; }
@@ -244,6 +246,7 @@ export default function ElevesPage() {
   const [reimportResult, setReimportResult] = useState<ReimportResult | null>(null);
   const [reimportError, setReimportError] = useState<string | null>(null);
   const [showBI, setShowBI] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const reimportRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
   const [filterSchool, setFilterSchool] = useState("");
@@ -260,7 +263,7 @@ export default function ElevesPage() {
   const load = (isFirstLoad = false) => {
     if (isFirstLoad) { setDataLoading(true); setDataError(null); }
     Promise.all([
-      elevesApi.list({ limit: 10000 }),
+      elevesApi.list({ limit: 10000, ...(showArchived ? { archives: true } : {}) }),
       schoolsApi.list({ limit: 10000 }),
       sessionsApi.list(),
     ]).then(([er, sr, sesr]) => {
@@ -274,7 +277,13 @@ export default function ElevesPage() {
       if (isFirstLoad) setDataLoading(false);
     });
   };
-  useEffect(() => { load(true); }, []);
+  useEffect(() => { load(true); }, [showArchived]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const arch = useArchive({
+    archive: (id) => elevesApi.delete(id),
+    restore: (id) => elevesApi.restore(id),
+    reload:  () => load(false),
+  });
   useEffect(() => { setPage(1); }, [search, filterSchool, filterClasse, filterSession, filterSexe, filterIef]);
   useEffect(() => { setSelectedIds(new Set()); setSelectAll(false); }, [search, filterSchool, filterClasse, filterSession, filterSexe, filterIef]);
 
@@ -398,7 +407,7 @@ export default function ElevesPage() {
 
   const doDelete = async (eleve: Eleve) => {
     setLoading(true);
-    try { await elevesApi.delete(eleve.id); load(false); setModal(null); }
+    try { if (await arch.archive(eleve.id)) setModal(null); }
     finally { setLoading(false); }
   };
 
@@ -406,11 +415,13 @@ export default function ElevesPage() {
     setLoading(true);
     try {
       const ids = selectAll ? filtered.map(e => e.id) : Array.from(selectedIds);
-      await elevesApi.bulkDelete(ids);
+      const { data } = await elevesApi.bulkDelete(ids);
+      const n = typeof data?.archived === "number" ? data.archived : ids.length;
+      arch.setNotice(`${n} élève${n > 1 ? "s" : ""} archivé${n > 1 ? "s" : ""}. Leur historique est conservé ; restauration possible via « Afficher les archivés ».`);
       clearSelection();
       load(false);
       setModal(null);
-    } catch (e) { notifyError("La suppression a échoué : aucun élève n’a été supprimé, ou seulement une partie. Rechargez la liste pour vérifier.", e); }
+    } catch (e) { notifyError("L’archivage a échoué : aucun élève n’a été archivé, ou seulement une partie. Rechargez la liste pour vérifier.", e); }
     finally { setLoading(false); }
   };
 
@@ -588,6 +599,9 @@ export default function ElevesPage() {
             Réinitialiser
           </button>
         )}
+        <div className="flex items-center">
+          <ShowArchivedToggle checked={showArchived} onChange={v => { setShowArchived(v); setPage(1); }} />
+        </div>
       </div>
 
       {/* ── Barre de sélection multiple ── */}
@@ -614,7 +628,7 @@ export default function ElevesPage() {
               <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
               <path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
             </svg>
-            Supprimer la sélection
+            Archiver la sélection
           </button>
           <button onClick={clearSelection} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-brand/10 text-brand/60 hover:text-brand transition-colors">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
@@ -684,6 +698,7 @@ export default function ElevesPage() {
                         {cleanNamePart(e.nom) && cleanNamePart(e.prenom) && (
                           <div className="text-xs text-tx-muted truncate">{cleanNamePart(e.prenom)}</div>
                         )}
+                        {e.archived_at && <div className="mt-1"><ArchivedBadge at={e.archived_at} /></div>}
                       </div>
                     </td>
                     <td className="px-4 py-3.5 cursor-pointer" onClick={() => setModal({ kind: "view", eleve: e })}>
@@ -714,10 +729,12 @@ export default function ElevesPage() {
                         : <span className="text-tx-muted text-xs">—</span>}
                     </td>
                     <td className="px-4 py-3.5" onClick={ev => ev.stopPropagation()}>
+                      {e.archived_at ? <RestoreButton onClick={() => arch.restore(e.id)} /> : (
                       <div className="flex gap-2">
                         <button onClick={() => openEdit(e)} className="text-xs bg-primary-soft text-primary px-3 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors">Modifier</button>
-                        <button onClick={() => setModal({ kind: "delete", eleve: e })} className="text-xs bg-danger-soft text-danger px-3 py-1 rounded-lg font-medium hover:bg-danger hover:text-white transition-colors">Supprimer</button>
+                        <button onClick={() => setModal({ kind: "delete", eleve: e })} className="text-xs bg-danger-soft text-danger px-3 py-1 rounded-lg font-medium hover:bg-danger hover:text-white transition-colors">Archiver</button>
                       </div>
+                      )}
                     </td>
                   </tr>
                 );
@@ -803,7 +820,9 @@ export default function ElevesPage() {
         </div>
       )}
 
-      {/* ── Modal Suppression unitaire ── */}
+      <ArchiveNotice message={arch.notice} onClose={() => arch.setNotice("")} />
+
+      {/* ── Modal Archivage unitaire ── */}
       {modal && typeof modal === "object" && modal.kind === "delete" && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-sm">
@@ -815,24 +834,25 @@ export default function ElevesPage() {
                 </svg>
               </div>
               <div>
-                <h2 className="text-base font-bold text-tx">Supprimer l&apos;élève</h2>
-                <p className="text-sm text-tx-muted mt-1">
-                  Êtes-vous sûr de vouloir supprimer <span className="font-semibold text-tx">{fullName(modal.eleve)}</span> ? Cette action est irréversible.
+                <h2 className="text-base font-bold text-tx">Archiver l&apos;élève</h2>
+                <p className="text-sm text-tx-muted mt-1 mb-2">
+                  Archiver <span className="font-semibold text-tx">{fullName(modal.eleve)}</span> ?
                 </p>
+                <ArchiveConsequences />
               </div>
             </div>
             <div className="flex gap-3 justify-end">
               <button onClick={() => setModal(null)} className="px-4 py-2 rounded-xl border border-border text-sm text-tx-muted hover:bg-surface-alt transition-colors">Annuler</button>
               <button onClick={() => doDelete(modal.eleve)} disabled={loading}
                 className="px-4 py-2 rounded-xl bg-danger hover:bg-danger/90 text-white text-sm font-semibold disabled:opacity-60 transition-colors">
-                {loading ? "Suppression…" : "Supprimer"}
+                {loading ? "Archivage…" : "Archiver"}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Modal Suppression multiple ── */}
+      {/* ── Modal Archivage multiple ── */}
       {modal && typeof modal === "object" && modal.kind === "bulkDelete" && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-sm">
@@ -844,17 +864,18 @@ export default function ElevesPage() {
                 </svg>
               </div>
               <div>
-                <h2 className="text-base font-bold text-tx">Supprimer {modal.count} élève{modal.count > 1 ? "s" : ""}</h2>
-                <p className="text-sm text-tx-muted mt-1">
-                  Cette action va supprimer définitivement <span className="font-semibold text-tx">{modal.count} élève{modal.count > 1 ? "s" : ""}</span> sélectionné{modal.count > 1 ? "s" : ""}. Elle est irréversible.
+                <h2 className="text-base font-bold text-tx">Archiver {modal.count} élève{modal.count > 1 ? "s" : ""}</h2>
+                <p className="text-sm text-tx-muted mt-1 mb-2">
+                  Archiver <span className="font-semibold text-tx">{modal.count} élève{modal.count > 1 ? "s" : ""}</span> sélectionné{modal.count > 1 ? "s" : ""} ?
                 </p>
+                <ArchiveConsequences />
               </div>
             </div>
             <div className="flex gap-3 justify-end">
               <button onClick={() => setModal(null)} className="px-4 py-2 rounded-xl border border-border text-sm text-tx-muted hover:bg-surface-alt transition-colors">Annuler</button>
               <button onClick={doBulkDelete} disabled={loading}
                 className="px-4 py-2 rounded-xl bg-danger hover:bg-danger/90 text-white text-sm font-semibold disabled:opacity-60 transition-colors">
-                {loading ? "Suppression…" : `Supprimer ${modal.count} élève${modal.count > 1 ? "s" : ""}`}
+                {loading ? "Archivage…" : `Archiver ${modal.count} élève${modal.count > 1 ? "s" : ""}`}
               </button>
             </div>
           </div>

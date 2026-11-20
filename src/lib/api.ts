@@ -74,10 +74,12 @@ export const authApi = {
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 export const sessionsApi = {
-  list: (params?: { limit?: number; skip?: number }) => api.get("/admin/sessions", { params }),
+  list: (params?: { limit?: number; skip?: number; archives?: boolean }) => api.get("/admin/sessions", { params }),
   create: (d: unknown) => api.post("/admin/sessions", d),
   update: (id: string, d: unknown) => api.patch(`/admin/sessions/${id}`, d),
-  delete: (id: string) => api.delete(`/admin/sessions/${id}`),
+  /** Archive (APP-15) : l'historique est conservé. `definitif` : suppression physique, refusée (409) s'il existe un historique. */
+  delete: (id: string, definitif = false) => api.delete(`/admin/sessions/${id}`, { params: definitif ? { definitif: true } : undefined }),
+  restore: (id: string) => api.post(`/admin/sessions/${id}/restaurer`),
   activate: (id: string) => api.post(`/admin/sessions/${id}/activate`),
   deactivate: (id: string) => api.patch(`/admin/sessions/${id}`, { status: "inactive" }),
   assignTeachers: (id: string, teacher_ids: string[]) =>
@@ -86,10 +88,12 @@ export const sessionsApi = {
 };
 
 export const teachersApi = {
-  list: (params?: { limit?: number; skip?: number }) => api.get("/admin/teachers", { params }),
+  list: (params?: { limit?: number; skip?: number; archives?: boolean }) => api.get("/admin/teachers", { params }),
   create: (d: unknown) => api.post("/admin/teachers", d),
   update: (id: string, d: unknown) => api.patch(`/admin/teachers/${id}`, d),
-  delete: (id: string) => api.delete(`/admin/teachers/${id}`),
+  /** Archive (APP-15) : l'historique est conservé. `definitif` : suppression physique, refusée (409) s'il existe un historique. */
+  delete: (id: string, definitif = false) => api.delete(`/admin/teachers/${id}`, { params: definitif ? { definitif: true } : undefined }),
+  restore: (id: string) => api.post(`/admin/teachers/${id}/restaurer`),
   toggleStatus: (id: string) => api.post(`/admin/teachers/${id}/toggle-status`),
   importCsv: (file: File) => {
     const fd = new FormData();
@@ -109,10 +113,12 @@ export const teachersApi = {
 };
 
 export const schoolsApi = {
-  list: (params?: { limit?: number; skip?: number }) => api.get("/admin/schools", { params }),
+  list: (params?: { limit?: number; skip?: number; archives?: boolean }) => api.get("/admin/schools", { params }),
   create: (d: unknown) => api.post("/admin/schools", d),
   update: (id: string, d: unknown) => api.patch(`/admin/schools/${id}`, d),
-  delete: (id: string) => api.delete(`/admin/schools/${id}`),
+  /** Archive (APP-15) : l'historique est conservé. `definitif` : suppression physique, refusée (409) s'il existe un historique. */
+  delete: (id: string, definitif = false) => api.delete(`/admin/schools/${id}`, { params: definitif ? { definitif: true } : undefined }),
+  restore: (id: string) => api.post(`/admin/schools/${id}/restaurer`),
   importCsv: (file: File) => {
     const fd = new FormData();
     fd.append("file", file);
@@ -142,11 +148,17 @@ export const planningApi = {
   create: (d: unknown) => api.post("/admin/planning", d),
   update: (id: string, d: unknown) => api.patch(`/admin/planning/${id}`, d),
   delete: (id: string) => api.delete(`/admin/planning/${id}`),
-  import: (session_id: string, file: File, semaine?: number) => {
+  /** APP-26 : `dryRun` = aperçu sans modification ; `accepterErreurs` confirme un import partiel. */
+  import: (session_id: string, file: File, semaine?: number, opts?: { dryRun?: boolean; accepterErreurs?: boolean }) => {
     const fd = new FormData();
     fd.append("file", file);
-    const qs = semaine != null ? `&semaine=${semaine}` : "";
-    return api.post(`/admin/planning/import?session_id=${session_id}${qs}`, fd, {
+    return api.post("/admin/planning/import", fd, {
+      params: {
+        session_id,
+        semaine: semaine ?? undefined,
+        dry_run: opts?.dryRun || undefined,
+        accepter_erreurs: opts?.accepterErreurs || undefined,
+      },
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
@@ -189,21 +201,25 @@ export const suiviEvaluationsApi = {
 };
 
 export const usersApi = {
-  list: (params?: { limit?: number; skip?: number }) => api.get("/admin/users", { params }),
+  list: (params?: { limit?: number; skip?: number; archives?: boolean }) => api.get("/admin/users", { params }),
   create: (d: unknown) => api.post("/admin/users", d),
   update: (id: string, d: unknown) => api.patch(`/admin/users/${id}`, d),
-  delete: (id: string) => api.delete(`/admin/users/${id}`),
+  /** Archive (APP-15) : l'historique est conservé. `definitif` : suppression physique, refusée (409) s'il existe un historique. */
+  delete: (id: string, definitif = false) => api.delete(`/admin/users/${id}`, { params: definitif ? { definitif: true } : undefined }),
+  restore: (id: string) => api.post(`/admin/users/${id}/restaurer`),
   /** Nouveau mot de passe pour un compte admin/coordonnateur (sessions invalidées). */
   resetPassword: (id: string, d: { new_password: string; force_change?: boolean }) =>
     api.post(`/admin/users/${id}/reset-password`, d),
 };
 
 export const superviseursApi = {
-  list: (params?: { limit?: number; skip?: number }) => api.get("/admin/superviseurs", { params }),
+  list: (params?: { limit?: number; skip?: number; archives?: boolean }) => api.get("/admin/superviseurs", { params }),
   create: (d: unknown) => api.post("/admin/superviseurs", d),
   get: (id: string) => api.get(`/admin/superviseurs/${id}`),
   update: (id: string, d: unknown) => api.patch(`/admin/superviseurs/${id}`, d),
-  delete: (id: string) => api.delete(`/admin/superviseurs/${id}`),
+  /** Archive (APP-15) : l'historique est conservé. `definitif` : suppression physique, refusée (409) s'il existe un historique. */
+  delete: (id: string, definitif = false) => api.delete(`/admin/superviseurs/${id}`, { params: definitif ? { definitif: true } : undefined }),
+  restore: (id: string) => api.post(`/admin/superviseurs/${id}/restaurer`),
   toggleStatus: (id: string) => api.post(`/admin/superviseurs/${id}/toggle-status`),
   assignTeachers: (id: string, ids: string[]) => api.post(`/admin/superviseurs/${id}/assign-teachers`, { assigned_teacher_ids: ids }),
   exportCsv: () => api.get("/admin/superviseurs/export/csv", { responseType: "blob" }),
@@ -213,18 +229,20 @@ export const superviseursApi = {
 export const comptesTerrainApi = {
   // Liste unifiée tuteurs + superviseurs — les mots de passe ne sont jamais
   // transmis : bcrypt les hache à sens unique, aucune route ne peut les lire.
-  list: (params?: { role?: "enseignant" | "superviseur"; search?: string; skip?: number; limit?: number }) =>
+  list: (params?: { role?: "enseignant" | "superviseur"; search?: string; skip?: number; limit?: number; archives?: boolean }) =>
     api.get("/admin/comptes-terrain", { params }),
   resetPassword: (id: string, d: { new_password: string; force_change?: boolean }) =>
     api.post(`/admin/comptes-terrain/${id}/reset-password`, d),
 };
 
 export const evaluateursApi = {
-  list: (params?: { limit?: number; skip?: number }) => api.get("/admin/evaluateurs", { params }),
+  list: (params?: { limit?: number; skip?: number; archives?: boolean }) => api.get("/admin/evaluateurs", { params }),
   create: (d: unknown) => api.post("/admin/evaluateurs", d),
   get: (id: string) => api.get(`/admin/evaluateurs/${id}`),
   update: (id: string, d: unknown) => api.patch(`/admin/evaluateurs/${id}`, d),
-  delete: (id: string) => api.delete(`/admin/evaluateurs/${id}`),
+  /** Archive (APP-15) : l'historique est conservé. `definitif` : suppression physique, refusée (409) s'il existe un historique. */
+  delete: (id: string, definitif = false) => api.delete(`/admin/evaluateurs/${id}`, { params: definitif ? { definitif: true } : undefined }),
+  restore: (id: string) => api.post(`/admin/evaluateurs/${id}/restaurer`),
   toggleStatus: (id: string) => api.post(`/admin/evaluateurs/${id}/toggle-status`),
   assignTeachers: (id: string, ids: string[]) => api.post(`/admin/evaluateurs/${id}/assign-teachers`, { assigned_teacher_ids: ids }),
 };
@@ -237,6 +255,7 @@ export const rapportJournalierAdminApi = {
     date_from?: string;
     date_to?: string;
     ief?: string;
+    statut?: string;
     skip?: number;
     limit?: number;
   }) =>
@@ -248,6 +267,7 @@ export const rapportJournalierAdminApi = {
     date_from?: string;
     date_to?: string;
     ief?: string;
+    statut?: string;
     fields?: string;
   }) =>
     api.get("/admin/rapports/journalier/export/csv", {
@@ -261,6 +281,7 @@ export const rapportJournalierAdminApi = {
     date_from?: string;
     date_to?: string;
     ief?: string;
+    statut?: string;
   }) => api.get("/admin/rapports/journalier/stats", { params }),
   photos: (params?: {
     teacher_id?: string;
@@ -269,6 +290,7 @@ export const rapportJournalierAdminApi = {
     date_from?: string;
     date_to?: string;
     ief?: string;
+    statut?: string;
     skip?: number;
     limit?: number;
   }) => api.get("/admin/rapports/journalier/photos", { params }),
@@ -279,6 +301,9 @@ export const rapportJournalierAdminApi = {
     api.get(`/admin/rapports/journalier/${rapportId}/photo/${index}`, {
       responseType: "blob",
     }),
+  /** APP-31 : annulation motivée (le rapport reste consultable avec statut=annule). */
+  annuler: (id: string, motif: string) => api.post(`/admin/rapports/journalier/${id}/annuler`, { motif }),
+  historique: (id: string) => api.get(`/admin/rapports/journalier/${id}/historique`),
 };
 
 export const rapportQuestionsApi = {
@@ -342,11 +367,13 @@ export const evaluationCompetencesApi = {
 };
 
 export const elevesApi = {
-  list: (params?: { school_id?: string; session_id?: string; classe?: string; skip?: number; limit?: number }) =>
+  list: (params?: { school_id?: string; session_id?: string; classe?: string; skip?: number; limit?: number; archives?: boolean }) =>
     api.get("/admin/eleves", { params }),
   create: (d: unknown) => api.post("/admin/eleves", d),
   update: (id: string, d: unknown) => api.patch(`/admin/eleves/${id}`, d),
-  delete: (id: string) => api.delete(`/admin/eleves/${id}`),
+  /** Archive (APP-15) : l'historique est conservé. `definitif` : suppression physique, refusée (409) s'il existe un historique. */
+  delete: (id: string, definitif = false) => api.delete(`/admin/eleves/${id}`, { params: definitif ? { definitif: true } : undefined }),
+  restore: (id: string) => api.post(`/admin/eleves/${id}/restaurer`),
   bulkDelete: (ids: string[]) => api.delete("/admin/eleves", { data: { ids } }),
   // Export
   exportCsv: () => api.get("/admin/eleves/export/csv", { responseType: "blob" }),
@@ -380,11 +407,13 @@ export const elevesApi = {
 };
 
 export const classesApi = {
-  list: (params?: { school_id?: string; niveau?: string; skip?: number; limit?: number }) =>
+  list: (params?: { school_id?: string; niveau?: string; skip?: number; limit?: number; archives?: boolean }) =>
     api.get("/admin/classes", { params }),
   create: (d: unknown) => api.post("/admin/classes", d),
   update: (id: string, d: unknown) => api.patch(`/admin/classes/${id}`, d),
-  delete: (id: string) => api.delete(`/admin/classes/${id}`),
+  /** Archive (APP-15) : l'historique est conservé. `definitif` : suppression physique, refusée (409) s'il existe un historique. */
+  delete: (id: string, definitif = false) => api.delete(`/admin/classes/${id}`, { params: definitif ? { definitif: true } : undefined }),
+  restore: (id: string) => api.post(`/admin/classes/${id}/restaurer`),
   exportXlsx: (fields?: string) => api.get("/admin/classes/export/xlsx", { params: fields ? { fields } : undefined, responseType: "blob" }),
   reimportXlsx: (file: File) => {
     const fd = new FormData();
@@ -479,7 +508,7 @@ export const exportApi = {
   teachersXlsx: (fields?: string) => api.get("/admin/teachers/export/xlsx", { params: fields ? { fields } : undefined, responseType: "blob" }),
   schools: () => api.get("/admin/schools/export/csv", { responseType: "blob" }),
   schoolsXlsx: (fields?: string) => api.get("/admin/schools/export/xlsx", { params: fields ? { fields } : undefined, responseType: "blob" }),
-  planning: (params?: { session_id?: string; semaine?: number }) =>
+  planning: (params?: { session_id?: string; semaine?: number; jour?: number; matiere?: string }) =>
     api.get("/admin/planning/export/csv", { params, responseType: "blob" }),
   eleves: () => api.get("/admin/eleves/export/csv", { responseType: "blob" }),
 };
@@ -487,10 +516,12 @@ export const exportApi = {
 // ── Import / Export global (écoles, superviseurs, tuteurs, classes, élèves) ────
 export const importExportApi = {
   export: () => api.get("/admin/import-export/export", { responseType: "blob" }),
-  import: (file: File) => {
+  /** APP-25 : `dryRun` = aperçu exact (tout est vérifié puis annulé). */
+  import: (file: File, dryRun = false) => {
     const form = new FormData();
     form.append("file", file);
     return api.post("/admin/import-export/import", form, {
+      params: dryRun ? { dry_run: true } : undefined,
       headers: { "Content-Type": "multipart/form-data" },
     });
   },

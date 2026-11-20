@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { planningApi, sessionsApi, exportApi } from "@/lib/api";
+import { errorDetail } from "@/lib/notify";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 
@@ -88,10 +89,13 @@ export default function PlanningPage() {
       const res = await exportApi.planning({
         session_id: sessId || undefined,
         semaine: filterSemaine !== "" ? Number(filterSemaine) : undefined,
+        // APP-34 : le fichier reflète exactement les filtres affichés.
+        jour: filterJour !== "" ? Number(filterJour) : undefined,
+        matiere: filterMatiere || undefined,
       });
       downloadBlob(res.data, "planning.csv");
-    } catch {
-      setExportError("L'export du planning a échoué. Réessayez dans un instant.");
+    } catch (e) {
+      setExportError(`L'export du planning a échoué${errorDetail(e) ? ` : ${errorDetail(e)}` : ""}. Réessayez dans un instant.`);
     } finally { setExporting(false); }
   };
 
@@ -101,11 +105,16 @@ export default function PlanningPage() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importPreview, setImportPreview] = useState<any[]>([]);
   const [importErrors, setImportErrors] = useState<string[]>([]);
-  const [importResult, setImportResult] = useState<{ imported: number; errors: any[] } | null>(null);
+  const [importResult, setImportResult] = useState<{ imported: number; replaced: number; errors: any[]; perimetre: string } | null>(null);
+  // Rapport V2, APP-26 : aperçu serveur (dry_run) obligatoire avant remplacement.
+  const [importApercu, setImportApercu] = useState<{
+    perimetre: string; a_remplacer: number; valides: number; errors: { row: any; error: string }[];
+    segments: { jour: number; heure_debut: string; heure_fin: string; matiere?: string; semaine?: number }[];
+  } | null>(null);
   const [importing, setImporting] = useState(false);
 
   const resetImport = () => {
-    setImportFile(null); setImportPreview([]); setImportErrors([]);
+    setImportFile(null); setImportPreview([]); setImportErrors([]); setImportApercu(null);
     setImportResult(null); setImporting(false); setImportSemaine("");
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -113,7 +122,7 @@ export default function PlanningPage() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    setImportFile(f); setImportResult(null); setImportPreview([]); setImportErrors([]);
+    setImportFile(f); setImportResult(null); setImportPreview([]); setImportErrors([]); setImportApercu(null);
 
     const name = f.name.toLowerCase();
     const isPdf = name.endsWith(".pdf") || f.type === "application/pdf";
@@ -129,34 +138,38 @@ export default function PlanningPage() {
     reader.readAsText(f, "utf-8");
   };
 
+  /** Étape 1 : aperçu serveur (rien n'est modifié). Étape 2 : remplacement confirmé. */
   const handleImport = async () => {
     if (!importFile) return;
     if (!sessId) {
       setImportErrors(["Aucune session active trouvée. Créez ou activez une session de programme avant d'importer un planning."]);
       return;
     }
+    const semaine = importSemaine ? Number(importSemaine) : undefined;
     setImporting(true);
+    setImportErrors([]);
     try {
-      const res = await planningApi.import(
-        sessId,
-        importFile,
-        importSemaine ? Number(importSemaine) : undefined
-      );
-      setImportResult(res.data);
-      if (res.data.imported > 0) loadSegs();
+      if (!importApercu) {
+        const res = await planningApi.import(sessId, importFile, semaine, { dryRun: true });
+        setImportApercu(res.data);
+      } else {
+        const res = await planningApi.import(sessId, importFile, semaine, {
+          accepterErreurs: importApercu.errors.length > 0,
+        });
+        setImportResult(res.data);
+        setImportApercu(null);
+        if (res.data.imported > 0) loadSegs();
+      }
     } catch (e: any) {
       const detail = e?.response?.data?.detail;
-      let msg: string;
-      if (!e?.response) {
-        msg = "Impossible de joindre le serveur. Vérifiez votre connexion et que le serveur est démarré.";
-      } else if (Array.isArray(detail)) {
-        msg = detail.map((d: any) => d.msg ?? JSON.stringify(d)).join(" · ");
-      } else if (detail) {
-        msg = String(detail);
-      } else {
-        msg = `Erreur ${e.response.status} lors de l'import.`;
+      const lignes: string[] = [errorDetail(e) ?? "Erreur lors de l'import."];
+      if (detail && typeof detail === "object" && Array.isArray(detail.errors)) {
+        lignes.push(...detail.errors.slice(0, 30).map((x: any) => `Ligne ${x.row} : ${x.error}`));
       }
-      setImportErrors([msg]);
+      // 409 PLANNING_IMPORT_PARTIEL : le serveur renvoie l'aperçu à jour.
+      if (detail?.code === "PLANNING_IMPORT_PARTIEL") setImportApercu(detail);
+      else setImportApercu(null);
+      setImportErrors(lignes);
     } finally {
       setImporting(false);
     }
@@ -606,7 +619,7 @@ export default function PlanningPage() {
                   <label className="block text-sm font-medium text-tx mb-1">Semaine concernée</label>
                   <select
                     value={importSemaine}
-                    onChange={e => setImportSemaine(e.target.value)}
+                    onChange={e => { setImportSemaine(e.target.value); setImportApercu(null); }}
                     className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 transition">
                     <option value="">Toutes les semaines (remplace tout le planning)</option>
                     {Array.from({ length: 12 }, (_, i) => i + 1).map(s => (
@@ -681,6 +694,43 @@ export default function PlanningPage() {
               </>
             )}
 
+            {/* Aperçu serveur avant remplacement */}
+            {importApercu && !importResult && (
+              <div className="mb-4 rounded-xl border border-border p-4 overflow-auto">
+                <p className="text-sm font-bold text-tx">Aperçu — rien n&apos;est encore modifié</p>
+                <ul className="text-sm text-tx mt-2 space-y-0.5">
+                  <li>Périmètre remplacé : <b>{importApercu.perimetre}</b></li>
+                  <li>Créneaux actuels supprimés : <b>{importApercu.a_remplacer}</b></li>
+                  <li>Créneaux valides importés : <b>{importApercu.valides}</b></li>
+                  {importApercu.errors.length > 0 && (
+                    <li className="text-danger">Lignes invalides (non importées) : <b>{importApercu.errors.length}</b></li>
+                  )}
+                </ul>
+                {importApercu.errors.length > 0 && (
+                  <div className="mt-2 px-3 py-2 rounded-lg bg-danger-soft text-danger text-xs space-y-0.5 max-h-32 overflow-auto">
+                    {importApercu.errors.map((e, i) => <p key={i}>Ligne {e.row} : {e.error}</p>)}
+                  </div>
+                )}
+                <table className="w-full text-xs mt-3">
+                  <thead><tr className="text-tx-muted">
+                    {["Sem.", "Jour", "Début", "Fin", "Activité"].map(h => <th key={h} className="text-left py-1 pr-3">{h}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {importApercu.segments.slice(0, 50).map((r, i) => (
+                      <tr key={i} className="border-t border-border">
+                        <td className="py-1 pr-3">{r.semaine ?? "—"}</td>
+                        <td className="py-1 pr-3">{JOURS[r.jour] ?? r.jour}</td>
+                        <td className="py-1 pr-3 font-mono">{r.heure_debut}</td>
+                        <td className="py-1 pr-3 font-mono">{r.heure_fin}</td>
+                        <td className="py-1">{r.matiere ?? ""}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {importApercu.valides > 50 && <p className="text-xs text-tx-muted mt-1">… {importApercu.valides - 50} autre(s) créneau(x).</p>}
+              </div>
+            )}
+
             {/* Résultat après import */}
             {importResult && (
               <div className="flex-1 flex flex-col items-center justify-center gap-4 py-6">
@@ -693,6 +743,9 @@ export default function PlanningPage() {
                 <div className="text-center">
                   <p className="text-base font-bold text-tx">
                     {importResult.imported} créneau{importResult.imported !== 1 ? "x" : ""} importé{importResult.imported !== 1 ? "s" : ""}
+                  </p>
+                  <p className="text-xs text-tx-muted mt-1">
+                    {importResult.perimetre} · {importResult.replaced} ancien(s) créneau(x) remplacé(s)
                   </p>
                   {importResult.errors.length > 0 && (
                     <p className="text-sm text-warn mt-1">{importResult.errors.length} ligne{importResult.errors.length !== 1 ? "s" : ""} ignorée{importResult.errors.length !== 1 ? "s" : ""}</p>
@@ -718,11 +771,15 @@ export default function PlanningPage() {
               {!importResult && (
                 <button
                   onClick={handleImport}
-                  disabled={!importFile || importErrors.length > 0 || importing}
+                  disabled={!importFile || importing || (!importApercu && importErrors.length > 0)}
                   className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                   {importing
                     ? <><svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>Importation…</>
-                    : <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>Importer {importPreview.length > 0 ? `(${importPreview.length} créneaux)` : importFile?.name.endsWith(".pdf") ? "le PDF" : ""}</>
+                    : <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>{importApercu
+                      ? (importApercu.errors.length > 0
+                          ? `Remplacer malgré ${importApercu.errors.length} ligne(s) invalide(s)`
+                          : `Confirmer le remplacement (${importApercu.valides} créneaux)`)
+                      : "Analyser le fichier"}</>
                   }
                 </button>
               )}

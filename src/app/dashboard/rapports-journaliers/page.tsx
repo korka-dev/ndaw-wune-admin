@@ -7,7 +7,27 @@ import ExportModal from "@/components/ExportModal";
 import RapportPhoto from "@/components/RapportPhoto";
 import { LineChart, BarList, Donut, Carte, type Point } from "@/components/Charts";
 
-import { notifyError } from "@/lib/notify";
+import { errorDetail, notifyError } from "@/lib/notify";
+
+// Rapport V2, APP-31 : un rapport n'est jamais supprimé. Par défaut, les listes,
+// statistiques et exports excluent les rapports annulés (comme les indicateurs).
+type StatutFiltre = "" | "soumis" | "corrige" | "annule" | "tous";
+const STATUTS: { key: StatutFiltre; label: string }[] = [
+  { key: "", label: "Valides" },
+  { key: "soumis", label: "Soumis" },
+  { key: "corrige", label: "Corrigés" },
+  { key: "annule", label: "Annulés" },
+  { key: "tous", label: "Tous" },
+];
+const STATUT_BADGE: Record<string, { label: string; cls: string }> = {
+  soumis:  { label: "Soumis",  cls: "bg-surface-alt text-tx-muted border border-border" },
+  corrige: { label: "Corrigé", cls: "bg-warn-soft text-warn" },
+  annule:  { label: "Annulé",  cls: "bg-danger-soft text-danger" },
+};
+interface RapportVersion {
+  version: number; statut: string; action: string; motif: string;
+  auteur_id: string | null; created_at: string; contenu: Record<string, unknown>;
+}
 const PAGE_SIZE = 20;
 
 const RAPPORT_EXPORT_FIELDS = [
@@ -60,6 +80,10 @@ interface RapportJournalier {
   // base64) : seul leur nombre est renvoyé, les images se chargent une par une.
   nb_photos: number;
   created_at: string;
+  statut: "soumis" | "corrige" | "annule";
+  version: number;
+  statut_motif: string | null;
+  statut_at: string | null;
 }
 
 interface RapportStats {
@@ -147,6 +171,12 @@ export default function RapportsJournaliersPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [roleFilter, setRoleFilter] = useState<"" | "enseignant" | "superviseur">("");
+  const [statutFilter, setStatutFilter] = useState<StatutFiltre>("");
+  // Annulation motivée et historique du rapport ouvert
+  const [motifAnnulation, setMotifAnnulation] = useState<string | null>(null);
+  const [annulant, setAnnulant] = useState(false);
+  const [annulErreur, setAnnulErreur] = useState<string | null>(null);
+  const [versions, setVersions] = useState<RapportVersion[] | null>(null);
 
   // Debounce recherche — évite une requête par frappe clavier
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -203,6 +233,7 @@ export default function RapportsJournaliersPage() {
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo) params.date_to = dateTo;
       if (roleFilter) params.role = roleFilter;
+      if (statutFilter) params.statut = statutFilter;
 
       const res = await rapportJournalierAdminApi.list(params);
       setRapports(res.data.items ?? []);
@@ -213,7 +244,7 @@ export default function RapportsJournaliersPage() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, dateFrom, dateTo, roleFilter]);
+  }, [debouncedSearch, dateFrom, dateTo, roleFilter, statutFilter]);
 
   const filtres = useCallback(() => {
     const p: Record<string, unknown> = {};
@@ -221,8 +252,9 @@ export default function RapportsJournaliersPage() {
     if (dateFrom) p.date_from = dateFrom;
     if (dateTo) p.date_to = dateTo;
     if (roleFilter) p.role = roleFilter;
+    if (statutFilter) p.statut = statutFilter;
     return p;
-  }, [debouncedSearch, dateFrom, dateTo, roleFilter]);
+  }, [debouncedSearch, dateFrom, dateTo, roleFilter, statutFilter]);
 
   const fetchStats = useCallback(async () => {
     setStatsLoading(true);
@@ -251,7 +283,38 @@ export default function RapportsJournaliersPage() {
   useEffect(() => { if (onglet === "photos") fetchPhotos(photosPage); }, [onglet, fetchPhotos, photosPage]);
 
   // Reset to page 1 when filters change
-  useEffect(() => { setPage(1); setPhotosPage(1); }, [debouncedSearch, dateFrom, dateTo, roleFilter]);
+  useEffect(() => { setPage(1); setPhotosPage(1); }, [debouncedSearch, dateFrom, dateTo, roleFilter, statutFilter]);
+
+  // Réinitialise l'annulation / l'historique à chaque ouverture de rapport.
+  useEffect(() => { setMotifAnnulation(null); setAnnulErreur(null); setVersions(null); }, [detail?.id]);
+
+  const chargerHistorique = async () => {
+    if (!detail) return;
+    try {
+      const { data } = await rapportJournalierAdminApi.historique(detail.id);
+      setVersions(data ?? []);
+    } catch (e) { notifyError("L'historique du rapport n'a pas pu être chargé.", e); }
+  };
+
+  const confirmerAnnulation = async () => {
+    if (!detail || !motifAnnulation || motifAnnulation.trim().length < 3) {
+      setAnnulErreur("Indiquez un motif (3 caractères minimum).");
+      return;
+    }
+    setAnnulant(true);
+    setAnnulErreur(null);
+    try {
+      const { data } = await rapportJournalierAdminApi.annuler(detail.id, motifAnnulation.trim());
+      setDetail(d => (d ? { ...d, ...data } : d));
+      setMotifAnnulation(null);
+      setVersions(null);
+      fetchRapports(page);
+    } catch (e) {
+      setAnnulErreur(errorDetail(e) ?? "L'annulation a échoué. Réessayez.");
+    } finally {
+      setAnnulant(false);
+    }
+  };
 
   const handleExport = async (fields: string[]) => {
     setExporting(true);
@@ -261,6 +324,7 @@ export default function RapportsJournaliersPage() {
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo) params.date_to = dateTo;
       if (roleFilter) params.role = roleFilter;
+      if (statutFilter) params.statut = statutFilter;
       const res = await rapportJournalierAdminApi.exportCsv(params);
       downloadBlob(res.data, "rapports-journaliers.csv");
       setShowExportModal(false);
@@ -355,14 +419,24 @@ export default function RapportsJournaliersPage() {
         />
 
         {/* Clear filters */}
-        {(search || dateFrom || dateTo || roleFilter) && (
+        {(search || dateFrom || dateTo || roleFilter || statutFilter) && (
           <button
-            onClick={() => { setSearch(""); setDebouncedSearch(""); setDateFrom(""); setDateTo(""); setRoleFilter(""); }}
+            onClick={() => { setSearch(""); setDebouncedSearch(""); setDateFrom(""); setDateTo(""); setRoleFilter(""); setStatutFilter(""); }}
             className="px-4 py-2.5 rounded-xl text-sm text-tx-muted border border-border hover:bg-surface-alt transition-colors flex-shrink-0"
           >
             Effacer filtres
           </button>
         )}
+
+        {/* Filtre par statut (APP-31) — par défaut, les annulés sont exclus */}
+        <select
+          value={statutFilter}
+          onChange={e => setStatutFilter(e.target.value as StatutFiltre)}
+          title="Statut des rapports"
+          className="bg-surface border border-border rounded-xl px-3 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 flex-shrink-0"
+        >
+          {STATUTS.map(o => <option key={o.key || "valides"} value={o.key}>{o.label}</option>)}
+        </select>
 
         {/* Filtre par rôle de l'auteur — à droite */}
         <div className="flex items-center gap-1 bg-surface border border-border rounded-xl p-1 flex-shrink-0">
@@ -403,7 +477,7 @@ export default function RapportsJournaliersPage() {
               <tr><td colSpan={7} className="px-5 py-16 text-center text-tx-muted text-sm">Chargement…</td></tr>
             ) : rapports.length === 0 ? (
               <tr><td colSpan={7} className="px-5 py-16 text-center text-tx-muted text-sm">
-                {(search || dateFrom || dateTo || roleFilter) ? "Aucun rapport ne correspond aux filtres." : "Aucun rapport journalier pour l'instant."}
+                {(search || dateFrom || dateTo || roleFilter || statutFilter) ? "Aucun rapport ne correspond aux filtres." : "Aucun rapport journalier pour l'instant."}
               </td></tr>
             ) : rapports.map(r => {
               const diffs = parseDifficultes(r.difficultes);
@@ -416,6 +490,11 @@ export default function RapportsJournaliersPage() {
                   {/* Date */}
                   <td className="px-4 py-3.5">
                     <span className="text-tx font-medium text-xs">{fmtDate(r.date_rapport)}</span>
+                    {r.statut && r.statut !== "soumis" && (
+                      <span className={`mt-1 inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUT_BADGE[r.statut]?.cls ?? ""}`}>
+                        {STATUT_BADGE[r.statut]?.label ?? r.statut}{r.version > 1 ? ` · v${r.version}` : ""}
+                      </span>
+                    )}
                   </td>
                   {/* Tuteur */}
                   <td className="px-4 py-3.5">
@@ -698,6 +777,42 @@ export default function RapportsJournaliersPage() {
                 </Section>
               )}
 
+              {/* Statut et historique (APP-31) */}
+              <Section title="Statut">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${STATUT_BADGE[detail.statut]?.cls ?? ""}`}>
+                    {STATUT_BADGE[detail.statut]?.label ?? detail.statut} · version {detail.version ?? 1}
+                  </span>
+                  {detail.statut_at && <span className="text-xs text-tx-muted">le {fmtDate(detail.statut_at)}</span>}
+                </div>
+                {detail.statut_motif && <p className="text-sm text-tx mt-2">Motif : {detail.statut_motif}</p>}
+                {detail.statut === "annule" && (
+                  <p className="text-xs text-tx-muted mt-1">Ce rapport reste consultable mais ne compte plus dans les indicateurs ni les exports par défaut.</p>
+                )}
+                {(detail.version ?? 1) > 1 || detail.statut !== "soumis" ? (
+                  versions === null ? (
+                    <button onClick={chargerHistorique} className="mt-2 text-xs font-semibold text-brand hover:underline">
+                      Voir l&apos;historique des versions
+                    </button>
+                  ) : versions.length === 0 ? (
+                    <p className="mt-2 text-xs text-tx-muted">Aucune version antérieure.</p>
+                  ) : (
+                    <ul className="mt-2 space-y-1.5">
+                      {versions.map(v => (
+                        <li key={`${v.version}-${v.created_at}`} className="text-xs bg-surface-alt rounded-lg px-3 py-2">
+                          <b>v{v.version}</b> · {v.action === "annulation" ? "annulation" : "correction"} le {fmtDate(v.created_at)}
+                          {v.motif ? ` — ${v.motif}` : ""}
+                          <details className="mt-1">
+                            <summary className="cursor-pointer text-tx-muted">Contenu de cette version</summary>
+                            <pre className="whitespace-pre-wrap break-words text-[11px] mt-1">{JSON.stringify(v.contenu, null, 2)}</pre>
+                          </details>
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                ) : null}
+              </Section>
+
               {/* Informations générales */}
               <Section title="Informations générales">
                 <div className="grid grid-cols-2 gap-3">
@@ -846,7 +961,43 @@ export default function RapportsJournaliersPage() {
 
             </div>
 
-            <div className="px-6 pb-5 border-t border-border pt-4 flex justify-end">
+            <div className="px-6 pb-5 border-t border-border pt-4 flex flex-wrap items-center justify-end gap-3">
+              {detail.statut !== "annule" && (
+                motifAnnulation === null ? (
+                  <button
+                    onClick={() => setMotifAnnulation("")}
+                    className="mr-auto px-4 py-2.5 rounded-xl border border-danger/30 text-sm text-danger font-medium hover:bg-danger-soft transition-colors"
+                  >
+                    Annuler ce rapport…
+                  </button>
+                ) : (
+                  <div className="mr-auto flex flex-col gap-1.5 w-full sm:w-auto sm:flex-1">
+                    <div className="flex gap-2">
+                      <input
+                        autoFocus
+                        value={motifAnnulation}
+                        onChange={e => setMotifAnnulation(e.target.value)}
+                        placeholder="Motif de l'annulation (obligatoire)"
+                        maxLength={500}
+                        className="flex-1 bg-surface-alt border border-border rounded-xl px-3 py-2 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-danger/30"
+                      />
+                      <button
+                        onClick={confirmerAnnulation}
+                        disabled={annulant}
+                        className="px-4 py-2 rounded-xl bg-danger text-white text-sm font-semibold disabled:opacity-60"
+                      >
+                        {annulant ? "…" : "Confirmer"}
+                      </button>
+                      <button onClick={() => { setMotifAnnulation(null); setAnnulErreur(null); }}
+                        className="px-3 py-2 rounded-xl border border-border text-sm text-tx-muted">
+                        Retour
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-tx-muted">Le rapport est conservé avec son contenu ; il sort des indicateurs.</p>
+                    {annulErreur && <p className="text-xs text-danger">{annulErreur}</p>}
+                  </div>
+                )
+              )}
               <button
                 onClick={() => setDetail(null)}
                 className="px-5 py-2.5 rounded-xl border border-border text-sm text-tx-muted font-medium hover:bg-surface-alt transition-colors"

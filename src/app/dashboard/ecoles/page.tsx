@@ -10,6 +10,7 @@ import { BarList } from "@/components/Charts";
 import { BIButton, BIModal, BIPanel, KpiCard } from "@/components/BIModal";
 
 import { notifyError } from "@/lib/notify";
+import { useArchive, ArchiveNotice, ShowArchivedToggle, ArchivedBadge, RestoreButton, archiveConfirmText } from "@/components/ArchiveControls";
 const SCHOOL_EXPORT_FIELDS = [
   { key: "nom",       label: "Nom de l'école" },
   { key: "region",    label: "Région (IEF)" },
@@ -27,9 +28,10 @@ interface School {
   director: string | null;
   director_phone: string | null;
   langue: string | null;
+  archived_at?: string | null;
 }
 
-const EMPTY: Omit<School, "id"> = { name: "", region: "", city: "", director: "", director_phone: "", langue: "" };
+const EMPTY: Omit<School, "id" | "archived_at"> = { name: "", region: "", city: "", director: "", director_phone: "", langue: "" };
 const PAGE_SIZE = 25;
 
 type ReimportResult = { updated: number; created: number; skipped: number; errors: string[] };
@@ -60,17 +62,24 @@ export default function EcolesPage() {
   const [reimportResult, setReimportResult] = useState<ReimportResult | null>(null);
   const [reimportError, setReimportError] = useState<string | null>(null);
   const [showBI, setShowBI] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const reimportRef = useRef<HTMLInputElement>(null);
 
   const load = (isFirstLoad = false) => {
     if (isFirstLoad) { setDataLoading(true); setDataError(null); }
-    schoolsApi.list({ limit: 10000 })
+    schoolsApi.list({ limit: 10000, ...(showArchived ? { archives: true } : {}) })
       .then(r => { setSchools(r.data.items ?? []); setDataError(null); })
       .catch(() => setDataError("Impossible de charger les écoles."))
       .finally(() => { if (isFirstLoad) setDataLoading(false); });
   };
 
-  useEffect(() => { load(true); }, []);
+  useEffect(() => { load(true); }, [showArchived]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const arch = useArchive({
+    archive: (id) => schoolsApi.delete(id),
+    restore: (id) => schoolsApi.restore(id),
+    reload:  () => load(false),
+  });
   useEffect(() => { setPage(1); }, [search, filterRegion, filterCity]);
 
   const regions = Array.from(
@@ -184,12 +193,6 @@ export default function EcolesPage() {
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? "Une erreur est survenue.");
     } finally { setLoading(false); }
-  };
-
-  const del = async (id: string) => {
-    if (!confirm("Supprimer cette école ? Les enseignants rattachés seront détachés.")) return;
-    try { await schoolsApi.delete(id); await load(); }
-    catch (e: any) { alert(e?.response?.data?.detail ?? "Suppression impossible."); }
   };
 
   const isFormModal = modal === "create" || (modal !== null && modal !== "view" && typeof modal === "object");
@@ -327,6 +330,10 @@ export default function EcolesPage() {
             Réinitialiser
           </button>
         )}
+
+        <div className="flex items-center">
+          <ShowArchivedToggle checked={showArchived} onChange={v => { setShowArchived(v); setPage(1); }} />
+        </div>
       </div>
 
       {/* ── Liste ── */}
@@ -351,7 +358,10 @@ export default function EcolesPage() {
                     <div className="w-8 h-8 rounded-lg bg-brand-soft flex items-center justify-center flex-shrink-0">
                       <SchoolIcon />
                     </div>
-                    <span className="font-medium text-tx truncate">{s.name}</span>
+                    <div className="min-w-0">
+                      <div className="font-medium text-tx truncate">{s.name}</div>
+                      {s.archived_at && <div className="mt-1"><ArchivedBadge at={s.archived_at} /></div>}
+                    </div>
                   </div>
                 </td>
                 <td className="px-5 py-3.5 text-tx-muted truncate">{s.region ?? "—"}</td>
@@ -367,16 +377,18 @@ export default function EcolesPage() {
                 </td>
                 {/* Actions */}
                 <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
+                  {s.archived_at ? <RestoreButton onClick={() => arch.restore(s.id)} /> : (
                   <div className="flex gap-2">
                     <button onClick={() => openEdit(s)}
                       className="text-xs bg-primary-soft text-primary px-2.5 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors">
                       Modifier
                     </button>
-                    <button onClick={() => del(s.id)}
+                    <button onClick={() => arch.archive(s.id, archiveConfirmText(`l'école « ${s.name} »`))}
                       className="text-xs bg-danger-soft text-danger px-2.5 py-1 rounded-lg font-medium hover:bg-danger hover:text-white transition-colors">
-                      Supprimer
+                      Archiver
                     </button>
                   </div>
+                  )}
                 </td>
               </tr>
             ))}
@@ -702,6 +714,8 @@ export default function EcolesPage() {
           ]}
         />
       )}
+
+      <ArchiveNotice message={arch.notice} onClose={() => arch.setNotice("")} />
     </div>
   );
 }

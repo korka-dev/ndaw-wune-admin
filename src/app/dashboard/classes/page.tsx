@@ -8,6 +8,7 @@ import { BarList } from "@/components/Charts";
 import { BIButton, BIModal, BIPanel, KpiCard } from "@/components/BIModal";
 
 import { notifyError } from "@/lib/notify";
+import { useArchive, ArchiveNotice, ShowArchivedToggle, ArchivedBadge, RestoreButton, ArchiveConsequences } from "@/components/ArchiveControls";
 type ReimportResult = { created: number; skipped: number; schools_created: number; errors: string[] };
 
 const PAGE_SIZE = 25;
@@ -28,6 +29,7 @@ interface SchoolClasse {
   effectif?: number;
   school_id: string;
   school?: { id: string; name: string };
+  archived_at?: string | null;
 }
 interface School { id: string; name: string; }
 
@@ -57,6 +59,7 @@ export default function ClassesPage() {
   const [filterNiveau, setFilterNiveau] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [showArchived, setShowArchived] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [reimportLoading, setReimportLoading] = useState(false);
@@ -97,7 +100,7 @@ export default function ClassesPage() {
   const load = (isFirstLoad = false) => {
     if (isFirstLoad) { setDataLoading(true); setDataError(null); }
     Promise.all([
-      classesApi.list({ limit: 10000 }),
+      classesApi.list({ limit: 10000, ...(showArchived ? { archives: true } : {}) }),
       schoolsApi.list({ limit: 10000 }),
     ])
       .then(([rClasses, rSchools]) => {
@@ -108,7 +111,13 @@ export default function ClassesPage() {
       .catch(() => { setDataError("Impossible de charger les données."); })
       .finally(() => { if (isFirstLoad) setDataLoading(false); });
   };
-  useEffect(() => { load(true); }, []);
+  useEffect(() => { load(true); }, [showArchived]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const arch = useArchive({
+    archive: (id) => classesApi.delete(id),
+    restore: (id) => classesApi.restore(id),
+    reload:  () => load(false),
+  });
   useEffect(() => { setPage(1); }, [search, filterSchool, filterNiveau]);
 
   const hasFilters = !!(search || filterSchool || filterNiveau);
@@ -168,8 +177,7 @@ export default function ClassesPage() {
 
   const doDelete = async (c: SchoolClasse) => {
     setLoading(true);
-    try { await classesApi.delete(c.id); load(false); setModal(null); }
-    catch (err: any) { setSaveError(err?.response?.data?.detail ?? "Erreur lors de la suppression."); }
+    try { if (await arch.archive(c.id)) setModal(null); }
     finally { setLoading(false); }
   };
 
@@ -296,6 +304,9 @@ export default function ClassesPage() {
             Réinitialiser
           </button>
         )}
+        <div className="flex items-center">
+          <ShowArchivedToggle checked={showArchived} onChange={v => { setShowArchived(v); setPage(1); }} />
+        </div>
       </div>
 
       {/* ── Erreur chargement ── */}
@@ -335,6 +346,7 @@ export default function ClassesPage() {
                 <tr key={c.id} className="border-t border-border hover:bg-surface-alt transition-colors">
                   <td className="px-5 py-3.5 text-center">
                     <span className="font-semibold text-tx">{c.name}</span>
+                    {c.archived_at && <div className="mt-1"><ArchivedBadge at={c.archived_at} /></div>}
                   </td>
                   <td className="px-5 py-3.5 text-center">
                     <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${niveauColor(c.niveau)}`}>{c.niveau}</span>
@@ -346,6 +358,7 @@ export default function ClassesPage() {
                     ) : "—"}
                   </td>
                   <td className="px-5 py-3.5">
+                    {c.archived_at ? <div className="flex justify-center"><RestoreButton onClick={() => arch.restore(c.id)} /></div> : (
                     <div className="flex items-center justify-center gap-2">
                       <button
                         onClick={() => { setForm({ name: c.name, niveau: c.niveau, school_id: c.school_id, effectif: c.effectif?.toString() ?? "" }); setSaveError(null); setModal({ kind: "edit", classe: c }); }}
@@ -357,9 +370,10 @@ export default function ClassesPage() {
                         onClick={() => setModal({ kind: "delete", classe: c })}
                         className="text-xs bg-danger-soft text-danger px-3 py-1 rounded-lg font-medium hover:bg-danger hover:text-white transition-colors"
                       >
-                        Suppr.
+                        Archiver
                       </button>
                     </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -476,7 +490,9 @@ export default function ClassesPage() {
         </div>
       )}
 
-      {/* ── Modal Supprimer ── */}
+      <ArchiveNotice message={arch.notice} onClose={() => arch.setNotice("")} />
+
+      {/* ── Modal Archiver ── */}
       {modal && typeof modal === "object" && modal.kind === "delete" && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-sm">
@@ -488,12 +504,12 @@ export default function ClassesPage() {
                 </svg>
               </div>
               <div>
-                <h2 className="text-base font-bold text-tx">Supprimer la classe</h2>
-                <p className="text-sm text-tx-muted mt-1">
-                  Supprimer <span className="font-semibold text-tx">{modal.classe.name}</span>
+                <h2 className="text-base font-bold text-tx">Archiver la classe</h2>
+                <p className="text-sm text-tx-muted mt-1 mb-2">
+                  Archiver <span className="font-semibold text-tx">{modal.classe.name}</span>
                   {modal.classe.school && <> de <span className="font-semibold text-tx">{modal.classe.school.name}</span></>} ?
-                  Cette action est irréversible.
                 </p>
+                <ArchiveConsequences />
               </div>
             </div>
             {saveError && (
@@ -506,7 +522,7 @@ export default function ClassesPage() {
               </button>
               <button onClick={() => doDelete(modal.classe)} disabled={loading}
                 className="px-4 py-2 rounded-xl bg-danger hover:bg-danger/90 text-white text-sm font-semibold disabled:opacity-60 transition-colors">
-                {loading ? "Suppression…" : "Supprimer"}
+                {loading ? "Archivage…" : "Archiver"}
               </button>
             </div>
           </div>

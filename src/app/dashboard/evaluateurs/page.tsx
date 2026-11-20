@@ -2,12 +2,14 @@
 import { useEffect, useState } from "react";
 import { evaluateursApi, schoolsApi, teachersApi } from "@/lib/api";
 import Pagination from "@/components/Pagination";
+import { useArchive, ArchiveNotice, ShowArchivedToggle, ArchivedBadge, RestoreButton, ArchiveConsequences } from "@/components/ArchiveControls";
 
 const PAGE_SIZE = 20;
 
 interface Evaluateur {
   id: string; name: string; email?: string; phone?: string; title?: string;
   status: string; school_id?: string; assigned_teacher_ids?: string[];
+  archived_at?: string | null;
 }
 interface School { id: string; name: string; }
 interface Teacher { id: string; name: string; school_id?: string; classes?: string[]; }
@@ -26,11 +28,12 @@ export default function EvaluateursPage() {
   const [page, setPage] = useState(1);
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const load = (isFirstLoad = false) => {
     if (isFirstLoad) { setDataLoading(true); setDataError(null); }
     Promise.all([
-      evaluateursApi.list(),
+      evaluateursApi.list(showArchived ? { archives: true } : undefined),
       schoolsApi.list({ limit: 10000 }),
       teachersApi.list({ limit: 10000 }),
     ])
@@ -43,7 +46,13 @@ export default function EvaluateursPage() {
       .catch(() => { setDataError("Impossible de charger les données."); })
       .finally(() => { if (isFirstLoad) setDataLoading(false); });
   };
-  useEffect(() => { load(true); }, []);
+  useEffect(() => { load(true); }, [showArchived]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const arch = useArchive({
+    archive: (id) => evaluateursApi.delete(id),
+    restore: (id) => evaluateursApi.restore(id),
+    reload:  () => load(false),
+  });
 
   const save = async () => {
     setLoading(true);
@@ -59,7 +68,7 @@ export default function EvaluateursPage() {
 
   const doDelete = async (ev: Evaluateur) => {
     setLoading(true);
-    try { await evaluateursApi.delete(ev.id); load(false); setModal(null); }
+    try { if (await arch.archive(ev.id)) setModal(null); }
     finally { setLoading(false); }
   };
 
@@ -185,10 +194,13 @@ export default function EvaluateursPage() {
         </button>
       </div>
 
-      <div className="flex items-center gap-2 bg-surface border border-border rounded-xl px-4 py-2.5 mb-5 w-full max-w-sm">
+      <div className="flex items-center gap-4 mb-5">
+      <div className="flex items-center gap-2 bg-surface border border-border rounded-xl px-4 py-2.5 w-full max-w-sm">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-tx-muted flex-shrink-0"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.35-4.35" /></svg>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un évaluateur…"
           className="flex-1 bg-transparent text-sm text-tx outline-none placeholder:text-tx-muted" />
+      </div>
+      <ShowArchivedToggle checked={showArchived} onChange={v => { setShowArchived(v); setPage(1); }} />
       </div>
 
       <div className="bg-surface rounded-2xl border border-border overflow-hidden flex-1">
@@ -231,6 +243,7 @@ export default function EvaluateursPage() {
                       <div>
                         <div className="font-medium text-tx">{ev.name}</div>
                         {ev.title && <div className="text-xs text-tx-muted">{ev.title}</div>}
+                        {ev.archived_at && <div className="mt-1"><ArchivedBadge at={ev.archived_at} /></div>}
                       </div>
                     </div>
                   </td>
@@ -253,6 +266,7 @@ export default function EvaluateursPage() {
                     </span>
                   </td>
                   <td className="px-5 py-3.5 text-center">
+                    {ev.archived_at ? <RestoreButton onClick={() => arch.restore(ev.id)} /> : (
                     <div className="flex items-center justify-center gap-1">
                       <button onClick={() => openEdit(ev)} title="Modifier" className="p-1.5 rounded-lg hover:bg-primary-soft text-tx-muted hover:text-primary transition-colors">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
@@ -260,10 +274,11 @@ export default function EvaluateursPage() {
                       <button onClick={() => doToggle(ev)} title={ev.status === "actif" ? "Désactiver" : "Activer"} className="p-1.5 rounded-lg hover:bg-warn-soft text-tx-muted hover:text-warn transition-colors">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18.36 6.64a9 9 0 11-12.73 0M12 2v10" /></svg>
                       </button>
-                      <button onClick={() => setModal({ kind: "delete", ev })} title="Supprimer" className="p-1.5 rounded-lg hover:bg-danger-soft text-tx-muted hover:text-danger transition-colors">
+                      <button onClick={() => setModal({ kind: "delete", ev })} title="Archiver" className="p-1.5 rounded-lg hover:bg-danger-soft text-tx-muted hover:text-danger transition-colors">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" /></svg>
                       </button>
                     </div>
+                    )}
                   </td>
                 </tr>
               );
@@ -275,18 +290,21 @@ export default function EvaluateursPage() {
         </div>
       </div>
 
+      <ArchiveNotice message={arch.notice} onClose={() => arch.setNotice("")} />
+
       {modal === "create" && <FormModal title="Nouvel évaluateur" onSave={save} />}
       {modal && typeof modal === "object" && modal.kind === "edit" && <FormModal title="Modifier l'évaluateur" onSave={save} />}
       {modal && typeof modal === "object" && modal.kind === "delete" && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-sm">
-            <h2 className="text-base font-bold text-tx mb-2">Supprimer l'évaluateur</h2>
-            <p className="text-sm text-tx-muted mb-6">Voulez-vous supprimer <strong>{modal.ev.name}</strong> ? Cette action est irréversible.</p>
+            <h2 className="text-base font-bold text-tx mb-2">Archiver l'évaluateur</h2>
+            <p className="text-sm text-tx-muted mb-3">Archiver <strong>{modal.ev.name}</strong> ?</p>
+            <div className="mb-6"><ArchiveConsequences user /></div>
             <div className="flex gap-3">
               <button onClick={() => setModal(null)} className="flex-1 py-2.5 rounded-xl border border-border text-sm text-tx-muted font-medium hover:bg-surface-alt">Annuler</button>
               <button onClick={() => doDelete(modal.ev)} disabled={loading}
                 className="flex-1 py-2.5 rounded-xl bg-danger text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50">
-                {loading ? "Suppression…" : "Supprimer"}
+                {loading ? "Archivage…" : "Archiver"}
               </button>
             </div>
           </div>

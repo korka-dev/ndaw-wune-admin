@@ -2,10 +2,11 @@
 import { useEffect, useState } from "react";
 import { sessionsApi } from "@/lib/api";
 import Pagination from "@/components/Pagination";
+import { useArchive, ArchiveNotice, ShowArchivedToggle, ArchivedBadge, RestoreButton, archiveConfirmText } from "@/components/ArchiveControls";
 
 const PAGE_SIZE = 20;
 
-interface Session { id: string; name: string; date_debut: string; date_fin: string; status: string; description?: string; }
+interface Session { id: string; name: string; date_debut: string; date_fin: string; status: string; description?: string; archived_at?: string | null; }
 const EMPTY: Omit<Session, "id"> = { name: "", date_debut: "", date_fin: "", status: "inactive", description: "" };
 
 function StatusBadge({ status }: { status: string }) {
@@ -22,15 +23,22 @@ export default function SessionsPage() {
   const [page, setPage] = useState(1);
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const load = (isFirstLoad = false) => {
     if (isFirstLoad) { setDataLoading(true); setDataError(null); }
-    Promise.all([sessionsApi.list()])
+    Promise.all([sessionsApi.list(showArchived ? { archives: true } : undefined)])
       .then(([r]) => { setItems(r.data.items ?? []); setDataError(null); })
       .catch(() => { setDataError("Impossible de charger les données."); })
       .finally(() => { if (isFirstLoad) setDataLoading(false); });
   };
-  useEffect(() => { load(true); }, []);
+  useEffect(() => { load(true); }, [showArchived]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const arch = useArchive({
+    archive: (id) => sessionsApi.delete(id),
+    restore: (id) => sessionsApi.restore(id),
+    reload:  () => { load(false); window.dispatchEvent(new Event("session-change")); },
+  });
 
   const paginated = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -51,11 +59,14 @@ export default function SessionsPage() {
           <h1 className="text-xl font-bold text-tx">Gestion Sessions</h1>
           <p className="text-tx-muted text-sm mt-0.5">{items.length} session{items.length !== 1 ? "s" : ""} au total</p>
         </div>
+        <div className="flex items-center gap-4">
+        <ShowArchivedToggle checked={showArchived} onChange={v => { setShowArchived(v); setPage(1); }} />
         <button onClick={() => { setForm(EMPTY); setModal("create"); }}
           className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
           Nouvelle session
         </button>
+        </div>
       </div>
 
       <div className="bg-surface rounded-2xl border border-border overflow-hidden flex-1">
@@ -87,12 +98,16 @@ export default function SessionsPage() {
             )}
             {!dataLoading && !dataError && paginated.map(s => (
               <tr key={s.id} className="border-t border-border hover:bg-surface-alt transition-colors">
-                <td className="px-5 py-3.5 font-medium text-tx text-center">{s.name}</td>
+                <td className="px-5 py-3.5 font-medium text-tx text-center">
+                  {s.name}
+                  {s.archived_at && <div className="mt-1"><ArchivedBadge at={s.archived_at} /></div>}
+                </td>
                 <td className="px-5 py-3.5 text-tx-muted text-center">{s.date_debut}</td>
                 <td className="px-5 py-3.5 text-tx-muted text-center">{s.date_fin}</td>
                 <td className="px-5 py-3.5 text-center"><StatusBadge status={s.status} /></td>
                 <td className="px-5 py-3.5">
                   <div className="flex gap-2 justify-center">
+                    {s.archived_at ? <RestoreButton onClick={() => arch.restore(s.id)} /> : <>
                     {s.status !== "active" && (
                       <button onClick={() => { sessionsApi.activate(s.id).then(() => { load(false); window.dispatchEvent(new Event("session-change")); }); }}
                         className="text-xs bg-success-soft text-success px-2.5 py-1 rounded-lg font-medium hover:bg-success hover:text-white transition-colors">
@@ -100,19 +115,20 @@ export default function SessionsPage() {
                       </button>
                     )}
                     {s.status === "active" && (
-                      <button onClick={() => { if (!confirm("Archiver cette session ? Elle passera en statut Inactive et ne pourra plus recevoir de nouvelles séances.")) return; sessionsApi.deactivate(s.id).then(() => { load(false); window.dispatchEvent(new Event("session-change")); }); }}
+                      <button onClick={() => { if (!confirm("Désactiver cette session ? Elle passera en statut Inactive et ne pourra plus recevoir de nouvelles séances.")) return; sessionsApi.deactivate(s.id).then(() => { load(false); window.dispatchEvent(new Event("session-change")); }); }}
                         className="text-xs bg-warn-soft text-warn px-2.5 py-1 rounded-lg font-medium hover:bg-warn hover:text-white transition-colors">
-                        Archiver
+                        Désactiver
                       </button>
                     )}
                     <button onClick={() => { setForm(s); setModal(s); }}
                       className="text-xs bg-primary-soft text-primary px-2.5 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors">
                       Modifier
                     </button>
-                    <button onClick={() => { if (!confirm("Supprimer cette session ?")) return; sessionsApi.delete(s.id).then(() => { load(false); window.dispatchEvent(new Event("session-change")); }); }}
+                    <button onClick={() => arch.archive(s.id, archiveConfirmText("cette session (campagne)", { extra: "La session est désactivée." }))}
                       className="text-xs bg-danger-soft text-danger px-2.5 py-1 rounded-lg font-medium hover:bg-danger hover:text-white transition-colors">
-                      Supprimer
+                      Archiver
                     </button>
+                    </>}
                   </div>
                 </td>
               </tr>
@@ -126,6 +142,8 @@ export default function SessionsPage() {
           <Pagination page={page} total={items.length} pageSize={PAGE_SIZE} onChange={setPage} />
         </div>
       </div>
+
+      <ArchiveNotice message={arch.notice} onClose={() => arch.setNotice("")} />
 
       {modal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">

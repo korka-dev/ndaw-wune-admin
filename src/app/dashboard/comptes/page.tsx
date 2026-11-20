@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { usersApi } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import Pagination from "@/components/Pagination";
+import { useArchive, ArchiveNotice, ShowArchivedToggle, ArchivedBadge, RestoreButton, archiveConfirmText } from "@/components/ArchiveControls";
 
 const PAGE_SIZE = 20;
 
@@ -21,7 +22,7 @@ function toApiRole(uiRole: UIRole | string): string {
   return UI_ROLES.find(r => r.value === uiRole)?.apiRole ?? uiRole;
 }
 
-interface Compte { id: string; name: string; email?: string; phone?: string; title?: string; role: string; uiRole?: UIRole; status: string; }
+interface Compte { id: string; name: string; email?: string; phone?: string; title?: string; role: string; uiRole?: UIRole; status: string; archived_at?: string | null; }
 const EMPTY = { name: "", email: "", phone: "", password: "", title: "", role: "superviseur" as UIRole };
 
 export default function ComptesPage() {
@@ -41,15 +42,22 @@ export default function ComptesPage() {
   const [resetError,  setResetError]  = useState("");
   const [resetDone,   setResetDone]   = useState("");
   const [resetting,   setResetting]   = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   const load = (isFirstLoad = false) => {
     if (isFirstLoad) { setDataLoading(true); setDataError(null); }
-    Promise.all([usersApi.list()])
+    Promise.all([usersApi.list(showArchived ? { archives: true } : undefined)])
       .then(([r]) => { setItems(r.data.items ?? []); setDataError(null); })
       .catch(() => { setDataError("Impossible de charger les données."); })
       .finally(() => { if (isFirstLoad) setDataLoading(false); });
   };
-  useEffect(() => { load(true); }, []);
+  useEffect(() => { load(true); }, [showArchived]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const arch = useArchive({
+    archive: (id) => usersApi.delete(id),
+    restore: (id) => usersApi.restore(id),
+    reload:  () => load(false),
+  });
 
   const save = async () => {
     if (!form.name.trim()) { setError("Le nom est obligatoire."); return; }
@@ -92,12 +100,6 @@ export default function ComptesPage() {
     } finally { setResetting(false); }
   };
 
-  const del = async (id: string) => {
-    if (!confirm("Supprimer ce compte ?")) return;
-    try { await usersApi.delete(id); load(false); }
-    catch (e: any) { alert(e?.response?.data?.detail ?? "Suppression impossible."); }
-  };
-
   const isAdmin = me?.role === "admin";
   const initials = (n: string) => n.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase();
   const paginated = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -109,6 +111,8 @@ export default function ComptesPage() {
           <h1 className="text-xl font-bold text-tx">Comptes utilisateurs</h1>
           <p className="text-tx-muted text-sm mt-0.5">Administrateurs, superviseurs & coordonnateurs</p>
         </div>
+        <div className="flex items-center gap-4">
+        <ShowArchivedToggle checked={showArchived} onChange={v => { setShowArchived(v); setPage(1); }} />
         {isAdmin && (
           <button
             onClick={() => { setForm(EMPTY); setError(""); setModal("create"); }}
@@ -118,6 +122,7 @@ export default function ComptesPage() {
             Nouveau compte
           </button>
         )}
+        </div>
       </div>
 
       <div className="bg-surface rounded-2xl border border-border overflow-hidden">
@@ -159,6 +164,7 @@ export default function ComptesPage() {
                         {u.id === me?.id && <span className="text-[10px] bg-brand-soft text-brand px-1.5 py-0.5 rounded font-semibold">Vous</span>}
                       </div>
                       {u.title && <div className="text-xs text-tx-muted">{u.title}</div>}
+                      {u.archived_at && <div className="mt-1"><ArchivedBadge at={u.archived_at} /></div>}
                     </div>
                   </div>
                 </td>
@@ -183,7 +189,8 @@ export default function ComptesPage() {
                   })()}
                 </td>
                 <td className="px-5 py-3.5">
-                  {isAdmin && (
+                  {isAdmin && u.archived_at && <RestoreButton onClick={() => arch.restore(u.id)} />}
+                  {isAdmin && !u.archived_at && (
                     <div className="flex gap-2">
                       <button
                         onClick={() => { setForm({ ...EMPTY, ...u, password: "", role: (u.role as UIRole) ?? "superviseur" }); setError(""); setModal(u); }}
@@ -197,9 +204,9 @@ export default function ComptesPage() {
                       )}
                       {u.id !== me?.id && (
                         <button
-                          onClick={() => del(u.id)}
+                          onClick={() => arch.archive(u.id, archiveConfirmText(`le compte de ${u.name}`, { user: true }))}
                           className="text-xs bg-danger-soft text-danger px-2.5 py-1 rounded-lg font-medium hover:bg-danger hover:text-white transition-colors"
-                        >Supprimer</button>
+                        >Archiver</button>
                       )}
                     </div>
                   )}
@@ -215,6 +222,8 @@ export default function ComptesPage() {
           <Pagination page={page} total={items.length} pageSize={PAGE_SIZE} onChange={setPage} />
         </div>
       </div>
+
+      <ArchiveNotice message={arch.notice} onClose={() => arch.setNotice("")} />
 
       {resetDone && (
         <div role="status" className="fixed bottom-6 right-6 z-50 bg-success-soft text-success rounded-xl px-4 py-3 text-sm shadow-lg flex gap-3 items-start">

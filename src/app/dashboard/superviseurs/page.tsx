@@ -7,6 +7,7 @@ import { Donut, BarList } from "@/components/Charts";
 import { BIButton, BIModal, BIPanel, KpiCard } from "@/components/BIModal";
 
 import { notifyError } from "@/lib/notify";
+import { useArchive, ArchiveNotice, ShowArchivedToggle, ArchivedBadge, RestoreButton, ArchiveConsequences } from "@/components/ArchiveControls";
 const PAGE_SIZE = 50;
 
 interface SchoolBrief { id: string; name: string; code_ecole?: number; region?: string; }
@@ -14,6 +15,7 @@ interface Superviseur {
   id: string; name: string; phone?: string; title?: string;
   status: string; school_id?: string; classes?: string[];
   school?: SchoolBrief;
+  archived_at?: string | null;
 }
 interface School { id: string; name: string; code_ecole?: number; region?: string; }
 interface Teacher { id: string; name: string; phone?: string; school_id?: string; classes?: string[]; }
@@ -55,6 +57,7 @@ export default function SuperviseursPage() {
   const [exporting, setExporting] = useState<"csv" | "xlsx" | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [showBI, setShowBI] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   /* auto-focus premier champ à l'ouverture du modal */
   const firstFieldRef = useRef<HTMLInputElement>(null);
@@ -80,7 +83,7 @@ export default function SuperviseursPage() {
   const load = (isFirstLoad = false) => {
     if (isFirstLoad) { setDataLoading(true); setDataError(null); }
     Promise.all([
-      superviseursApi.list({ limit: 10000 }),
+      superviseursApi.list({ limit: 10000, ...(showArchived ? { archives: true } : {}) }),
       schoolsApi.list({ limit: 10000 }),
       teachersApi.list({ limit: 10000 }),
     ])
@@ -93,7 +96,13 @@ export default function SuperviseursPage() {
       .catch(() => { setDataError("Impossible de charger les données."); })
       .finally(() => { if (isFirstLoad) setDataLoading(false); });
   };
-  useEffect(() => { load(true); }, []);
+  useEffect(() => { load(true); }, [showArchived]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const arch = useArchive({
+    archive: (id) => superviseursApi.delete(id),
+    restore: (id) => superviseursApi.restore(id),
+    reload:  () => load(false),
+  });
 
   const handleExport = async (fmt: "csv" | "xlsx") => {
     setExporting(fmt);
@@ -133,7 +142,7 @@ export default function SuperviseursPage() {
 
   const doDelete = async (sup: Superviseur) => {
     setLoading(true);
-    try { await superviseursApi.delete(sup.id); load(false); setModal(null); }
+    try { if (await arch.archive(sup.id)) setModal(null); }
     finally { setLoading(false); }
   };
 
@@ -204,6 +213,8 @@ export default function SuperviseursPage() {
   const saveAssign = async (sup: Superviseur) => {
     setLoading(true);
     try { await superviseursApi.assignTeachers(sup.id, assignIds); load(false); closeModal(); }
+    // 422 si un identifiant n'est pas un enseignant actif (APP-06) : message du serveur.
+    catch (e) { notifyError("L'affectation des enseignants a échoué.", e); }
     finally { setLoading(false); }
   };
   const closeModal = () => setModal(null);
@@ -368,6 +379,9 @@ export default function SuperviseursPage() {
             Réinitialiser
           </button>
         )}
+        <div className="flex items-center">
+          <ShowArchivedToggle checked={showArchived} onChange={v => { setShowArchived(v); setPage(1); }} />
+        </div>
       </div>
 
       {/* ── Table ── */}
@@ -424,6 +438,7 @@ export default function SuperviseursPage() {
                       </div>
                       <div className="min-w-0">
                         <div className="font-medium text-tx text-sm leading-tight truncate">{sup.name}</div>
+                        {sup.archived_at && <div className="mt-1"><ArchivedBadge at={sup.archived_at} /></div>}
                       </div>
                     </div>
                   </td>
@@ -479,10 +494,12 @@ export default function SuperviseursPage() {
 
                   {/* Actions */}
                   <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
+                    {sup.archived_at ? <RestoreButton onClick={() => arch.restore(sup.id)} /> : (
                     <button onClick={() => setModal({ kind: "manage", sup })}
                       className="text-xs bg-primary-soft text-primary px-3 py-1.5 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors">
                       Gérer
                     </button>
+                    )}
                   </td>
                 </tr>
               );
@@ -560,7 +577,7 @@ export default function SuperviseursPage() {
                 {modal.sup.status === "actif" ? "Désactiver le superviseur" : "Activer le superviseur"}
               </button>
 
-              {/* Supprimer */}
+              {/* Archiver */}
               <button
                 onClick={() => { const s = modal.sup; closeModal(); setTimeout(() => setModal({ kind: "delete", sup: s }), 30); }}
                 className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-surface-alt hover:bg-danger-soft text-tx hover:text-danger text-sm font-medium transition-colors text-left">
@@ -570,7 +587,7 @@ export default function SuperviseursPage() {
                   <path d="M10 11v6M14 11v6" />
                   <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
                 </svg>
-                Supprimer le superviseur
+                Archiver le superviseur
               </button>
             </div>
 
@@ -818,10 +835,17 @@ export default function SuperviseursPage() {
                 className="flex-1 py-2.5 rounded-xl border border-border text-sm text-tx-muted font-medium hover:bg-surface-alt transition-colors">
                 Fermer
               </button>
+              {modal.sup.archived_at ? (
+                <button onClick={async () => { if (await arch.restore(modal.sup.id)) closeModal(); }}
+                  className="flex-1 py-2.5 rounded-xl bg-success text-white text-sm font-semibold hover:opacity-90 transition-opacity">
+                  Restaurer
+                </button>
+              ) : (
               <button onClick={() => setModal({ kind: "manage", sup: modal.sup })}
                 className="flex-1 py-2.5 rounded-xl bg-brand text-white text-sm font-semibold hover:opacity-90 transition-opacity">
                 Gérer
               </button>
+              )}
             </div>
           </div>
         </div>
@@ -969,7 +993,9 @@ export default function SuperviseursPage() {
         );
       })()}
 
-      {/* ── Modal Suppression ── */}
+      <ArchiveNotice message={arch.notice} onClose={() => arch.setNotice("")} />
+
+      {/* ── Modal Archivage ── */}
       {modal && typeof modal === "object" && modal.kind === "delete" && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-sm">
@@ -978,10 +1004,11 @@ export default function SuperviseursPage() {
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-danger"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4h6v2" /></svg>
               </div>
               <div>
-                <h2 className="text-base font-bold text-tx">Supprimer le superviseur</h2>
-                <p className="text-sm text-tx-muted mt-1">
-                  Voulez-vous supprimer <strong className="text-tx">{modal.sup.name}</strong> ? Cette action est irréversible.
+                <h2 className="text-base font-bold text-tx">Archiver le superviseur</h2>
+                <p className="text-sm text-tx-muted mt-1 mb-2">
+                  Archiver <strong className="text-tx">{modal.sup.name}</strong> ?
                 </p>
+                <ArchiveConsequences user />
               </div>
             </div>
             <div className="flex gap-3">
@@ -991,7 +1018,7 @@ export default function SuperviseursPage() {
               </button>
               <button onClick={() => doDelete(modal.sup)} disabled={loading}
                 className="flex-1 py-2.5 rounded-xl bg-danger text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity">
-                {loading ? "Suppression…" : "Supprimer"}
+                {loading ? "Archivage…" : "Archiver"}
               </button>
             </div>
           </div>
