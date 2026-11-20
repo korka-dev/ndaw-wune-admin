@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { sessionsApi } from "@/lib/api";
 import { ActiveSessionCtx } from "@/lib/session-context";
+import NoticeStack from "@/components/NoticeStack";
 
 type NavItem = {
   href: string;
@@ -257,6 +258,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <ActiveSessionCtx.Provider value={activeSession === "loading" ? null : activeSession}>
           {children}
         </ActiveSessionCtx.Provider>
+        {/* APP-47 : erreurs visibles (chargements, exports, actions) */}
+        <NoticeStack />
       </main>
 
       {/* ── Modal déconnexion ── */}

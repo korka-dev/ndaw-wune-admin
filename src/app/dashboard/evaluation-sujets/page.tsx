@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { evaluationSujetsApi, schoolsApi } from "@/lib/api";
 
+import { notifyError } from "@/lib/notify";
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface SujetOut {
@@ -223,7 +224,7 @@ export default function EvaluationSujetsPage() {
     try {
       const { data } = await evaluationSujetsApi.list();
       setSujets(data);
-    } catch { /* silencieux */ }
+    } catch (e) { notifyError("Le chargement des données a échoué. Rechargez la page ou réessayez plus tard.", e); }
     finally { setLoading(false); }
   }, []);
 
@@ -238,7 +239,7 @@ export default function EvaluationSujetsPage() {
         for (const s of items) if (s.langue) set.add(String(s.langue).toLowerCase());
         setLangues(Array.from(set).sort());
       })
-      .catch(() => {});
+      .catch((e) => notifyError("Le chargement des données a échoué. Rechargez la page ou réessayez plus tard.", e));
   }, []);
 
   const openDetail = async (id: string) => {

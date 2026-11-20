@@ -6,6 +6,7 @@ import Pagination from "@/components/Pagination";
 import { Donut, BarList } from "@/components/Charts";
 import { BIButton, BIModal, BIPanel } from "@/components/BIModal";
 
+import { notifyError } from "@/lib/notify";
 const PAGE_SIZE = 20;
 const MODAL_PAGE_SIZE = 10;
 
@@ -325,7 +326,7 @@ export default function SuiviSuperviseurPage() {
       setSessions(list);
       const active = list.find((s: any) => s.status === "active");
       if (active) setSessId(active.id);
-    }).catch(() => {});
+    }).catch((e) => notifyError("Le chargement des données a échoué. Rechargez la page ou réessayez plus tard.", e));
   }, []);
 
   /* Chargement */
@@ -334,7 +335,7 @@ export default function SuiviSuperviseurPage() {
     suiviSuperviseurApi
       .list({ session_id: sessId || undefined, search: search || undefined })
       .then(r => setSuperviseurs(r.data))
-      .catch(() => {})
+      .catch((e) => notifyError("Le chargement des données a échoué. Rechargez la page ou réessayez plus tard.", e))
       .finally(() => setLoading(false));
   }, [sessId, search]);
 
@@ -346,7 +347,7 @@ export default function SuiviSuperviseurPage() {
     try {
       const res = await suiviSuperviseurApi.exportCsv({ session_id: sessId || undefined, search: search || undefined });
       downloadBlob(res.data, "suivi_superviseurs.csv");
-    } catch { /* silencieux */ }
+    } catch (e) { notifyError("L'export a échoué. Réessayez dans un instant.", e); }
     finally { setExporting(false); }
   };
 

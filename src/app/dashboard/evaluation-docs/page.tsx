@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { evaluationDocsApi } from "@/lib/api";
 
+import { notifyError } from "@/lib/notify";
 const LANGUES = ["Seereer", "Pulaar", "Wolof"] as const;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -275,7 +276,7 @@ export default function EvaluationDocsPage() {
     try {
       const { data } = await evaluationDocsApi.list();
       setDocs(data);
-    } catch { /* silencieux */ }
+    } catch (e) { notifyError("Le chargement des données a échoué. Rechargez la page ou réessayez plus tard.", e); }
     finally { setLoading(false); }
   }, []);
 

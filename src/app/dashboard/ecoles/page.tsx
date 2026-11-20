@@ -9,6 +9,7 @@ import { LANGUES_NATIONALES } from "@/lib/langues";
 import { BarList } from "@/components/Charts";
 import { BIButton, BIModal, BIPanel, KpiCard } from "@/components/BIModal";
 
+import { notifyError } from "@/lib/notify";
 const SCHOOL_EXPORT_FIELDS = [
   { key: "nom",       label: "Nom de l'école" },
   { key: "region",    label: "Région (IEF)" },
@@ -133,7 +134,7 @@ export default function EcolesPage() {
       const res = await exportApi.schoolsXlsx(fields.join(","));
       downloadBlob(res.data, "ecoles.xlsx");
       setShowExportModal(false);
-    } catch { /* silencieux */ }
+    } catch (e) { notifyError("L'export a échoué. Réessayez dans un instant.", e); }
     finally { setExporting(false); }
   };
 

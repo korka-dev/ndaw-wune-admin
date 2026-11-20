@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { suiviApi, sessionsApi } from "@/lib/api";
 import Pagination from "@/components/Pagination";
 
+import { notifyError } from "@/lib/notify";
 const PAGE_SIZE = 20;
 
 /* ══ Types ═══════════════════════════════════════════════════════ */
@@ -59,6 +60,8 @@ interface SeanceDetail {
   nb_eleves_total?:     number;
   planning_segment_id?: string;
   soumis_offline?:      boolean;
+  /** APP-21 : tuteur | tuteur_tardive | automatique | recuperation */
+  cloture_mode?:        string | null;
   rapport_at?:          string;
   pauses?:              PauseEvent[];
   total_paused_minutes?: number;
@@ -643,6 +646,16 @@ function TeacherModal({
                     </td>
                     <td className="px-4 py-3.5 text-xs text-tx whitespace-nowrap">
                       {s.duree_minutes != null ? `${s.duree_minutes} min` : "—"}
+                      {/* APP-21 : une séance oubliée n'a pas de durée mesurée — jamais de durée inventée */}
+                      {s.cloture_mode === "automatique" && (
+                        <p className="text-[11px] text-warn" title="Séance restée ouverte plus de 4 h, clôturée par le serveur. Durée inconnue.">Oubliée · clôture auto</p>
+                      )}
+                      {s.cloture_mode === "recuperation" && (
+                        <p className="text-[11px] text-warn" title="Séance restée ouverte, clôturée par le tuteur depuis l'application. Durée inconnue.">Oubliée · clôturée par le tuteur</p>
+                      )}
+                      {s.cloture_mode === "tuteur_tardive" && (
+                        <p className="text-[11px] text-tx-muted" title="L'arrêt du minuteur est arrivé après une clôture automatique : la durée affichée est celle mesurée par le téléphone.">Arrêt reçu en retard</p>
+                      )}
                     </td>
                     {/* Colonne Élèves */}
                     <td className="px-4 py-3.5 text-xs whitespace-nowrap">
@@ -725,7 +738,7 @@ export default function SuiviSeancesPage() {
         const active = list.find((s: any) => s.status === "active");
         if (active) setSessId(active.id);
       })
-      .catch(() => {})
+      .catch((e) => notifyError("Le chargement des données a échoué. Rechargez la page ou réessayez plus tard.", e))
       .finally(() => setSessionsReady(true)); // sessions prêtes dans tous les cas
   }, []);
 

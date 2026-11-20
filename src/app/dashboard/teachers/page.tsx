@@ -7,6 +7,7 @@ import ExportModal from "@/components/ExportModal";
 import { Donut, BarList } from "@/components/Charts";
 import { BIButton, BIModal, BIPanel, KpiCard } from "@/components/BIModal";
 
+import { notifyError } from "@/lib/notify";
 type ReimportResult = { updated: number; created: number; skipped: number; errors: string[] };
 
 const TEACHER_EXPORT_FIELDS = [
@@ -127,7 +128,7 @@ export default function TeachersPage() {
       const res = await exportApi.teachersXlsx(fields.join(","));
       downloadBlob(res.data, "enseignants.xlsx");
       setShowExportModal(false);
-    } catch { /* silencieux */ }
+    } catch (e) { notifyError("L'export a échoué. Réessayez dans un instant.", e); }
     finally { setExporting(false); }
   };
 

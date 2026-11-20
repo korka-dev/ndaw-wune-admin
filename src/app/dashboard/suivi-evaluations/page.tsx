@@ -5,6 +5,7 @@ import Pagination from "@/components/Pagination";
 import { Donut, BarList, LineChart } from "@/components/Charts";
 import { BIButton, BIModal, BIPanel } from "@/components/BIModal";
 
+import { notifyError } from "@/lib/notify";
 const PAGE_SIZE_L1 = 20;
 const PAGE_SIZE_L2 = 12;
 const PAGE_SIZE_L3 = 15;
@@ -252,7 +253,7 @@ export default function SuiviEvaluationsPage() {
     setShowBI(true);
     if (biStats) return;
     setBiLoading(true);
-    dashboardApi.stats().then(r => setBiStats(r.data)).catch(() => {}).finally(() => setBiLoading(false));
+    dashboardApi.stats().then(r => setBiStats(r.data)).catch((e) => notifyError("Le chargement des données a échoué. Rechargez la page ou réessayez plus tard.", e)).finally(() => setBiLoading(false));
   };
 
   // Libellés des compétences (configurées par l'admin), pour affichage lisible
@@ -264,7 +265,7 @@ export default function SuiviEvaluationsPage() {
         for (const c of data ?? []) map[c.code] = c.label;
         setCompetenceLabels(map);
       })
-      .catch(() => {});
+      .catch((e) => notifyError("Le chargement des données a échoué. Rechargez la page ou réessayez plus tard.", e));
   }, []);
   const competenceLabel = (code: string) => competenceLabels[code] ?? code;
 

@@ -4,6 +4,7 @@ import { usageLogsApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 
+import { notifyError } from "@/lib/notify";
 const PAGE_SIZE = 50;
 
 const FEATURE_LABELS: Record<string, string> = {
@@ -76,7 +77,7 @@ export default function LogsUtilisationPage() {
     usageLogsApi
       .stats({ date_from: dateFrom || undefined, date_to: dateTo || undefined })
       .then(r => setStats(r.data))
-      .catch(() => {});
+      .catch((e) => notifyError("Le chargement des données a échoué. Rechargez la page ou réessayez plus tard.", e));
   };
 
   const loadLogs = (p = page) => {
@@ -90,7 +91,7 @@ export default function LogsUtilisationPage() {
         limit: PAGE_SIZE,
       })
       .then(r => { setLogs(r.data.items ?? []); setTotal(r.data.total ?? 0); })
-      .catch(() => {});
+      .catch((e) => notifyError("Le chargement des données a échoué. Rechargez la page ou réessayez plus tard.", e));
   };
 
   useEffect(() => { loadStats(); }, [dateFrom, dateTo]);
@@ -107,7 +108,7 @@ export default function LogsUtilisationPage() {
         date_to: dateTo || undefined,
       });
       downloadBlob(res.data, "logs_utilisation.csv");
-    } catch { /* silencieux */ }
+    } catch (e) { notifyError("L'export a échoué. Réessayez dans un instant.", e); }
     finally { setExporting(false); }
   };
 

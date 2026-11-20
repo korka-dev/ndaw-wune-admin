@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { progressionConfigsApi, schoolsApi, sessionsApi } from "@/lib/api";
 
+import { notifyError } from "@/lib/notify";
 type ProgressionConfig = {
   id: string;
   school_id: string | null;
@@ -36,7 +37,7 @@ export default function ProgressionConfigPage() {
       setConfigs(cfgRes.data ?? []);
       setSchools(schoolsRes.data.items ?? []);
       setSessions(sessionsRes.data.items ?? []);
-    } catch { /* silencieux */ }
+    } catch (e) { notifyError("Le chargement des données a échoué. Rechargez la page ou réessayez plus tard.", e); }
     finally { setLoading(false); }
   }, []);
 

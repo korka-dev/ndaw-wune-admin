@@ -6,6 +6,7 @@ import Pagination from "@/components/Pagination";
 import { Donut, BarList } from "@/components/Charts";
 import { BIButton, BIModal, BIPanel, KpiCard } from "@/components/BIModal";
 
+import { notifyError } from "@/lib/notify";
 const PAGE_SIZE = 50;
 
 interface SchoolBrief { id: string; name: string; code_ecole?: number; region?: string; }
@@ -101,7 +102,7 @@ export default function SuperviseursPage() {
         ? await superviseursApi.exportCsv()
         : await superviseursApi.exportXlsx();
       downloadBlob(res.data, fmt === "csv" ? "superviseurs.csv" : "superviseurs.xlsx");
-    } catch { /* silencieux */ }
+    } catch (e) { notifyError("L'export a échoué. Réessayez dans un instant.", e); }
     finally { setExporting(null); }
   };
 

@@ -7,6 +7,7 @@ import ExportModal from "@/components/ExportModal";
 import { BarList } from "@/components/Charts";
 import { BIButton, BIModal, BIPanel, KpiCard } from "@/components/BIModal";
 
+import { notifyError } from "@/lib/notify";
 type ReimportResult = { created: number; skipped: number; schools_created: number; errors: string[] };
 
 const PAGE_SIZE = 25;
@@ -89,7 +90,7 @@ export default function ClassesPage() {
       const res = await classesApi.exportXlsx(fields.join(","));
       downloadBlob(res.data, "classes.xlsx");
       setShowExportModal(false);
-    } catch { /* silencieux */ }
+    } catch (e) { notifyError("L'export a échoué. Réessayez dans un instant.", e); }
     finally { setExporting(false); }
   };
 

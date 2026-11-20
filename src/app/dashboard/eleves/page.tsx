@@ -7,6 +7,7 @@ import ExportModal from "@/components/ExportModal";
 import { Donut, BarList } from "@/components/Charts";
 import { BIButton, BIModal, BIPanel, KpiCard } from "@/components/BIModal";
 
+import { notifyError } from "@/lib/notify";
 const PAGE_SIZE = 50;
 
 const ELEVE_EXPORT_FIELDS = [
@@ -409,7 +410,7 @@ export default function ElevesPage() {
       clearSelection();
       load(false);
       setModal(null);
-    } catch { /* silencieux */ }
+    } catch (e) { notifyError("La suppression a échoué : aucun élève n’a été supprimé, ou seulement une partie. Rechargez la liste pour vérifier.", e); }
     finally { setLoading(false); }
   };
 
@@ -420,7 +421,7 @@ export default function ElevesPage() {
       const res = await elevesApi.exportXlsx(fields.join(","));
       downloadBlob(res.data, "eleves.xlsx");
       setShowExportModal(false);
-    } catch { /* silencieux */ }
+    } catch (e) { notifyError("L'export a échoué. Réessayez dans un instant.", e); }
     finally { setExporting(false); }
   };
 

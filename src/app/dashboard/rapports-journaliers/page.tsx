@@ -7,6 +7,7 @@ import ExportModal from "@/components/ExportModal";
 import RapportPhoto from "@/components/RapportPhoto";
 import { LineChart, BarList, Donut, Carte, type Point } from "@/components/Charts";
 
+import { notifyError } from "@/lib/notify";
 const PAGE_SIZE = 20;
 
 const RAPPORT_EXPORT_FIELDS = [
@@ -164,7 +165,7 @@ export default function RapportsJournaliersPage() {
   const [resolving, setResolving] = useState<string | null>(null);
 
   useEffect(() => {
-    rapportQuestionsApi.list().then(({ data }) => setQuestionDefs(data)).catch(() => {});
+    rapportQuestionsApi.list().then(({ data }) => setQuestionDefs(data)).catch((e) => notifyError("Le chargement des données a échoué. Rechargez la page ou réessayez plus tard.", e));
   }, []);
 
   useEffect(() => {
@@ -187,7 +188,7 @@ export default function RapportsJournaliersPage() {
     try {
       await rapportDifficulteResolutionsApi.resolve(detail.id, { difficulte_label: label, resolue: nextValue });
       setResolutions(prev => ({ ...prev, [label]: nextValue }));
-    } catch { /* silencieux */ }
+    } catch (e) { notifyError("L’enregistrement du suivi de la difficulté a échoué. Réessayez.", e); }
     finally { setResolving(null); }
   };
 
@@ -263,7 +264,7 @@ export default function RapportsJournaliersPage() {
       const res = await rapportJournalierAdminApi.exportCsv(params);
       downloadBlob(res.data, "rapports-journaliers.csv");
       setShowExportModal(false);
-    } catch { /* silencieux */ }
+    } catch (e) { notifyError("L'export a échoué. Réessayez dans un instant.", e); }
     finally { setExporting(false); }
   };
 

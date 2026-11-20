@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { remarquesApi } from "@/lib/api";
 import Pagination from "@/components/Pagination";
 
+import { notifyError } from "@/lib/notify";
 const PAGE_SIZE = 50;
 
 const CATEGORIE_LABELS: Record<string, string> = {
@@ -51,7 +52,7 @@ export default function RemarquesPage() {
         limit: PAGE_SIZE,
       })
       .then(r => { setItems(r.data.items ?? []); setTotal(r.data.total ?? 0); })
-      .catch(() => {});
+      .catch((e) => notifyError("Le chargement des données a échoué. Rechargez la page ou réessayez plus tard.", e));
   };
 
   useEffect(() => { setPage(1); load(1); }, [filterCategorie, filterStatut]);
