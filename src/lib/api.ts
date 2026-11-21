@@ -4,6 +4,7 @@ import {
   refreshSession,
   clearAuthCookies,
 } from "./cookies";
+import { nouvelIdRequete } from "./support";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -15,6 +16,8 @@ api.interceptors.request.use((config) => {
     const token = getAccessToken();
     if (token) config.headers.Authorization = `Bearer ${token}`;
   }
+  // APP-45 : référence de requête, reprise dans les journaux de l'API.
+  config.headers["X-Request-ID"] = nouvelIdRequete();
   return config;
 });
 

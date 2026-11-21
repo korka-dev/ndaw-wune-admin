@@ -22,13 +22,18 @@ COPY . .
 # dans le bundle JavaScript, pas au runtime.
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_APP_ORIGIN
+# Version livrée (commit), transmise avec les signalements d'erreur (APP-45).
+ARG NEXT_PUBLIC_APP_VERSION=admin
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_APP_ORIGIN=$NEXT_PUBLIC_APP_ORIGIN
+ENV NEXT_PUBLIC_APP_VERSION=$NEXT_PUBLIC_APP_VERSION
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build
+# APP-42 : le build échoue si le bundle appelle une autre API que NEXT_PUBLIC_API_URL.
+RUN ATTENDUE="$NEXT_PUBLIC_API_URL" sh scripts/verifier-bundle.sh .next/static
 
 # ── Stage 3 : Image de production minimale ────────────────────────────────────
 FROM node:20-alpine AS runner

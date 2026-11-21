@@ -21,6 +21,7 @@ services:
         # NEXT_PUBLIC_* sont injectées au BUILD (pas au runtime)
         NEXT_PUBLIC_API_URL:    ${NEXT_PUBLIC_API_URL}
         NEXT_PUBLIC_APP_ORIGIN: ${NEXT_PUBLIC_APP_ORIGIN:-admin.ndawwune.cloud}
+        NEXT_PUBLIC_APP_VERSION: ${NEXT_PUBLIC_APP_VERSION:-admin}
 
     image: ndawwune-admin:latest
     container_name: ndawwune-admin

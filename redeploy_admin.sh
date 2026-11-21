@@ -78,7 +78,8 @@ success "Dépendances installées."
 # .env.production est sourcé ci-dessus donc Next.js le lit automatiquement.
 header "Étape 2/4 — Build Next.js (standalone)"
 log "next build avec NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL ..."
-NODE_ENV=production npm run build
+NEXT_PUBLIC_APP_VERSION="admin-$(git rev-parse --short HEAD 2>/dev/null || echo inconnu)" NODE_ENV=production npm run build
+ATTENDUE="$NEXT_PUBLIC_API_URL" sh scripts/verifier-bundle.sh .next/static || { error "Bundle non conforme (APP-42) : déploiement interrompu."; exit 1; }
 success "Build terminé."
 
 # ── 3. Copie des assets statiques ─────────────────────────────────────────────
@@ -131,7 +132,7 @@ echo ""
 pm2 status ndawwune-admin
 echo ""
 header "Déploiement terminé !"
-success "Dashboard Admin disponible sur https://admin.ndawwune.cloud"
+success "Dashboard Admin disponible sur https://${NEXT_PUBLIC_APP_ORIGIN:-admin.ndawwune.cloud}"
 echo ""
 log "Commandes utiles :"
 echo "  pm2 logs ndawwune-admin     # logs en temps réel"

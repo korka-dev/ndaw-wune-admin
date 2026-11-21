@@ -89,7 +89,8 @@ fi
 header "Étape 1/2 — Build de l'image Docker"
 log "docker compose build --no-cache (NEXT_PUBLIC_API_URL injecté dans le bundle) ..."
 
-docker compose --env-file .env.production build --no-cache
+NEXT_PUBLIC_APP_VERSION="admin-$(git rev-parse --short HEAD 2>/dev/null || echo inconnu)" \
+  docker compose --env-file .env.production build --no-cache
 
 success "Image construite."
 

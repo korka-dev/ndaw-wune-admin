@@ -12,6 +12,15 @@ export default function NoticeStack() {
           <div className="flex-1">
             <div className="font-semibold text-red-700">{n.message}</div>
             {n.detail && <div className="text-xs text-tx-muted mt-0.5 break-words">{n.detail}</div>}
+            {n.reference && (
+              <button
+                onClick={() => navigator.clipboard?.writeText(n.reference!).catch(() => {})}
+                className="mt-1 text-[11px] font-mono text-tx-muted hover:text-tx"
+                title="Copier la référence à transmettre au support"
+              >
+                Réf. support : {n.reference} ⧉
+              </button>
+            )}
           </div>
           <button onClick={() => dismiss(n.id)} className="text-tx-muted hover:text-tx text-xs" aria-label="Fermer">✕</button>
         </div>
