@@ -7,11 +7,15 @@ type AuditLog = {
   id: string;
   user_name: string;
   user_role: string;
-  action: "create" | "update" | "delete" | "read";
+  action: string;
   entity: string;
   method: string;
   path: string;
   description: string;
+  cible_type?: string | null;
+  cible_id?: string | null;
+  motif?: string | null;
+  request_id?: string | null;
   created_at: string;
 };
 
@@ -20,6 +24,11 @@ const ACTION_LABELS: Record<string, string> = {
   update: "Modification",
   delete: "Suppression",
   read: "Consultation",
+  archive: "Archivage",
+  restore: "Restauration",
+  annulation: "Annulation",
+  correction: "Correction",
+  export: "Export",
 };
 
 const ACTION_STYLES: Record<string, string> = {
@@ -27,6 +36,11 @@ const ACTION_STYLES: Record<string, string> = {
   update: "bg-brand-soft text-brand",
   delete: "bg-danger-soft text-danger",
   read: "bg-surface-alt text-tx-muted",
+  archive: "bg-danger-soft text-danger",
+  restore: "bg-success-soft text-success",
+  annulation: "bg-danger-soft text-danger",
+  correction: "bg-brand-soft text-brand",
+  export: "bg-surface-alt text-tx-muted",
 };
 
 const ROLE_LABELS: Record<string, string> = {
@@ -100,6 +114,7 @@ export default function HistoriqueModificationsPage() {
                 <th className="px-4 py-2.5">Utilisateur</th>
                 <th className="px-4 py-2.5">Action</th>
                 <th className="px-4 py-2.5">Ressource</th>
+                <th className="px-4 py-2.5">Détail et motif</th>
               </tr>
             </thead>
             <tbody>
@@ -116,6 +131,17 @@ export default function HistoriqueModificationsPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-tx">{log.entity}</td>
+                  <td className="px-4 py-3 max-w-md">
+                    <div className="text-tx">{log.description}</div>
+                    {log.motif && <div className="text-xs text-tx mt-0.5">Motif : {log.motif}</div>}
+                    {(log.cible_id || log.request_id) && (
+                      <div className="text-[11px] font-mono text-tx-muted mt-0.5">
+                        {log.cible_id && <span>cible {log.cible_id.slice(0, 8)}</span>}
+                        {log.cible_id && log.request_id && " · "}
+                        {log.request_id && <span>réf. {log.request_id}</span>}
+                      </div>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
