@@ -24,6 +24,8 @@ type Question = {
   active: boolean;
   ordre: number;
   cible: QuestionCible;
+  /** Version du sens de la question (L4, REC13) : +1 à chaque changement de libellé, type, options ou cible. */
+  version?: number;
 };
 
 const TYPE_LABELS: Record<QuestionType, string> = {
@@ -373,6 +375,12 @@ export default function RapportQuestionsPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-medium text-tx">{q.label}</span>
+                    {(q.version ?? 1) > 1 && (
+                      <span className="px-1.5 py-0.5 rounded bg-surface-alt text-[10px] font-semibold text-tx-muted"
+                            title="Les réponses déjà reçues restent liées à la version en vigueur lors de leur réception.">
+                        v{q.version}
+                      </span>
+                    )}
                     <span className="text-xs px-2 py-0.5 rounded-full bg-brand-soft text-brand font-medium">{CIBLE_LABELS[q.cible ?? "tuteur"]}</span>
                     {q.required && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-danger font-medium">Obligatoire</span>

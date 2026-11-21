@@ -366,9 +366,18 @@ export const evaluationCompetencesApi = {
   delete: (id: string) => api.delete(`/admin/evaluation-competences/${id}`),
 };
 
+/** Filtres serveur de la liste, des compteurs et des exports élèves (APP-38). */
+export type EleveFiltres = {
+  school_id?: string; session_id?: string; classe?: string; search?: string; ief?: string;
+  sexe?: string; statut?: string; type?: "titulaire" | "remplacant"; archives?: boolean;
+  sort?: "nom" | "prenom" | "classe" | "statut" | "type" | "ecole" | "ief" | "created_at"; order?: "asc" | "desc";
+};
+
 export const elevesApi = {
-  list: (params?: { school_id?: string; session_id?: string; classe?: string; skip?: number; limit?: number; archives?: boolean }) =>
+  list: (params?: EleveFiltres & { skip?: number; limit?: number }) =>
     api.get("/admin/eleves", { params }),
+  /** Compteurs agrégés côté serveur sur le résultat filtré (KPI, BI). */
+  stats: (params?: EleveFiltres) => api.get("/admin/eleves/stats", { params }),
   create: (d: unknown) => api.post("/admin/eleves", d),
   update: (id: string, d: unknown) => api.patch(`/admin/eleves/${id}`, d),
   /** Archive (APP-15) : l'historique est conservé. `definitif` : suppression physique, refusée (409) s'il existe un historique. */
@@ -376,8 +385,10 @@ export const elevesApi = {
   restore: (id: string) => api.post(`/admin/eleves/${id}/restaurer`),
   bulkDelete: (ids: string[]) => api.delete("/admin/eleves", { data: { ids } }),
   // Export
-  exportCsv: () => api.get("/admin/eleves/export/csv", { responseType: "blob" }),
-  exportXlsx: (fields?: string) => api.get("/admin/eleves/export/xlsx", { params: fields ? { fields } : undefined, responseType: "blob" }),
+  // Export du résultat filtré complet (aucun plafond de pagination, APP-38)
+  exportCsv: (filtres?: EleveFiltres) => api.get("/admin/eleves/export/csv", { params: filtres, responseType: "blob" }),
+  exportXlsx: (fields?: string, filtres?: EleveFiltres) =>
+    api.get("/admin/eleves/export/xlsx", { params: { ...filtres, ...(fields ? { fields } : {}) }, responseType: "blob" }),
   // Import unifié (CSV, Excel, PDF)
   import: (file: File) => {
     const fd = new FormData();
@@ -527,3 +538,68 @@ export const importExportApi = {
   },
 };
 
+
+// ── Données analytiques (rapport V2, lot L4 — APP-36, Partie II D5-D9) ─────────
+export interface AnalytiqueFiltres {
+  campagne_id?: string;
+  date_debut?: string;
+  date_fin?: string;
+  recu_depuis?: string;
+  recu_jusqua?: string;
+  ief?: string;
+  commune?: string;
+  ecole_id?: string;
+  statut?: "tous" | "valides" | "soumis" | "corrige" | "annule";
+  nominatif?: boolean;
+}
+
+export interface Indicateur {
+  code: string;
+  libelle: string;
+  unite: string;
+  valeur: number | string | null;
+  statut: "calcule" | "non_calculable";
+  raison: string | null;
+  numerateur: number | null;
+  denominateur: number | null;
+  population: string | null;
+  manquants: unknown;
+  definition: string;
+  sources: string[];
+  detail: Record<string, unknown>;
+}
+
+export interface IndicateursReponse {
+  schema_version: string;
+  borne_snapshot: string;
+  fraicheur: string | null;
+  filtres: Record<string, unknown>;
+  indicateurs: Indicateur[];
+}
+
+export interface ExportHistorique {
+  date: string;
+  par: string;
+  role: string;
+  export_id?: string;
+  mode?: "nominatif" | "pseudonymise";
+  filtres?: Record<string, unknown>;
+  borne_snapshot?: string;
+  lignes?: Record<string, number>;
+  anomalies?: number;
+  taille_octets?: number;
+}
+
+/** Retire les filtres vides : un champ vide ne doit jamais devenir un filtre. */
+const nettoyer = (f: AnalytiqueFiltres) =>
+  Object.fromEntries(Object.entries(f).filter(([, v]) => v !== "" && v !== undefined && v !== false));
+
+export const analytiqueApi = {
+  indicateurs: (f: AnalytiqueFiltres) =>
+    api.get<IndicateursReponse>("/admin/analytique/indicateurs", { params: nettoyer({ ...f, nominatif: false }) }),
+  /** Archive CSV complète du périmètre (aucun plafond d'écran). */
+  exporter: (f: AnalytiqueFiltres) =>
+    api.get<Blob>("/admin/analytique/export", { params: nettoyer(f), responseType: "blob", timeout: 0 }),
+  tables: () => api.get("/admin/analytique/tables"),
+  historique: (limit = 50) => api.get<ExportHistorique[]>("/admin/analytique/exports", { params: { limit } }),
+};

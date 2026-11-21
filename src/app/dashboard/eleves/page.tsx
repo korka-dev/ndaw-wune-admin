@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import { elevesApi, schoolsApi, sessionsApi, classesApi } from "@/lib/api";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { elevesApi, schoolsApi, sessionsApi, classesApi, type EleveFiltres } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
 import ExportModal from "@/components/ExportModal";
@@ -10,6 +10,8 @@ import { BIButton, BIModal, BIPanel, KpiCard } from "@/components/BIModal";
 import { notifyError } from "@/lib/notify";
 import { useArchive, ArchiveNotice, ShowArchivedToggle, ArchivedBadge, RestoreButton, ArchiveConsequences } from "@/components/ArchiveControls";
 const PAGE_SIZE = 50;
+/** Plafond de l'archivage groupé côté API (DELETE /admin/eleves). */
+const BULK_MAX = 500;
 
 const ELEVE_EXPORT_FIELDS = [
   { key: "nom",     label: "Nom" },
@@ -37,6 +39,17 @@ interface Eleve {
   archived_at?: string | null;
 }
 interface School { id: string; name: string; region?: string; }
+/** Compteurs calculés par l'API sur le résultat filtré (GET /admin/eleves/stats). */
+interface EleveStats {
+  total: number; filles: number; garcons: number; titulaires: number; remplacants: number;
+  par_classe: { label: string; value: number }[];
+  par_ecole: { label: string; value: number }[];
+}
+type SortKey = NonNullable<EleveFiltres["sort"]>;
+/** Colonnes triables du tableau (les autres en-têtes restent fixes). */
+const SORTABLE: Record<string, SortKey> = {
+  "Nom / Prénom": "nom", "Classe": "classe", "École": "ecole", "IEF": "ief", "Statut": "statut", "Type": "type",
+};
 interface Session { id: string; name: string; status: string; }
 
 const NIVEAU_CLASSES: Record<string, string[]> = {
@@ -231,12 +244,15 @@ function EleveFormFields({
 }
 
 export default function ElevesPage() {
-  const [eleves, setEleves] = useState<Eleve[]>([]);
+  const [eleves, setEleves] = useState<Eleve[]>([]);   // page courante uniquement (APP-38)
+  const [total, setTotal] = useState(0);              // total exact du résultat filtré (serveur)
+  const [stats, setStats] = useState<EleveStats | null>(null);
   const [schools, setSchools] = useState<School[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [modal, setModal] = useState<ModalState>(null);
   const [form, setForm] = useState<FormType>(EMPTY_FORM);
   const [dataLoading, setDataLoading] = useState(true);
+  const [listLoading, setListLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -249,87 +265,110 @@ export default function ElevesPage() {
   const [showArchived, setShowArchived] = useState(false);
   const reimportRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filterSchool, setFilterSchool] = useState("");
   const [filterClasse, setFilterClasse] = useState("");
   const [filterSession, setFilterSession] = useState("");
   const [filterSexe, setFilterSexe] = useState("");
   const [filterIef, setFilterIef] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("nom");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
+  const [reloadTick, setReloadTick] = useState(0);
 
   // ── Sélection multiple ────────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [selectAll, setSelectAll] = useState(false);
+  const [selectingAll, setSelectingAll] = useState(false);
 
-  const load = (isFirstLoad = false) => {
-    if (isFirstLoad) { setDataLoading(true); setDataError(null); }
-    Promise.all([
-      elevesApi.list({ limit: 10000, ...(showArchived ? { archives: true } : {}) }),
-      schoolsApi.list({ limit: 10000 }),
-      sessionsApi.list(),
-    ]).then(([er, sr, sesr]) => {
-      setEleves(er.data.items ?? []);
-      setSchools(sr.data.items ?? []);
-      setSessions(sesr.data.items ?? []);
-      setDataError(null);
-    }).catch(() => {
-      setDataError("Impossible de charger les données. Vérifiez votre connexion.");
-    }).finally(() => {
-      if (isFirstLoad) setDataLoading(false);
-    });
-  };
-  useEffect(() => { load(true); }, [showArchived]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Recherche envoyée au serveur après une courte pause de frappe
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 350);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Filtres, tri et pagination sont appliqués par l'API : plus aucun chargement
+  // global ni filtrage dans le navigateur (APP-38).
+  const filtres = useMemo<EleveFiltres>(() => ({
+    ...(debouncedSearch ? { search: debouncedSearch } : {}),
+    ...(filterSchool ? { school_id: filterSchool } : {}),
+    ...(filterClasse ? { classe: filterClasse } : {}),
+    ...(filterSession ? { session_id: filterSession } : {}),
+    ...(filterSexe ? { sexe: filterSexe } : {}),
+    ...(filterIef ? { ief: filterIef } : {}),
+    ...(showArchived ? { archives: true } : {}),
+    sort: sortKey,
+    order: sortOrder,
+  }), [debouncedSearch, filterSchool, filterClasse, filterSession, filterSexe, filterIef, showArchived, sortKey, sortOrder]);
+  const filtresKey = JSON.stringify(filtres);
+
+  // Sources des listes déroulantes (écoles, sessions), chargées une fois
+  useEffect(() => {
+    Promise.all([schoolsApi.list({ limit: 10000 }), sessionsApi.list()])
+      .then(([sr, sesr]) => {
+        setSchools(sr.data.items ?? []);
+        setSessions(sesr.data.items ?? []);
+      })
+      .catch(e => notifyError("Impossible de charger les écoles et les sessions.", e));
+  }, []);
+
+  // Page courante + compteurs, à chaque changement de filtre, de tri ou de page
+  const prevFiltresKey = useRef(filtresKey);
+  const statsKey = useRef<string | null>(null);
+  const requestSeq = useRef(0);
+  const statsSeq = useRef(0);
+  useEffect(() => {
+    if (prevFiltresKey.current !== filtresKey) {
+      prevFiltresKey.current = filtresKey;
+      setSelectedIds(new Set());
+      if (page !== 1) { setPage(1); return; }   // l'effet repartira avec la page 1
+    }
+    const seq = ++requestSeq.current;
+    const statsKeyNow = `${filtresKey}|${reloadTick}`;
+    const withStats = statsKey.current !== statsKeyNow;
+    setListLoading(true);
+    elevesApi.list({ ...filtres, skip: (page - 1) * PAGE_SIZE, limit: PAGE_SIZE })
+      .then(res => {
+        if (seq !== requestSeq.current) return;   // réponse périmée
+        setEleves(res.data.items ?? []);
+        setTotal(res.data.total ?? 0);
+        setDataError(null);
+      })
+      .catch(() => {
+        if (seq === requestSeq.current) setDataError("Impossible de charger les données. Vérifiez votre connexion.");
+      })
+      .finally(() => {
+        if (seq === requestSeq.current) { setListLoading(false); setDataLoading(false); }
+      });
+    if (withStats) {
+      statsKey.current = statsKeyNow;
+      const sseq = ++statsSeq.current;
+      elevesApi.stats(filtres)
+        .then(res => { if (sseq === statsSeq.current) setStats(res.data); })
+        .catch(e => notifyError("Impossible de calculer les indicateurs élèves.", e));
+    }
+  }, [filtresKey, page, reloadTick]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const load = () => setReloadTick(t => t + 1);
 
   const arch = useArchive({
     archive: (id) => elevesApi.delete(id),
     restore: (id) => elevesApi.restore(id),
-    reload:  () => load(false),
+    reload:  load,
   });
-  useEffect(() => { setPage(1); }, [search, filterSchool, filterClasse, filterSession, filterSexe, filterIef]);
-  useEffect(() => { setSelectedIds(new Set()); setSelectAll(false); }, [search, filterSchool, filterClasse, filterSession, filterSexe, filterIef]);
 
   // Listes dérivées filtrées par IEF
   const iefs = [...new Set(schools.map(s => s.region).filter(Boolean))].sort() as string[];
   const schoolsByIef = filterIef ? schools.filter(s => s.region === filterIef) : schools;
 
-  const elevesByClasse = Object.entries(
-    eleves.reduce<Record<string, number>>((acc, e) => {
-      const k = e.classe?.trim() || "Non renseignée";
-      acc[k] = (acc[k] ?? 0) + 1;
-      return acc;
-    }, {})
-  ).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 8);
-
-  const elevesByEcole = Object.entries(
-    eleves.reduce<Record<string, number>>((acc, e) => {
-      const k = e.school_name?.trim() || "Non renseignée";
-      acc[k] = (acc[k] ?? 0) + 1;
-      return acc;
-    }, {})
-  ).map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value).slice(0, 8);
-
   const hasFilters = !!(search || filterSchool || filterClasse || filterSession || filterSexe || filterIef);
 
-  const filtered = eleves.filter(e => {
-    const cleanNom = cleanNamePart(e.nom);
-    const cleanPrenom = cleanNamePart(e.prenom);
-    const fName = `${cleanNom} ${cleanPrenom}`.toLowerCase();
-    const matchSearch = !search.trim() || fName.includes(search.toLowerCase());
-    const matchSchool = !filterSchool || e.school_id === filterSchool;
-    const matchClasse = !filterClasse || e.classe === filterClasse;
-    const matchSession = !filterSession || e.session_id === filterSession;
-    const matchSexe = !filterSexe || (e.genre?.toLowerCase() === filterSexe.toLowerCase());
-    return matchSearch && matchSchool && matchClasse && matchSession && matchSexe;
-  });
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
   // ── Helpers de sélection ──────────────────────────────────────────────────
-  const pageIds = paginated.map(e => e.id);
+  const pageIds = eleves.map(e => e.id);
   const allPageSel = pageIds.length > 0 && pageIds.every(id => selectedIds.has(id));
   const somePageSel = pageIds.some(id => selectedIds.has(id));
-  const selCount = selectAll ? filtered.length : selectedIds.size;
+  const selCount = selectedIds.size;
 
   const toggleOne = (id: string) => {
-    setSelectAll(false);
     setSelectedIds(prev => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
@@ -338,30 +377,30 @@ export default function ElevesPage() {
   };
 
   const togglePage = () => {
-    setSelectAll(false);
-    if (allPageSel) {
-      setSelectedIds(prev => {
-        const next = new Set(prev);
-        pageIds.forEach(id => next.delete(id));
-        return next;
-      });
-    } else {
-      setSelectedIds(prev => {
-        const next = new Set(prev);
-        pageIds.forEach(id => next.add(id));
-        return next;
-      });
-    }
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allPageSel) pageIds.forEach(id => next.delete(id));
+      else pageIds.forEach(id => next.add(id));
+      return next;
+    });
   };
 
-  const selectAllFiltered = () => {
-    setSelectAll(true);
-    setSelectedIds(new Set(filtered.map(e => e.id)));
+  // Sélection de tout le résultat filtré : identifiants demandés au serveur,
+  // dans la limite acceptée par l'archivage groupé.
+  const selectAllFiltered = async () => {
+    setSelectingAll(true);
+    try {
+      const res = await elevesApi.list({ ...filtres, skip: 0, limit: BULK_MAX });
+      setSelectedIds(new Set((res.data.items ?? []).map((e: Eleve) => e.id)));
+    } catch (e) { notifyError("Impossible de sélectionner tous les résultats.", e); }
+    finally { setSelectingAll(false); }
   };
 
-  const clearSelection = () => {
-    setSelectAll(false);
-    setSelectedIds(new Set());
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) setSortOrder(o => (o === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortOrder("asc"); }
   };
 
   // ── CRUD ──────────────────────────────────────────────────────────────────
@@ -391,7 +430,7 @@ export default function ElevesPage() {
       } else if (modal && typeof modal === "object" && modal.kind === "edit") {
         await elevesApi.update(modal.eleve.id, form);
       }
-      load(false);
+      load();
       setModal(null);
     } catch (err: any) {
       const detail = err?.response?.data?.detail;
@@ -414,22 +453,23 @@ export default function ElevesPage() {
   const doBulkDelete = async () => {
     setLoading(true);
     try {
-      const ids = selectAll ? filtered.map(e => e.id) : Array.from(selectedIds);
+      const ids = Array.from(selectedIds);
       const { data } = await elevesApi.bulkDelete(ids);
       const n = typeof data?.archived === "number" ? data.archived : ids.length;
       arch.setNotice(`${n} élève${n > 1 ? "s" : ""} archivé${n > 1 ? "s" : ""}. Leur historique est conservé ; restauration possible via « Afficher les archivés ».`);
       clearSelection();
-      load(false);
+      load();
       setModal(null);
     } catch (e) { notifyError("L’archivage a échoué : aucun élève n’a été archivé, ou seulement une partie. Rechargez la liste pour vérifier.", e); }
     finally { setLoading(false); }
   };
 
   // ── Export ─────────────────────────────────────────────────────────────────
+  // Exporte TOUT le résultat filtré (pas seulement la page affichée).
   const handleExportXlsx = async (fields: string[]) => {
     setExporting(true);
     try {
-      const res = await elevesApi.exportXlsx(fields.join(","));
+      const res = await elevesApi.exportXlsx(fields.join(","), filtres);
       downloadBlob(res.data, "eleves.xlsx");
       setShowExportModal(false);
     } catch (e) { notifyError("L'export a échoué. Réessayez dans un instant.", e); }
@@ -469,6 +509,8 @@ export default function ElevesPage() {
     return [cNom?.[0], cPrenom?.[0]].filter(Boolean).join("").toUpperCase() || "?";
   };
 
+  const st = stats ?? { total: 0, filles: 0, garcons: 0, titulaires: 0, remplacants: 0, par_classe: [], par_ecole: [] };
+
   return (
     <div className="flex flex-col h-full flex-shrink-0 px-7 pb-7">
       {/* ── Header ── */}
@@ -477,8 +519,8 @@ export default function ElevesPage() {
           <h1 className="text-xl font-bold text-tx">Gestion Élèves</h1>
           <p className="text-tx-muted text-sm mt-0.5">
             {hasFilters
-              ? `${filtered.length} résultat${filtered.length !== 1 ? "s" : ""} sur ${eleves.length} élève${eleves.length !== 1 ? "s" : ""}`
-              : `${eleves.length} élève${eleves.length !== 1 ? "s" : ""} au total`}
+              ? `${total} résultat${total !== 1 ? "s" : ""}`
+              : `${total} élève${total !== 1 ? "s" : ""} au total`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -515,13 +557,14 @@ export default function ElevesPage() {
       </div>
 
       {/* KPIs — remplace les anciens anneaux de genre et de statut */}
-      {eleves.length > 0 && (
+      {/* Compteurs calculés par l'API sur tout le résultat filtré (APP-38) */}
+      {stats && stats.total > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-5">
-          <KpiCard label="Élèves" value={eleves.length} color="text-tx" />
-          <KpiCard label="Filles" value={eleves.filter(e => e.genre === "Fille").length} color="text-warn" />
-          <KpiCard label="Garçons" value={eleves.filter(e => e.genre === "Garçon").length} color="text-primary" />
-          <KpiCard label="Titulaires" value={eleves.filter(e => e.statut_selection === "Titulaire").length} color="text-success" />
-          <KpiCard label="Remplaçants" value={eleves.filter(e => e.statut_selection === "Remplaçant").length} color="text-danger" />
+          <KpiCard label="Élèves" value={st.total} color="text-tx" />
+          <KpiCard label="Filles" value={st.filles} color="text-warn" />
+          <KpiCard label="Garçons" value={st.garcons} color="text-primary" />
+          <KpiCard label="Titulaires" value={st.titulaires} color="text-success" />
+          <KpiCard label="Remplaçants" value={st.remplacants} color="text-danger" />
         </div>
       )}
 
@@ -614,9 +657,9 @@ export default function ElevesPage() {
             <span className="text-sm font-medium text-brand">
               {selCount} élève{selCount > 1 ? "s" : ""} sélectionné{selCount > 1 ? "s" : ""}
             </span>
-            {!selectAll && selCount < filtered.length && (
-              <button onClick={selectAllFiltered} className="text-xs text-brand/70 hover:text-brand underline transition-colors ml-1">
-                Sélectionner les {filtered.length} résultats
+            {selCount < total && total <= BULK_MAX && (
+              <button onClick={selectAllFiltered} disabled={selectingAll} className="text-xs text-brand/70 hover:text-brand underline transition-colors ml-1 disabled:opacity-60">
+                {selectingAll ? "Sélection…" : `Sélectionner les ${total} résultats`}
               </button>
             )}
           </div>
@@ -641,7 +684,7 @@ export default function ElevesPage() {
         <div className="mb-4 flex items-center gap-3 px-4 py-3 bg-danger-soft border border-danger/20 rounded-xl text-sm text-danger">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
           <span>{dataError}</span>
-          <button onClick={() => load(true)} className="ml-auto text-xs underline font-medium">Réessayer</button>
+          <button onClick={load} className="ml-auto text-xs underline font-medium">Réessayer</button>
         </div>
       )}
 
@@ -657,7 +700,7 @@ export default function ElevesPage() {
           </div>
         )}
 
-        <div className={`overflow-x-auto overflow-y-auto flex-1 ${dataLoading ? "hidden" : ""}`}>
+        <div className={`overflow-x-auto overflow-y-auto flex-1 transition-opacity ${dataLoading ? "hidden" : ""} ${listLoading ? "opacity-60" : ""}`}>
           <table className="w-full text-sm table-fixed min-w-[1150px]">
             <colgroup><col className="w-[44px]" /><col className="w-[18%]" /><col className="w-[7%]" /><col className="w-[17%]" /><col className="w-[13%]" /><col className="w-[10%]" /><col className="w-[9%]" /><col className="w-[18%]" /></colgroup>
             <thead className="sticky top-0 z-10 bg-surface-alt shadow-sm">
@@ -672,13 +715,26 @@ export default function ElevesPage() {
                     {somePageSel && !allPageSel && <span className="w-2 h-0.5 bg-brand rounded-full block" />}
                   </button>
                 </th>
-                {["Nom / Prénom", "Classe", "École", "IEF", "Statut", "Type", "Actions"].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide first:text-center bg-surface-alt sticky top-0 z-10">{h}</th>
-                ))}
+                {["Nom / Prénom", "Classe", "École", "IEF", "Statut", "Type", "Actions"].map(h => {
+                  const key = SORTABLE[h];
+                  const active = key && sortKey === key;
+                  return (
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide first:text-center bg-surface-alt sticky top-0 z-10"
+                      aria-sort={active ? (sortOrder === "asc" ? "ascending" : "descending") : undefined}>
+                      {key ? (
+                        <button onClick={() => toggleSort(key)} title="Trier"
+                          className={`inline-flex items-center gap-1 uppercase tracking-wide hover:text-tx transition-colors ${active ? "text-brand" : ""}`}>
+                          {h}
+                          <span aria-hidden className="text-[10px]">{active ? (sortOrder === "asc" ? "▲" : "▼") : "↕"}</span>
+                        </button>
+                      ) : h}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
-              {paginated.map(e => {
+              {eleves.map(e => {
                 const isSel = selectedIds.has(e.id);
                 const ecole = e.school_name ?? schoolName(e.school_id);
                 const ief = e.school_region ?? "—";
@@ -739,7 +795,7 @@ export default function ElevesPage() {
                   </tr>
                 );
               })}
-              {filtered.length === 0 && (
+              {!listLoading && eleves.length === 0 && (
                 <tr><td colSpan={8} className="px-5 py-16 text-center text-tx-muted text-sm">
                   {hasFilters ? "Aucun élève ne correspond aux filtres." : "Aucun élève pour l'instant."}
                 </td></tr>
@@ -750,7 +806,7 @@ export default function ElevesPage() {
 
         {!dataLoading && (
           <div className="px-5 flex-shrink-0">
-            <Pagination page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />
+            <Pagination page={page} total={total} pageSize={PAGE_SIZE} onChange={setPage} />
           </div>
         )}
       </div>
@@ -935,14 +991,14 @@ export default function ElevesPage() {
       {showBI && (
         <BIModal
           title="Analyse BI — Élèves"
-          subtitle={`${eleves.length} élève${eleves.length !== 1 ? "s" : ""} au total`}
+          subtitle={`${st.total} élève${st.total !== 1 ? "s" : ""}${hasFilters ? " (résultat filtré)" : " au total"}`}
           onClose={() => setShowBI(false)}
           kpis={[
-            { label: "Élèves", value: eleves.length },
-            { label: "Filles", value: eleves.filter(e => e.genre === "Fille").length, color: "text-warn" },
-            { label: "Garçons", value: eleves.filter(e => e.genre === "Garçon").length, color: "text-primary" },
-            { label: "Titulaires", value: eleves.filter(e => e.statut_selection === "Titulaire").length, color: "text-success" },
-            { label: "Remplaçants", value: eleves.filter(e => e.statut_selection === "Remplaçant").length, color: "text-danger" },
+            { label: "Élèves", value: st.total },
+            { label: "Filles", value: st.filles, color: "text-warn" },
+            { label: "Garçons", value: st.garcons, color: "text-primary" },
+            { label: "Titulaires", value: st.titulaires, color: "text-success" },
+            { label: "Remplaçants", value: st.remplacants, color: "text-danger" },
           ]}
           tabs={[
             {
@@ -953,15 +1009,15 @@ export default function ElevesPage() {
                   <BIPanel title="Répartition par genre">
                     <Donut
                       color="#C08A3E"
-                      pct={eleves.length ? Math.round((eleves.filter(e => e.genre === "Fille").length / eleves.length) * 100) : 0}
-                      legende={`${eleves.filter(e => e.genre === "Fille").length} filles · ${eleves.filter(e => e.genre === "Garçon").length} garçons`}
+                      pct={st.total ? Math.round((st.filles / st.total) * 100) : 0}
+                      legende={`${st.filles} filles · ${st.garcons} garçons`}
                     />
                   </BIPanel>
                   <BIPanel title="Titulaires / Remplaçants">
                     <Donut
                       color="#4A90C2"
-                      pct={eleves.length ? Math.round((eleves.filter(e => e.statut_selection === "Titulaire").length / eleves.length) * 100) : 0}
-                      legende={`${eleves.filter(e => e.statut_selection === "Titulaire").length} titulaires · ${eleves.filter(e => e.statut_selection === "Remplaçant").length} remplaçants`}
+                      pct={st.total ? Math.round((st.titulaires / st.total) * 100) : 0}
+                      legende={`${st.titulaires} titulaires · ${st.remplacants} remplaçants`}
                     />
                   </BIPanel>
                 </div>
@@ -973,10 +1029,10 @@ export default function ElevesPage() {
               content: (
                 <div className="grid grid-cols-2 gap-4">
                   <BIPanel title="Élèves par classe" sub="top 8">
-                    <BarList color="#7B4F9E" data={elevesByClasse} />
+                    <BarList color="#7B4F9E" data={st.par_classe} />
                   </BIPanel>
                   <BIPanel title="Élèves par école" sub="top 8">
-                    <BarList color="#2F7D4A" data={elevesByEcole} />
+                    <BarList color="#2F7D4A" data={st.par_ecole} />
                   </BIPanel>
                 </div>
               ),

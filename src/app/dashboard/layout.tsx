@@ -53,6 +53,13 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    label: "Données",
+    items: [
+      { href: "/dashboard/indicateurs", label: "Indicateurs",       icon: "activity" },
+      { href: "/dashboard/exports",     label: "Centre d'exports",  icon: "import"   },
+    ],
+  },
+  {
     label: "Ressources",
     items: [
       { href: "/dashboard/ressources", label: "Ressources FLN", icon: "doc" },
