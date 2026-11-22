@@ -354,7 +354,19 @@ export const remplacementsApi = {
     date_to?: string;
     skip?: number;
     limit?: number;
+    statut?: string;
   }) => api.get("/admin/remplacements", { params }),
+  // L7 / RET03 : demande à valider (si ARED a choisi la validation)
+  decider: (id: string, d: { decision: "valider" | "refuser"; motif?: string }) =>
+    api.post(`/admin/remplacements/${id}/decision`, d),
+};
+
+// L7 — décisions terrain
+export const terrainApi = {
+  propositions: (statut?: string) => api.get("/admin/propositions-groupe", { params: statut ? { statut } : {} }),
+  deciderProposition: (id: string, d: { decision: "valider" | "refuser"; motif?: string }) =>
+    api.post(`/admin/propositions-groupe/${id}/decision`, d),
+  parametres: () => api.get("/admin/terrain/parametres"),
 };
 
 export const auditLogsApi = {
@@ -438,8 +450,13 @@ export const classesApi = {
 
 export const ressourcesApi = {
   list: (params?: { limit?: number; skip?: number }) => api.get("/admin/ressources", { params }),
-  upload: (file: File, title?: string, description?: string, resource_type?: string, langue?: string) => {
+  upload: (file: File, title?: string, description?: string, resource_type?: string, langue?: string,
+           classement?: { activite?: string; niveau?: string; version?: string }) => {
     const fd = new FormData();
+    // RET08 : classement terrain
+    if (classement?.activite) fd.append("activite", classement.activite);
+    if (classement?.niveau) fd.append("niveau", classement.niveau);
+    if (classement?.version) fd.append("version", classement.version);
     fd.append("file", file);
     if (title) fd.append("title", title);
     if (description) fd.append("description", description);
@@ -449,7 +466,8 @@ export const ressourcesApi = {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
-  update: (id: string, d: { title?: string; description?: string; langue?: string | null }) =>
+  update: (id: string, d: { title?: string; description?: string; langue?: string | null;
+    activite?: string | null; niveau?: string | null; version?: string | null }) =>
     api.patch(`/admin/ressources/${id}`, d),
   download: (id: string) =>
     api.get(`/admin/ressources/${id}/download`, { responseType: "blob" }),
