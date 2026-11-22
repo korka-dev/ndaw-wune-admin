@@ -62,8 +62,10 @@ USER nextjs
 
 EXPOSE 3000
 
-# Healthcheck : Next.js répond sur / (même si c'est une redirection)
+# Healthcheck : Next.js répond sur / (même si c'est une redirection).
+# 127.0.0.1 et non localhost : sous Alpine, localhost peut viser ::1 alors que
+# le serveur n'écoute qu'en IPv4 (HOSTNAME=0.0.0.0) → faux « unhealthy ».
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget -qO- http://localhost:3000/ || exit 1
+  CMD wget -qO- http://127.0.0.1:3000/ >/dev/null || exit 1
 
 CMD ["node", "server.js"]
