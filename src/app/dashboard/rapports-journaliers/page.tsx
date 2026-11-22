@@ -8,6 +8,8 @@ import RapportPhoto from "@/components/RapportPhoto";
 import { LineChart, BarList, Donut, Carte, type Point } from "@/components/Charts";
 
 import { errorDetail, notifyError } from "@/lib/notify";
+import { useRouter } from "next/navigation";
+import { demandesApi } from "@/lib/l6";
 
 // Rapport V2, APP-31 : un rapport n'est jamais supprimé. Par défaut, les listes,
 // statistiques et exports excluent les rapports annulés (comme les indicateurs).
@@ -69,7 +71,7 @@ interface RapportJournalier {
   difficultes: string | string[];
   autres_difficultes: string | null;
   description_difficultes: string | null;
-  directeur_venu: boolean;
+  directeur_venu: boolean | null;
   besoin_appui: boolean;
   domaines_appui: string | null;
   has_observations: boolean;
@@ -140,6 +142,7 @@ function parseDifficultes(d: string | string[]): string[] {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function RapportsJournaliersPage() {
+  const router = useRouter();
   const [rapports, setRapports] = useState<RapportJournalier[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -189,6 +192,15 @@ export default function RapportsJournaliersPage() {
   // Modal détail
   const [detail, setDetail] = useState<RapportJournalier | null>(null);
   const [questionDefs, setQuestionDefs] = useState<RapportQuestionDef[]>([]);
+
+  // Demande d'appui issue d'une difficulté ou d'un besoin (rapport V2, D9.3) — idempotent côté serveur.
+  const creerDemande = async (type: "difficulte" | "besoin", libelle: string) => {
+    if (!detail) return;
+    try {
+      const r = await demandesApi.depuisRapport({ rapport_id: detail.id, type, libelle });
+      router.push(`/dashboard/demandes-appui?id=${r.data.id}`);
+    } catch (e) { notifyError("Création de la demande d'appui impossible.", e); }
+  };
 
   // Résolution des difficultés du rapport ouvert
   const [resolutions, setResolutions] = useState<Record<string, boolean>>({});
@@ -886,6 +898,13 @@ export default function RapportsJournaliersPage() {
                               >
                                 {isBusy ? "…" : isResolved ? "✓ Résolu" : "Régler"}
                               </button>
+                              <button
+                                onClick={() => creerDemande("difficulte", d)}
+                                title="Créer ou ouvrir la demande d'appui liée à cette difficulté"
+                                className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white/70 text-warn hover:bg-white"
+                              >
+                                → Appui
+                              </button>
                             </span>
                           );
                         })}
@@ -908,7 +927,7 @@ export default function RapportsJournaliersPage() {
                     <div className="text-[11px] text-tx-muted mb-1">Directeur venu</div>
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${detail.directeur_venu ? "bg-success-soft text-success" : "bg-surface border border-border text-tx-muted"}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${detail.directeur_venu ? "bg-success" : "bg-tx-muted/40"}`} />
-                      {detail.directeur_venu ? "Oui" : "Non"}
+                      {detail.directeur_venu === null ? "Non renseigné" : detail.directeur_venu ? "Oui" : "Non"}
                     </span>
                   </div>
                   <div className="bg-surface-alt rounded-xl px-4 py-3">
@@ -924,6 +943,12 @@ export default function RapportsJournaliersPage() {
                     <div className="text-[11px] text-tx-muted mb-0.5">Domaines d&apos;appui</div>
                     <p className="text-sm text-tx">{detail.domaines_appui}</p>
                   </div>
+                )}
+                {detail.besoin_appui && (
+                  <button onClick={() => creerDemande("besoin", detail.domaines_appui || "Besoin d'appui signalé")}
+                          className="mt-3 px-3 py-1.5 rounded-lg border border-border text-xs font-semibold text-tx hover:bg-surface-alt">
+                    Créer / ouvrir la demande d&apos;appui
+                  </button>
                 )}
               </Section>
 
