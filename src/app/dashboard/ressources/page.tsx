@@ -17,6 +17,9 @@ type Document = {
   description: string | null;
   resource_type: ResourceType;
   langue: string | null;
+  activite?: string | null;
+  niveau?: string | null;
+  version?: string | null;
   uploaded_by: string | null;
   created_at: string;
 };
@@ -128,6 +131,9 @@ export default function RessourcesPage() {
   const [activeTab, setActiveTab]     = useState<"all" | ResourceType>("all");
   const [uploadType, setUploadType]   = useState<ResourceType>("document");
   const [uploadLangue, setUploadLangue] = useState<string>("");
+  const [uploadActivite, setUploadActivite] = useState("");
+  const [uploadNiveau, setUploadNiveau] = useState("");
+  const [uploadVersion, setUploadVersion] = useState("");
   const [langueEditId, setLangueEditId] = useState<string | null>(null);
   // Langues proposées : celles réellement enseignées dans les écoles. Proposer
   // une langue qu'aucune école n'utilise rendrait la ressource invisible pour
@@ -173,7 +179,10 @@ export default function RessourcesPage() {
       // Auto-détecter vidéo si le MIME le dit
       const effectiveType: ResourceType = f.type.startsWith("video/") ? "video" : uploadType;
       try {
-        await ressourcesApi.upload(f, undefined, undefined, effectiveType, uploadLangue || undefined);
+        await ressourcesApi.upload(f, undefined, undefined, effectiveType, uploadLangue || undefined, {
+          activite: uploadActivite.trim() || undefined, niveau: uploadNiveau.trim() || undefined,
+          version: uploadVersion.trim() || undefined,
+        });
         setProgress(prev => prev.map((p, idx) => idx === i ? { ...p, done: true } : p));
       } catch {
         setProgress(prev => prev.map((p, idx) => idx === i ? { ...p, done: true, error: "Échec" } : p));
@@ -209,6 +218,20 @@ export default function RessourcesPage() {
   };
 
   // ── Langue ──────────────────────────────────────────────────────────────────
+  const handleClassement = async (doc: Document) => {
+    const activite = window.prompt("Activité (vide pour retirer) :", doc.activite ?? "");
+    if (activite === null) return;
+    const niveau = window.prompt("Niveau (vide pour retirer) :", doc.niveau ?? "");
+    if (niveau === null) return;
+    const version = window.prompt("Version (vide pour retirer) :", doc.version ?? "");
+    if (version === null) return;
+    const d = { activite: activite.trim() || null, niveau: niveau.trim() || null, version: version.trim() || null };
+    try {
+      await ressourcesApi.update(doc.id, d);
+      setDocs(list => list.map(x => x.id === doc.id ? { ...x, ...d } : x));
+    } catch { alert("Erreur lors de la mise à jour du classement."); }
+  };
+
   const handleChangeLangue = async (doc: Document, langue: string) => {
     const prev = doc.langue;
     setDocs(list => list.map(d => d.id === doc.id ? { ...d, langue: langue || null } : d));
@@ -315,6 +338,12 @@ export default function RessourcesPage() {
             <option key={l} value={l}>{langueLabel(l)}</option>
           ))}
         </select>
+        {/* RET08 : classement visible par les tuteurs */}
+        {([["Activité", uploadActivite, setUploadActivite, "ex. Lecture guidée"], ["Niveau", uploadNiveau, setUploadNiveau, "ex. CE1"],
+           ["Version", uploadVersion, setUploadVersion, "ex. 2026-1"]] as const).map(([lib, val, set, ph]) => (
+          <input key={lib} value={val} onChange={e => set(e.target.value)} placeholder={`${lib} — ${ph}`}
+            className="px-3 py-1.5 rounded-lg text-xs border border-border bg-surface text-tx w-40 focus:outline-none focus:border-brand/50" />
+        ))}
       </div>
 
       {/* Zone drag & drop */}
@@ -490,6 +519,10 @@ export default function RessourcesPage() {
                     {doc.description && (
                       <p className="text-xs text-tx-muted/70 mt-0.5 truncate">{doc.description}</p>
                     )}
+                    <button onClick={() => handleClassement(doc)} className="text-xs text-brand mt-0.5 hover:underline text-left">
+                      {[doc.activite && `Activité : ${doc.activite}`, doc.niveau && `Niveau : ${doc.niveau}`, doc.version && `Version ${doc.version}`]
+                        .filter(Boolean).join(" · ") || "Classer (activité, niveau, version)"}
+                    </button>
                   </div>
 
                   {/* Actions */}

@@ -15,7 +15,11 @@ type EleveRemplacement = {
   school_commune: string | null;
   classe: string;
   date_remplacement: string;
+  statut?: "applique" | "en_attente" | "refuse";
+  motif_refus?: string | null;
 };
+
+const STATUTS: Record<string, string> = { applique: "Appliqué", en_attente: "À valider", refuse: "Refusé" };
 
 const PAGE_SIZE = 30;
 
@@ -24,11 +28,13 @@ export default function RemplacementsPage() {
   const [total, setTotal] = useState(0);
   const [skip, setSkip] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [statut, setStatut] = useState<string>("");
+  const [erreur, setErreur] = useState<string | null>(null);
 
   const fetchItems = useCallback(async (offset: number) => {
     setLoading(true);
     try {
-      const { data } = await remplacementsApi.list({ skip: offset, limit: PAGE_SIZE });
+      const { data } = await remplacementsApi.list({ skip: offset, limit: PAGE_SIZE, ...(statut ? { statut } : {}) });
       setItems(data.items);
       setTotal(data.total);
       setSkip(offset);
@@ -37,9 +43,21 @@ export default function RemplacementsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [statut]);
 
   useEffect(() => { fetchItems(0); }, [fetchItems]);
+
+  const decider = async (r: EleveRemplacement, decision: "valider" | "refuser") => {
+    let motif: string | undefined;
+    if (decision === "refuser") {
+      const m = window.prompt("Motif du refus (visible par le tuteur) :");
+      if (!m || !m.trim()) return;
+      motif = m.trim();
+    } else if (!window.confirm(`Valider le remplacement de ${r.ancien_eleve_nom ?? "?"} par ${r.nouveau_eleve_nom} ?`)) return;
+    setErreur(null);
+    try { await remplacementsApi.decider(r.id, { decision, motif }); await fetchItems(skip); }
+    catch (e: any) { setErreur(e?.response?.data?.detail ?? "Décision refusée par le serveur."); }
+  };
 
   const formatDate = (iso: string) => {
     const d = new Date(iso);
@@ -55,7 +73,15 @@ export default function RemplacementsPage() {
         <h1 className="text-xl font-bold text-tx mb-0.5">Remplacements élève</h1>
         <p className="text-tx-muted text-sm">
           Historique des remplacements d&apos;élève effectués par les tuteurs depuis l&apos;app mobile.
+          Quand ARED exige une validation, les demandes « À valider » attendent une décision ici ou du superviseur.
         </p>
+        <div className="flex gap-2 mt-3">
+          {[["", "Tous"], ["en_attente", "À valider"], ["applique", "Appliqués"], ["refuse", "Refusés"]].map(([k, l]) => (
+            <button key={k} onClick={() => setStatut(k)}
+              className={`px-3 py-1.5 rounded-lg border border-border text-xs font-semibold ${statut === k ? "bg-surface-alt text-tx" : "text-tx-muted"}`}>{l}</button>
+          ))}
+        </div>
+        {erreur && <p className="mt-2 text-sm text-red-600">{erreur}</p>}
       </div>
 
       {loading ? (
@@ -75,7 +101,7 @@ export default function RemplacementsPage() {
           </div>
 
           <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[900px]">
+          <table className="w-full text-sm min-w-[1050px]">
             <thead>
               <tr className="text-left text-xs font-semibold text-tx-muted uppercase tracking-wide border-b border-border">
                 <th className="px-4 py-2.5">Date</th>
@@ -86,6 +112,7 @@ export default function RemplacementsPage() {
                 <th className="px-4 py-2.5">Ancien élève</th>
                 <th className="px-4 py-2.5">Nouvel élève</th>
                 <th className="px-4 py-2.5">Motif</th>
+                <th className="px-4 py-2.5">Statut</th>
               </tr>
             </thead>
             <tbody>
@@ -99,6 +126,15 @@ export default function RemplacementsPage() {
                   <td className="px-4 py-3 text-tx-muted">{r.ancien_eleve_nom ?? "—"}</td>
                   <td className="px-4 py-3 font-medium text-tx">{r.nouveau_eleve_nom}</td>
                   <td className="px-4 py-3 text-tx-muted max-w-xs truncate" title={r.motif}>{r.motif}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span className="text-xs font-semibold" title={r.motif_refus ?? undefined}>{STATUTS[r.statut ?? "applique"]}</span>
+                    {r.statut === "en_attente" && (
+                      <span className="ml-2 inline-flex gap-1">
+                        <button onClick={() => decider(r, "valider")} className="px-2 py-1 rounded bg-brand text-white text-xs font-semibold">Valider</button>
+                        <button onClick={() => decider(r, "refuser")} className="px-2 py-1 rounded border border-border text-xs font-semibold">Refuser</button>
+                      </span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

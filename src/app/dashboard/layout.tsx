@@ -50,6 +50,7 @@ const NAV_SECTIONS: NavSection[] = [
       { href: "/dashboard/rapports-journaliers", label: "Rapports Journaliers",  icon: "file-text"  },
       { href: "/dashboard/rapport-questions",    label: "Questions de Rapport",  icon: "check-sq",  adminOnly: true },
       { href: "/dashboard/remplacements",        label: "Remplacements élève",   icon: "users-sm"   },
+      { href: "/dashboard/terrain",              label: "Décisions terrain",     icon: "check-sq",  adminOnly: true },
       { href: "/dashboard/visites",              label: "Visites pédagogiques",  icon: "eye"        },
       { href: "/dashboard/grilles-visite",       label: "Grilles de visite",     icon: "check-sq",  adminOnly: true },
       { href: "/dashboard/demandes-appui",       label: "Demandes d'appui",      icon: "activity"   },

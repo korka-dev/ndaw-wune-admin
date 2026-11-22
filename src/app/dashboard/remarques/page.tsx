@@ -12,6 +12,15 @@ const CATEGORIE_LABELS: Record<string, string> = {
   eleves: "Élèves",
   securite: "Sécurité",
   autre: "Autre",
+  pedagogie: "Pédagogie",
+  application: "Application",
+};
+
+// L7 / RET13
+const DESTINATAIRE_LABELS: Record<string, string> = {
+  equipe_programme: "Équipe programme",
+  superviseur: "Superviseur",
+  support_technique: "Assistance technique",
 };
 
 const ROLE_LABELS: Record<string, string> = {
@@ -30,6 +39,10 @@ interface RemarqueItem {
   reponse_admin?: string | null;
   reponse_admin_at?: string | null;
   created_at: string;
+  destinataire?: string | null;
+  contexte_type?: string | null;
+  contexte_id?: string | null;
+  reponse_par_nom?: string | null;
 }
 
 export default function RemarquesPage() {
@@ -140,6 +153,9 @@ export default function RemarquesPage() {
                   <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-warn-soft text-warn">
                     {CATEGORIE_LABELS[r.categorie] ?? r.categorie}
                   </span>
+                  {r.destinataire && r.destinataire !== "equipe_programme" && (
+                    <div className="text-[11px] text-tx-muted mt-1">→ {DESTINATAIRE_LABELS[r.destinataire] ?? r.destinataire}</div>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-tx max-w-[320px]">
                   <span className="line-clamp-2">{r.message}</span>
@@ -194,6 +210,14 @@ export default function RemarquesPage() {
               <div>
                 <div className="text-[11px] text-tx-muted">Catégorie</div>
                 <div className="font-medium text-tx">{CATEGORIE_LABELS[detail.categorie] ?? detail.categorie}</div>
+              </div>
+              <div>
+                <div className="text-[11px] text-tx-muted">Destinataire</div>
+                <div className="font-medium text-tx">
+                  {DESTINATAIRE_LABELS[detail.destinataire ?? "equipe_programme"] ?? detail.destinataire}
+                  {detail.contexte_type ? <span className="text-tx-muted"> · {detail.contexte_type} {detail.contexte_id ?? ""}</span> : null}
+                </div>
+                {detail.reponse_par_nom && <div className="text-[11px] text-tx-muted">Répondu par {detail.reponse_par_nom}</div>}
               </div>
               <div>
                 <div className="text-[11px] text-tx-muted">Date</div>

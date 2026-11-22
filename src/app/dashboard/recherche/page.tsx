@@ -14,6 +14,8 @@ import { notifyError } from "@/lib/notify";
 type Ligne = {
   user_id: string; nom: string; groupe_recherche: string | null; app_access_stocke: string; app_access_attendu: string | null;
   app_access_effectif: string; minuteur_visible: boolean; source: string; exception: boolean; incoherent: boolean;
+  // RET15 : ce que le téléphone a réellement reçu à sa dernière synchronisation
+  version_app?: string | null; derniere_sync_le?: string | null; minuteur_expose?: boolean | null; ecart_telephone?: boolean;
 };
 type Matrice = { campagne: { id: string; nom: string; protocole_minuteur: boolean }; totaux: Record<string, number>; lignes: Ligne[] };
 const ACCES: Record<string, string> = { full: "Complet", timer_only: "Minuteur seul", no_timer: "Sans minuteur" };
@@ -59,7 +61,7 @@ function Assignation({ l, sessionId, onFermer, onMaj }: { l: Ligne; sessionId?: 
 export default function RecherchePage() {
   const [sessionId, setSessionId] = useState<string | undefined>();
   const [m, setM] = useState<Matrice | null>(null);
-  const [filtre, setFiltre] = useState<"tous" | "incoherents" | "exceptions">("tous");
+  const [filtre, setFiltre] = useState<"tous" | "incoherents" | "exceptions" | "ecarts">("tous");
   const [choisi, setChoisi] = useState<Ligne | null>(null);
   const [motif, setMotif] = useState("");
   const [apercu, setApercu] = useState<any | null>(null);
@@ -78,7 +80,7 @@ export default function RecherchePage() {
     } catch (e) { notifyError("Alignement impossible.", e); }
   };
 
-  const lignes = (m?.lignes ?? []).filter(l => filtre === "tous" || (filtre === "incoherents" ? l.incoherent : l.exception));
+  const lignes = (m?.lignes ?? []).filter(l => filtre === "tous" || (filtre === "incoherents" ? l.incoherent : filtre === "ecarts" ? (l.ecart_telephone || l.derniere_sync_le == null) : l.exception));
   return (
     <div className="p-7 space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -91,13 +93,16 @@ export default function RecherchePage() {
       {m && (
         <>
           {!m.campagne.protocole_minuteur && <p className="text-sm bg-brand-soft rounded-lg p-3">Protocole inactif sur {m.campagne.nom} : l&apos;affichage du minuteur suit le réglage individuel de chaque compte.</p>}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-7 gap-3">
             <Chiffre libelle="Traitement" valeur={m.totaux.traitement} />
             <Chiffre libelle="Contrôle" valeur={m.totaux.controle} />
             <Chiffre libelle="Non assignés" valeur={m.totaux.non_assigne} ton={m.totaux.non_assigne ? "alerte" : undefined} />
             <Chiffre libelle="Incohérents" valeur={m.totaux.incoherents} ton={m.totaux.incoherents ? "alerte" : "ok"} />
             <Chiffre libelle="Exceptions" valeur={m.totaux.exceptions} />
+            <Chiffre libelle="Écart téléphone" valeur={m.totaux.ecarts_telephone ?? 0} ton={m.totaux.ecarts_telephone ? "alerte" : "ok"} />
+            <Chiffre libelle="Jamais synchronisés" valeur={m.totaux.jamais_synchronises ?? 0} ton={m.totaux.jamais_synchronises ? "alerte" : undefined} />
           </div>
+          <p className="text-xs text-tx-muted">« Téléphone » = ce que l&apos;application a reçu à sa dernière synchronisation. Un écart signifie que le téléphone n&apos;a pas encore récupéré le réglage actuel : demandez au tuteur de synchroniser.</p>
           <section className="bg-surface border border-border rounded-2xl p-4 flex flex-wrap gap-3 items-end">
             <div className="flex-1 min-w-[240px]"><label className={etiquette}>Motif de l&apos;alignement</label>
               <input className={champ} value={motif} onChange={e => setMotif(e.target.value)} placeholder="ex. Démarrage de la campagne" /></div>
@@ -106,8 +111,8 @@ export default function RecherchePage() {
             {apercu && <p className="w-full text-sm">{apercu.a_aligner} compte(s) à aligner · {apercu.non_assignes} non assigné(s) · {apercu.applique ? <Badge ton="ok">Appliqué</Badge> : <Badge ton="info">Aperçu</Badge>}</p>}
           </section>
           <div className="flex gap-2">
-            {(["tous", "incoherents", "exceptions"] as const).map(k => (
-              <button key={k} className={`${bouton} ${filtre === k ? "bg-surface-alt" : ""}`} onClick={() => setFiltre(k)}>{k === "tous" ? "Tous" : k === "incoherents" ? "Incohérents" : "Exceptions"}</button>
+            {(["tous", "incoherents", "exceptions", "ecarts"] as const).map(k => (
+              <button key={k} className={`${bouton} ${filtre === k ? "bg-surface-alt" : ""}`} onClick={() => setFiltre(k)}>{k === "tous" ? "Tous" : k === "incoherents" ? "Incohérents" : k === "ecarts" ? "Écart téléphone" : "Exceptions"}</button>
             ))}
           </div>
           <Tableau<Ligne> lignes={lignes} onClic={l => setChoisi(l)} colonnes={[
@@ -117,6 +122,10 @@ export default function RecherchePage() {
             { cle: "app_access_attendu", titre: "Attendu", rendu: l => (l.app_access_attendu ? ACCES[l.app_access_attendu] : "—") },
             { cle: "app_access_effectif", titre: "Effectif", rendu: l => ACCES[l.app_access_effectif] ?? l.app_access_effectif },
             { cle: "minuteur_visible", titre: "Minuteur", rendu: l => (l.minuteur_visible ? "Visible" : "Masqué") },
+            { cle: "minuteur_expose", titre: "Téléphone", rendu: l => (l.derniere_sync_le == null ? <Badge ton="alerte">Jamais synchronisé</Badge>
+              : <>{l.minuteur_expose ? "Minuteur reçu" : "Sans minuteur"}{l.ecart_telephone && <> <Badge ton="alerte">Écart</Badge></>}</>) },
+            { cle: "version_app", titre: "Version", rendu: l => l.version_app ?? "—" },
+            { cle: "derniere_sync_le", titre: "Dernière synchro", rendu: l => (l.derniere_sync_le ? fmtDateHeure(l.derniere_sync_le) : "—") },
             { cle: "source", titre: "Source", rendu: l => <>{l.source}{l.exception && <> <Badge ton="alerte">Exception</Badge></>}{l.incoherent && <> <Badge ton="alerte">Incohérent</Badge></>}</> },
           ]} />
         </>
