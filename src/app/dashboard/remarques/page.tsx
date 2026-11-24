@@ -26,6 +26,7 @@ const DESTINATAIRE_LABELS: Record<string, string> = {
 const ROLE_LABELS: Record<string, string> = {
   enseignant: "Tuteur",
   superviseur: "Superviseur",
+  inspecteur: "Inspecteur",
 };
 
 interface RemarqueItem {

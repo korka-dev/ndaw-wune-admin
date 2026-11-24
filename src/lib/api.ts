@@ -232,7 +232,7 @@ export const superviseursApi = {
 export const comptesTerrainApi = {
   // Liste unifiée tuteurs + superviseurs — les mots de passe ne sont jamais
   // transmis : bcrypt les hache à sens unique, aucune route ne peut les lire.
-  list: (params?: { role?: "enseignant" | "superviseur"; search?: string; skip?: number; limit?: number; archives?: boolean }) =>
+  list: (params?: { role?: "enseignant" | "superviseur" | "inspecteur"; search?: string; skip?: number; limit?: number; archives?: boolean }) =>
     api.get("/admin/comptes-terrain", { params }),
   resetPassword: (id: string, d: { new_password: string; force_change?: boolean }) =>
     api.post(`/admin/comptes-terrain/${id}/reset-password`, d),
@@ -248,6 +248,20 @@ export const evaluateursApi = {
   restore: (id: string) => api.post(`/admin/evaluateurs/${id}/restaurer`),
   toggleStatus: (id: string) => api.post(`/admin/evaluateurs/${id}/toggle-status`),
   assignTeachers: (id: string, ids: string[]) => api.post(`/admin/evaluateurs/${id}/assign-teachers`, { assigned_teacher_ids: ids }),
+};
+
+/** Lot L8 : comptes inspecteurs (IEF) — consultation en lecture seule des écoles de leur IEF dans l'app mobile. */
+export const inspecteursApi = {
+  list: (params?: { limit?: number; skip?: number; archives?: boolean }) => api.get("/admin/inspecteurs", { params }),
+  /** IEF possibles (libellés des écoles) : [{ ief, nb_ecoles }]. */
+  iefs: () => api.get("/admin/inspecteurs/iefs"),
+  create: (d: { name: string; phone: string; email?: string; title?: string; ief: string }) => api.post("/admin/inspecteurs", d),
+  update: (id: string, d: { name?: string; phone?: string; email?: string; title?: string; ief?: string; status?: string }) =>
+    api.patch(`/admin/inspecteurs/${id}`, d),
+  /** Archivage : l'historique est conservé. */
+  delete: (id: string) => api.delete(`/admin/inspecteurs/${id}`),
+  restore: (id: string) => api.post(`/admin/inspecteurs/${id}/restaurer`),
+  toggleStatus: (id: string) => api.post(`/admin/inspecteurs/${id}/toggle-status`),
 };
 
 export const rapportJournalierAdminApi = {

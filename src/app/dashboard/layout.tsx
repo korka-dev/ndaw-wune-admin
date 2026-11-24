@@ -32,6 +32,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/dashboard/sessions",     label: "Gestion Sessions",     icon: "calendar"   },
       { href: "/dashboard/superviseurs", label: "Gestion Superviseurs", icon: "supervisor", adminOnly: true },
+      { href: "/dashboard/inspecteurs",  label: "Gestion Inspecteurs",  icon: "shield",     adminOnly: true },
       { href: "/dashboard/ecoles",       label: "Gestion Écoles",       icon: "school",     adminOnly: true },
       { href: "/dashboard/teachers",     label: "Gestion Enseignants",  icon: "users"      },
       { href: "/dashboard/classes",      label: "Gestion Classes",       icon: "book",      adminOnly: true },

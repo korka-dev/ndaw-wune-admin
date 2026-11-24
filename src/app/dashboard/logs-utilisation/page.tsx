@@ -42,6 +42,7 @@ function fmtDuration(seconds: number | null | undefined) {
 const ROLE_LABELS: Record<string, string> = {
   enseignant: "Tuteur",
   superviseur: "Superviseur",
+  inspecteur: "Inspecteur",
 };
 
 interface LogItem {
@@ -179,6 +180,7 @@ export default function LogsUtilisationPage() {
           <option value="">Tous les rôles</option>
           <option value="enseignant">Tuteur</option>
           <option value="superviseur">Superviseur</option>
+          <option value="inspecteur">Inspecteur</option>
         </select>
         {(filterFeature || filterRole || dateFrom || dateTo) && (
           <button onClick={() => { setFilterFeature(""); setFilterRole(""); setDateFrom(""); setDateTo(""); }}

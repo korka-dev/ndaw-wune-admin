@@ -9,7 +9,8 @@ interface Compte {
   id: string;
   name: string;
   phone: string | null;
-  role: "enseignant" | "superviseur";
+  role: "enseignant" | "superviseur" | "inspecteur";
+  ief?: string | null;
   status: string;
   must_change_password: boolean;
   school?: { name: string; region?: string | null } | null;
@@ -18,6 +19,7 @@ interface Compte {
 const ROLE_LABEL: Record<Compte["role"], string> = {
   enseignant: "Tuteur",
   superviseur: "Superviseur",
+  inspecteur: "Inspecteur",
 };
 
 function genererMotDePasse(): string {
@@ -38,7 +40,7 @@ export default function IdentifiantsPage() {
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState<"" | "enseignant" | "superviseur">("");
+  const [roleFilter, setRoleFilter] = useState<"" | "enseignant" | "superviseur" | "inspecteur">("");
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleSearchChange = (v: string) => {
@@ -128,7 +130,7 @@ export default function IdentifiantsPage() {
     <div className="flex flex-col min-h-full flex-shrink-0 px-7 pb-7">
       {/* ── En-tête ─────────────────────────────────────────────────────────── */}
       <div className="sticky top-0 z-10 bg-bg pt-7 pb-4 mb-6 border-b border-border">
-        <h1 className="text-xl font-bold text-tx">Identifiants tuteurs / superviseurs</h1>
+        <h1 className="text-xl font-bold text-tx">Identifiants tuteurs / superviseurs / inspecteurs</h1>
         <p className="text-tx-muted text-sm mt-0.5">
           {loading ? "Chargement…" : `${total} compte${total !== 1 ? "s" : ""} au total`}
         </p>
@@ -186,6 +188,7 @@ export default function IdentifiantsPage() {
             { key: "", label: "Tous" },
             { key: "enseignant", label: "Tuteurs" },
             { key: "superviseur", label: "Superviseurs" },
+            { key: "inspecteur", label: "Inspecteurs" },
           ] as const).map(opt => (
             <button
               key={opt.key || "all"}
@@ -255,7 +258,7 @@ export default function IdentifiantsPage() {
                 </td>
                 <td className="px-4 py-3.5 text-tx-muted text-xs">{c.phone || "—"}</td>
                 <td className="px-4 py-3.5">
-                  <span className="text-tx truncate block">{c.school?.name || "—"}</span>
+                  <span className="text-tx truncate block">{c.school?.name || (c.ief ? `IEF ${c.ief}` : "—")}</span>
                   {c.school?.region && <span className="text-tx-muted text-xs truncate block">{c.school.region}</span>}
                 </td>
                 <td className="px-4 py-3.5">
