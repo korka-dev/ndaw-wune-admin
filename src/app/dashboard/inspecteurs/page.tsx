@@ -72,11 +72,13 @@ export default function InspecteursPage() {
   const save = async () => {
     setLoading(true);
     setFormError(null);
+    const enEdition = modal !== "create";
     const payload = {
       name: form.name.trim(),
       phone: form.phone.trim(),
-      email: form.email.trim() || undefined,
-      title: form.title.trim() || undefined,
+      // En modification, une valeur vidée est envoyée vide : le serveur l'efface.
+      email: form.email.trim() || (enEdition ? "" : undefined),
+      title: form.title.trim() || (enEdition ? "" : undefined),
       ief: form.ief,
     };
     try {
@@ -156,6 +158,7 @@ export default function InspecteursPage() {
           <div>
             <label className="text-xs font-semibold text-tx-muted mb-1.5 block">Email</label>
             <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="inspecteur@email.com" type="email" className={inputCls} />
+            {modal !== "create" && <p className="text-[11px] text-tx-muted mt-1">Laisser vide pour retirer l&apos;email.</p>}
           </div>
           <div>
             <label className="text-xs font-semibold text-tx-muted mb-1.5 block">Fonction</label>
