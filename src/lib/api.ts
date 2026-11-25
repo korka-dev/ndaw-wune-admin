@@ -154,9 +154,13 @@ export const planningApi = {
   flsResume: (session_id?: string) =>
     api.get("/admin/planning/fls/resume", { params: session_id ? { session_id } : undefined }),
   /** Lot L9 : import de la répartition des écoles avec / sans FLS (.xlsx). `dryRun` vaut true par défaut. */
-  importFls: (file: File, opts?: { dryRun?: boolean; completerIef?: boolean }) => {
+  importFls: (file: File, opts?: { dryRun?: boolean; completerIef?: boolean; associations?: Record<string, string> }) => {
     const fd = new FormData();
     fd.append("file", file);
+    // Choix de l'admin : { nom dans le fichier : id de l'école } (suggestion acceptée, ambiguïté tranchée).
+    if (opts?.associations && Object.keys(opts.associations).length > 0) {
+      fd.append("associations", JSON.stringify(opts.associations));
+    }
     return api.post("/admin/planning/import-fls", fd, {
       params: {
         dry_run: opts?.dryRun ?? true,

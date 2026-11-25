@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { planningApi, sessionsApi, exportApi } from "@/lib/api";
+import { planningApi, sessionsApi, exportApi, schoolsApi } from "@/lib/api";
 import { errorDetail } from "@/lib/notify";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
@@ -91,10 +91,18 @@ interface FlsImportResult {
     nom_fichier: string; ief_fichier?: string | null; fls: boolean; id: string; nom: string; ief?: string | null;
     fls_actuel: boolean | null; change: boolean; ief_differente?: boolean; ief_manquante?: boolean;
   }[];
-  introuvables: { nom_fichier: string; ief_fichier?: string | null; fls: boolean; suggestion?: string | null }[];
+  introuvables: {
+    nom_fichier: string; ief_fichier?: string | null; fls: boolean;
+    suggestion?: string | null; suggestion_id?: string | null; suggestion_ief?: string | null; raison?: string;
+  }[];
+  associations_appliquees?: number;
   ambigues: { nom_fichier: string; ief_fichier?: string | null; fls: boolean; ecoles: { id: string; nom: string; ief?: string | null }[]; raison?: string }[];
   ecoles_sans_type_restantes?: number;
 }
+interface EcoleRef { id: string; name: string; region?: string | null; archived_at?: string | null }
+/** « IEF Kaolack-commune » ≈ « kaolack commune » : même clé que le serveur, en plus simple. */
+const cleIef = (v?: string | null) =>
+  (v ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/^ief /, "");
 const flsLabel = (v: boolean | null | undefined) => (v === true ? "Avec FLS" : v === false ? "Sans FLS" : "Non renseigné");
 
 export default function PlanningPage() {
@@ -125,6 +133,18 @@ export default function PlanningPage() {
   const [flsResultat, setFlsResultat] = useState<FlsImportResult | null>(null);
   const [flsError, setFlsError] = useState<string | null>(null);
   const [flsBusy, setFlsBusy] = useState(false);
+  // Choix de l'admin pour les écoles introuvables ou ambiguës : { nom dans le fichier : id école }.
+  const [flsChoix, setFlsChoix] = useState<Record<string, string>>({});
+  const [flsChoixModifies, setFlsChoixModifies] = useState(false);
+  const [ecolesRef, setEcolesRef] = useState<EcoleRef[]>([]);
+  const choisirEcole = (nomFichier: string, id: string | null) => {
+    setFlsChoix(c => {
+      const n = { ...c };
+      if (id) n[nomFichier] = id; else delete n[nomFichier];
+      return n;
+    });
+    setFlsChoixModifies(true);
+  };
 
   /* ── Export CSV ── */
   const [exporting, setExporting] = useState(false);
@@ -258,21 +278,27 @@ export default function PlanningPage() {
   /* ── Import de la répartition FLS ── */
   const resetFlsImport = (fichier: File | null = null) => {
     setFlsFile(fichier); setFlsCompleterIef(true); setFlsApercu(null); setFlsResultat(null);
-    setFlsError(null); setFlsBusy(false);
+    setFlsError(null); setFlsBusy(false); setFlsChoix({}); setFlsChoixModifies(false);
     if (flsFileRef.current) flsFileRef.current.value = "";
   };
-  const openFlsImport = (fichier: File | null = null) => { resetFlsImport(fichier); setShowFlsImport(true); };
+  const openFlsImport = (fichier: File | null = null) => {
+    resetFlsImport(fichier); setShowFlsImport(true);
+    schoolsApi.list({ limit: 10000 })
+      .then(r => setEcolesRef(((r.data.items ?? []) as EcoleRef[]).filter(e => !e.archived_at)))
+      .catch(() => setEcolesRef([]));
+  };
 
   /** Étape 1 : aperçu (dry_run). Étape 2 : application avec le même fichier. */
   const handleFlsImport = async () => {
     if (!flsFile) return;
     setFlsBusy(true); setFlsError(null);
     try {
-      if (!flsApercu) {
-        const res = await planningApi.importFls(flsFile, { dryRun: true, completerIef: flsCompleterIef });
+      if (!flsApercu || flsChoixModifies) {
+        const res = await planningApi.importFls(flsFile, { dryRun: true, completerIef: flsCompleterIef, associations: flsChoix });
         setFlsApercu(res.data);
+        setFlsChoixModifies(false);
       } else {
-        const res = await planningApi.importFls(flsFile, { dryRun: false, completerIef: flsCompleterIef });
+        const res = await planningApi.importFls(flsFile, { dryRun: false, completerIef: flsCompleterIef, associations: flsChoix });
         setFlsResultat(res.data);
         setFlsApercu(null);
         loadFlsResume();
@@ -1031,17 +1057,37 @@ export default function PlanningPage() {
                       <div>
                         <p className="text-sm font-semibold text-warn mb-1">Écoles introuvables ({r.introuvables.length})</p>
                         <p className="text-xs text-tx-muted mb-1.5">
-                          Ces écoles ne seront pas mises à jour. Corrigez le nom de l&apos;école dans Gestion Écoles ou dans le fichier, puis réimportez.
+                          Sans choix de votre part, ces écoles ne seront pas mises à jour. Acceptez la suggestion ou choisissez l&apos;école
+                          correspondante, puis « Actualiser l&apos;aperçu ». Sinon, corrigez le nom dans Gestion Écoles ou dans le fichier.
                         </p>
-                        <div className="rounded-lg border border-border text-xs max-h-40 overflow-auto divide-y divide-border">
-                          {r.introuvables.map((x, i) => (
-                            <div key={i} className="px-3 py-1.5">
-                              <span className="font-medium text-tx">{x.nom_fichier}</span>
-                              {x.ief_fichier && <span className="text-tx-muted"> · IEF {x.ief_fichier}</span>}
-                              <span className="text-tx-muted"> · {flsLabel(x.fls)}</span>
-                              {x.suggestion && <span className="block text-tx-muted italic">Vouliez-vous dire « {x.suggestion} » ?</span>}
-                            </div>
-                          ))}
+                        <div className="rounded-lg border border-border text-xs max-h-72 overflow-auto divide-y divide-border">
+                          {r.introuvables.map((x, i) => {
+                            const choisi = flsChoix[x.nom_fichier] ?? "";
+                            const memeIef = ecolesRef.filter(e => x.ief_fichier && cleIef(e.region) === cleIef(x.ief_fichier));
+                            const options = (memeIef.length ? memeIef : ecolesRef).slice().sort((a, b) => a.name.localeCompare(b.name));
+                            return (
+                              <div key={i} className="px-3 py-2 flex flex-col gap-1.5">
+                                <div>
+                                  <span className="font-medium text-tx">{x.nom_fichier}</span>
+                                  {x.ief_fichier && <span className="text-tx-muted"> · {x.ief_fichier}</span>}
+                                  <span className="text-tx-muted"> · {flsLabel(x.fls)}</span>
+                                  {x.raison && <span className="block text-danger">{x.raison}</span>}
+                                </div>
+                                {x.suggestion && x.suggestion_id && (
+                                  <label className="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" checked={choisi === x.suggestion_id}
+                                      onChange={ev => choisirEcole(x.nom_fichier, ev.target.checked ? x.suggestion_id! : null)} />
+                                    <span>Utiliser « <strong>{x.suggestion}</strong> »{x.suggestion_ief ? ` (${x.suggestion_ief})` : ""}</span>
+                                  </label>
+                                )}
+                                <select value={choisi} onChange={ev => choisirEcole(x.nom_fichier, ev.target.value || null)}
+                                  className="border border-border rounded-lg px-2 py-1 bg-bg text-tx max-w-md">
+                                  <option value="">{memeIef.length ? "Choisir une école de cette IEF…" : "Choisir une école…"}</option>
+                                  {options.map(e => <option key={e.id} value={e.id}>{e.name}{e.region ? ` — ${e.region}` : ""}</option>)}
+                                </select>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -1049,7 +1095,7 @@ export default function PlanningPage() {
                     {r.ambigues.length > 0 && (
                       <div>
                         <p className="text-sm font-semibold text-warn mb-1">Écoles ambiguës ({r.ambigues.length})</p>
-                        <p className="text-xs text-tx-muted mb-1.5">Plusieurs écoles correspondent : elles ne seront pas mises à jour. Précisez le nom ou l&apos;IEF.</p>
+                        <p className="text-xs text-tx-muted mb-1.5">Plusieurs écoles correspondent : choisissez la bonne, sinon elles ne seront pas mises à jour.</p>
                         <div className="rounded-lg border border-border text-xs max-h-40 overflow-auto divide-y divide-border">
                           {r.ambigues.map((x, i) => (
                             <div key={i} className="px-3 py-1.5">
@@ -1057,9 +1103,11 @@ export default function PlanningPage() {
                               {x.ief_fichier && <span className="text-tx-muted"> · IEF {x.ief_fichier}</span>}
                               <span className="text-tx-muted"> · {flsLabel(x.fls)}</span>
                               {x.raison && <span className="block text-tx-muted">{x.raison}</span>}
-                              <span className="block text-tx-muted">
-                                Correspondances : {x.ecoles.map(ec => `${ec.nom}${ec.ief ? ` (${ec.ief})` : ""}`).join(" ; ")}
-                              </span>
+                              <select value={flsChoix[x.nom_fichier] ?? ""} onChange={ev => choisirEcole(x.nom_fichier, ev.target.value || null)}
+                                className="mt-1 border border-border rounded-lg px-2 py-1 bg-bg text-tx max-w-md">
+                                <option value="">Choisir la bonne école…</option>
+                                {x.ecoles.map(ec => <option key={ec.id} value={ec.id}>{ec.nom}{ec.ief ? ` — ${ec.ief}` : ""}</option>)}
+                              </select>
                             </div>
                           ))}
                         </div>
@@ -1123,7 +1171,10 @@ export default function PlanningPage() {
                     onClick={handleFlsImport}
                     disabled={!flsFile || flsBusy}
                     className="px-4 py-2 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                    {flsBusy ? "Traitement…" : flsApercu ? `Appliquer (${flsApercu.a_modifier} école${flsApercu.a_modifier !== 1 ? "s" : ""} à modifier)` : "Analyser le fichier"}
+                    {flsBusy ? "Traitement…"
+                      : flsApercu && flsChoixModifies ? "Actualiser l'aperçu avec mes choix"
+                      : flsApercu ? `Appliquer (${flsApercu.a_modifier} école${flsApercu.a_modifier !== 1 ? "s" : ""} à modifier)`
+                      : "Analyser le fichier"}
                   </button>
                 )}
               </div>
