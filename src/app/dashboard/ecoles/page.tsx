@@ -28,10 +28,20 @@ interface School {
   director: string | null;
   director_phone: string | null;
   langue: string | null;
+  /** Lot L9 : école avec FLS (true), sans FLS (false) ou non renseigné (null). */
+  fls: boolean | null;
   archived_at?: string | null;
 }
 
-const EMPTY: Omit<School, "id" | "archived_at"> = { name: "", region: "", city: "", director: "", director_phone: "", langue: "" };
+/** Lot L9 : libellé et style du badge FLS. */
+const flsInfo = (v: boolean | null | undefined) =>
+  v === true
+    ? { label: "Avec FLS", cls: "bg-success-soft text-success" }
+    : v === false
+      ? { label: "Sans FLS", cls: "bg-surface-alt text-tx-muted border border-border" }
+      : { label: "Non renseigné", cls: "bg-warn-soft text-warn" };
+
+const EMPTY: Omit<School, "id" | "archived_at"> = { name: "", region: "", city: "", director: "", director_phone: "", langue: "", fls: null };
 const PAGE_SIZE = 25;
 
 type ReimportResult = { updated: number; created: number; skipped: number; errors: string[] };
@@ -55,6 +65,7 @@ export default function EcolesPage() {
   const [search, setSearch] = useState("");
   const [filterRegion, setFilterRegion] = useState("");
   const [filterCity, setFilterCity] = useState("");
+  const [filterFls, setFilterFls] = useState<"" | "avec" | "sans" | "inconnu">("");
   const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -80,7 +91,7 @@ export default function EcolesPage() {
     restore: (id) => schoolsApi.restore(id),
     reload:  () => load(false),
   });
-  useEffect(() => { setPage(1); }, [search, filterRegion, filterCity]);
+  useEffect(() => { setPage(1); }, [search, filterRegion, filterCity, filterFls]);
 
   const regions = Array.from(
     new Set(schools.map(s => s.region).filter(Boolean))
@@ -120,7 +131,11 @@ export default function EcolesPage() {
     );
     const matchRegion = !filterRegion || s.region === filterRegion;
     const matchCity = !filterCity || s.city === filterCity;
-    return matchSearch && matchRegion && matchCity;
+    const matchFls = !filterFls
+      || (filterFls === "avec" && s.fls === true)
+      || (filterFls === "sans" && s.fls === false)
+      || (filterFls === "inconnu" && s.fls == null);
+    return matchSearch && matchRegion && matchCity && matchFls;
   });
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -168,7 +183,7 @@ export default function EcolesPage() {
 
   const openCreate = () => { setForm(EMPTY); setError(""); setPhoneError(""); setModal("create"); };
   const openEdit = (s: School) => {
-    setForm({ name: s.name, region: s.region ?? "", city: s.city ?? "", director: s.director ?? "", director_phone: s.director_phone ?? "", langue: s.langue ?? "" });
+    setForm({ name: s.name, region: s.region ?? "", city: s.city ?? "", director: s.director ?? "", director_phone: s.director_phone ?? "", langue: s.langue ?? "", fls: s.fls ?? null });
     setError(""); setPhoneError("");
     setModal(s);
   };
@@ -186,6 +201,7 @@ export default function EcolesPage() {
         director: form.director?.trim() || null,
         director_phone: form.director_phone?.trim() || null,
         langue: form.langue?.trim() || null,
+        fls: form.fls,
       };
       if (modal === "create") await schoolsApi.create(payload);
       else await schoolsApi.update((modal as School).id, payload);
@@ -204,7 +220,7 @@ export default function EcolesPage() {
         <div>
           <h1 className="text-xl font-bold text-tx">Gestion Écoles</h1>
           <p className="text-tx-muted text-sm mt-0.5">
-            {(search || filterRegion || filterCity)
+            {(search || filterRegion || filterCity || filterFls)
               ? `${filtered.length} résultat${filtered.length > 1 ? "s" : ""} sur ${schools.length} école${schools.length > 1 ? "s" : ""}`
               : `${schools.length} école${schools.length > 1 ? "s" : ""} au total`}
           </p>
@@ -320,10 +336,29 @@ export default function EcolesPage() {
           </svg>
         </div>
 
+        {/* Filtre FLS (lot L9) */}
+        <div className="relative">
+          <select
+            value={filterFls}
+            onChange={e => { setFilterFls(e.target.value as typeof filterFls); setPage(1); }}
+            className={`pl-3 pr-8 py-2.5 border rounded-xl text-sm bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none min-w-[150px] ${filterFls ? "border-brand text-brand font-medium" : "border-border text-tx"
+              }`}
+          >
+            <option value="">FLS : toutes</option>
+            <option value="avec">Avec FLS</option>
+            <option value="sans">Sans FLS</option>
+            <option value="inconnu">FLS non renseigné</option>
+          </select>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-tx-muted pointer-events-none">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </div>
+
         {/* Reset filtres actifs */}
-        {(filterRegion || filterCity) && (
+        {(filterRegion || filterCity || filterFls) && (
           <button
-            onClick={() => { setFilterRegion(""); setFilterCity(""); setPage(1); }}
+            onClick={() => { setFilterRegion(""); setFilterCity(""); setFilterFls(""); setPage(1); }}
             className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-brand/30 bg-brand-soft text-brand text-sm font-medium hover:bg-brand hover:text-white transition-colors"
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
@@ -340,10 +375,10 @@ export default function EcolesPage() {
       <div className="bg-surface rounded-2xl border border-border overflow-hidden flex-1 flex flex-col">
         <div className="overflow-x-auto overflow-y-auto flex-1">
           <table className="w-full text-sm table-fixed min-w-[950px]">
-            <colgroup><col className="w-[24%]" /><col className="w-[14%]" /><col className="w-[14%]" /><col className="w-[12%]" /><col className="w-[20%]" /><col className="w-[16%]" /></colgroup>
+            <colgroup><col className="w-[22%]" /><col className="w-[12%]" /><col className="w-[12%]" /><col className="w-[10%]" /><col className="w-[11%]" /><col className="w-[18%]" /><col className="w-[15%]" /></colgroup>
             <thead className="sticky top-0 z-10 bg-surface-alt shadow-sm">
               <tr className="border-b border-border bg-surface-alt">
-                {["École", "Région", "Commune", "Langue", "Directeur(trice)", "Actions"].map(h => (
+                {["École", "Région", "Commune", "Langue", "FLS", "Directeur(trice)", "Actions"].map(h => (
                   <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-tx-muted uppercase tracking-wide bg-surface-alt sticky top-0 z-10">{h}</th>
                 ))}
               </tr>
@@ -367,6 +402,11 @@ export default function EcolesPage() {
                 <td className="px-5 py-3.5 text-tx-muted truncate">{s.region ?? "—"}</td>
                 <td className="px-5 py-3.5 text-tx-muted truncate">{s.city ?? "—"}</td>
                 <td className="px-5 py-3.5 text-tx-muted truncate capitalize">{s.langue ?? "—"}</td>
+                <td className="px-5 py-3.5">
+                  <span className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-md whitespace-nowrap ${flsInfo(s.fls).cls}`}>
+                    {flsInfo(s.fls).label}
+                  </span>
+                </td>
                 <td className="px-5 py-3.5 text-tx-muted truncate">
                   {s.director ? (
                     <div>
@@ -393,7 +433,7 @@ export default function EcolesPage() {
               </tr>
             ))}
             {dataLoading && (
-              <tr><td colSpan={6} className="px-5 py-16 text-center">
+              <tr><td colSpan={7} className="px-5 py-16 text-center">
                 <div className="flex flex-col items-center gap-3">
                   <svg className="animate-spin" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="12" cy="12" r="10" strokeOpacity=".2" /><path d="M12 2a10 10 0 0110 10" />
@@ -403,15 +443,15 @@ export default function EcolesPage() {
               </td></tr>
             )}
             {!dataLoading && dataError && (
-              <tr><td colSpan={6} className="px-5 py-12 text-center">
+              <tr><td colSpan={7} className="px-5 py-12 text-center">
                 <p className="text-sm text-danger">{dataError}</p>
                 <button onClick={() => load(true)} className="mt-2 text-xs text-brand underline">Réessayer</button>
               </td></tr>
             )}
             {!dataLoading && !dataError && paginated.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-5 py-16 text-center text-tx-muted text-sm">
-                  {(search || filterRegion || filterCity)
+                <td colSpan={7} className="px-5 py-16 text-center text-tx-muted text-sm">
+                  {(search || filterRegion || filterCity || filterFls)
                     ? "Aucune école ne correspond aux filtres."
                     : <span>Aucune école enregistrée. <button onClick={openCreate} className="text-brand font-medium hover:underline">Créer la première →</button></span>
                   }
@@ -449,6 +489,7 @@ export default function EcolesPage() {
                 { label: "Directeur(trice)", value: viewData.director },
                 { label: "N° Directeur(trice)", value: viewData.director_phone },
                 { label: "Langue", value: viewData.langue },
+                { label: "FLS", value: flsInfo(viewData.fls).label },
               ].map(({ label, value }) => value ? (
                 <div key={label} className="flex items-center justify-between text-sm">
                   <span className="text-tx-muted">{label}</span>
@@ -611,6 +652,23 @@ export default function EcolesPage() {
                     <option value={form.langue}>{form.langue}</option>
                   )}
                 </select>
+              </div>
+
+              {/* FLS (lot L9) */}
+              <div>
+                <label className="block text-sm font-medium text-tx mb-1">Français langue seconde (FLS)</label>
+                <select
+                  value={form.fls === true ? "true" : form.fls === false ? "false" : ""}
+                  onChange={e => setForm(f => ({ ...f, fls: e.target.value === "true" ? true : e.target.value === "false" ? false : null }))}
+                  className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/40 transition appearance-none cursor-pointer"
+                >
+                  <option value="">— Non renseigné —</option>
+                  <option value="true">Avec FLS</option>
+                  <option value="false">Sans FLS</option>
+                </select>
+                <p className="text-xs text-tx-muted mt-1">
+                  Les écoles sans FLS ne voient pas les créneaux « Français langue seconde » de l&apos;emploi du temps. Non renseigné : l&apos;école voit tout.
+                </p>
               </div>
             </div>
 

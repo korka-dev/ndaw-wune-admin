@@ -140,14 +140,31 @@ export const schoolsApi = {
 };
 
 export const planningApi = {
-  list: (session_id?: string, semaine?: number) =>
+  /** Lot L9 : `type_ecole` = « tous » (défaut), « fls » ou « sans_fls » (aperçu des écoles sans FLS). */
+  list: (session_id?: string, semaine?: number, type_ecole?: "tous" | "fls" | "sans_fls") =>
     api.get("/admin/planning", {
       params: {
         ...(session_id ? { session_id } : {}),
         ...(semaine != null ? { semaine } : {}),
+        ...(type_ecole && type_ecole !== "tous" ? { type_ecole } : {}),
         limit: 200,
       },
     }),
+  /** Lot L9 : nombre d'écoles avec / sans FLS et de créneaux réservés FLS. */
+  flsResume: (session_id?: string) =>
+    api.get("/admin/planning/fls/resume", { params: session_id ? { session_id } : undefined }),
+  /** Lot L9 : import de la répartition des écoles avec / sans FLS (.xlsx). `dryRun` vaut true par défaut. */
+  importFls: (file: File, opts?: { dryRun?: boolean; completerIef?: boolean }) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return api.post("/admin/planning/import-fls", fd, {
+      params: {
+        dry_run: opts?.dryRun ?? true,
+        completer_ief: opts?.completerIef ?? true,
+      },
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
   create: (d: unknown) => api.post("/admin/planning", d),
   update: (id: string, d: unknown) => api.patch(`/admin/planning/${id}`, d),
   delete: (id: string) => api.delete(`/admin/planning/${id}`),

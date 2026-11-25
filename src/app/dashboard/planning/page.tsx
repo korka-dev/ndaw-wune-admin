@@ -60,9 +60,42 @@ interface Seg {
   heure_debut: string;
   heure_fin: string;
   matiere?: string;
+  /** Lot L9 : créneau visible uniquement par les écoles avec FLS. */
+  reserve_fls?: boolean;
 }
 
-const EMPTY = { session_id: "", semaine: "", jour: 0, heure_debut: "08:00", heure_fin: "10:00", matiere: "" };
+const EMPTY = { session_id: "", semaine: "", jour: 0, heure_debut: "08:00", heure_fin: "10:00", matiere: "", reserve_fls: false };
+
+/* ── Lot L9 : écoles avec / sans FLS ── */
+type TypeEcole = "tous" | "fls" | "sans_fls";
+const TYPES_ECOLE: { value: TypeEcole; label: string }[] = [
+  { value: "tous", label: "Toutes" },
+  { value: "fls", label: "Écoles avec FLS" },
+  { value: "sans_fls", label: "Écoles sans FLS" },
+];
+/** Même règle que le serveur : « Français langue seconde » ou « FLS » dans l'intitulé. */
+const estMatiereFls = (m?: string | null) => {
+  const t = (m ?? "").toLowerCase();
+  return t.includes("langue seconde") || /\bfls\b/.test(t);
+};
+interface FlsResume { avec_fls: number; sans_fls: number; non_renseignees: number; creneaux_reserves_fls: number }
+interface FlsImportResult {
+  dry_run: boolean;
+  lignes_fichier: number;
+  avec_fls: number;
+  sans_fls: number;
+  a_modifier: number;
+  ief_completees: number;
+  erreurs: { feuille: string; ligne: number; erreur: string }[];
+  trouvees: {
+    nom_fichier: string; ief_fichier?: string | null; fls: boolean; id: string; nom: string; ief?: string | null;
+    fls_actuel: boolean | null; change: boolean; ief_differente?: boolean; ief_manquante?: boolean;
+  }[];
+  introuvables: { nom_fichier: string; ief_fichier?: string | null; fls: boolean; suggestion?: string | null }[];
+  ambigues: { nom_fichier: string; ief_fichier?: string | null; fls: boolean; ecoles: { id: string; nom: string; ief?: string | null }[]; raison?: string }[];
+  ecoles_sans_type_restantes?: number;
+}
+const flsLabel = (v: boolean | null | undefined) => (v === true ? "Avec FLS" : v === false ? "Sans FLS" : "Non renseigné");
 
 export default function PlanningPage() {
   const [segs, setSegs] = useState<Seg[]>([]);
@@ -78,6 +111,20 @@ export default function PlanningPage() {
   const [filterMatiere, setFilterMatiere] = useState<string>("");
   const [filterSemaine, setFilterSemaine] = useState<string>("");
   const [importSemaine, setImportSemaine] = useState<string>("");
+  const [typeEcole, setTypeEcole] = useState<TypeEcole>("tous");
+  const [flsResume, setFlsResume] = useState<FlsResume | null>(null);
+  // La case FLS suit la matière tant que l'utilisateur ne l'a pas modifiée lui-même.
+  const [flsTouched, setFlsTouched] = useState(false);
+
+  /* ── Import de la répartition FLS (lot L9) ── */
+  const flsFileRef = useRef<HTMLInputElement>(null);
+  const [showFlsImport, setShowFlsImport] = useState(false);
+  const [flsFile, setFlsFile] = useState<File | null>(null);
+  const [flsCompleterIef, setFlsCompleterIef] = useState(true);
+  const [flsApercu, setFlsApercu] = useState<FlsImportResult | null>(null);
+  const [flsResultat, setFlsResultat] = useState<FlsImportResult | null>(null);
+  const [flsError, setFlsError] = useState<string | null>(null);
+  const [flsBusy, setFlsBusy] = useState(false);
 
   /* ── Export CSV ── */
   const [exporting, setExporting] = useState(false);
@@ -112,10 +159,11 @@ export default function PlanningPage() {
     segments: { jour: number; heure_debut: string; heure_fin: string; matiere?: string; semaine?: number }[];
   } | null>(null);
   const [importing, setImporting] = useState(false);
+  const [importEstRepartitionFls, setImportEstRepartitionFls] = useState(false);
 
   const resetImport = () => {
     setImportFile(null); setImportPreview([]); setImportErrors([]); setImportApercu(null);
-    setImportResult(null); setImporting(false); setImportSemaine("");
+    setImportResult(null); setImporting(false); setImportSemaine(""); setImportEstRepartitionFls(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -123,6 +171,7 @@ export default function PlanningPage() {
     const f = e.target.files?.[0];
     if (!f) return;
     setImportFile(f); setImportResult(null); setImportPreview([]); setImportErrors([]); setImportApercu(null);
+    setImportEstRepartitionFls(false);
 
     const name = f.name.toLowerCase();
     const isPdf = name.endsWith(".pdf") || f.type === "application/pdf";
@@ -158,7 +207,7 @@ export default function PlanningPage() {
         });
         setImportResult(res.data);
         setImportApercu(null);
-        if (res.data.imported > 0) loadSegs();
+        if (res.data.imported > 0) { loadSegs(); loadFlsResume(); }
       }
     } catch (e: any) {
       const detail = e?.response?.data?.detail;
@@ -169,6 +218,8 @@ export default function PlanningPage() {
       // 409 PLANNING_IMPORT_PARTIEL : le serveur renvoie l'aperçu à jour.
       if (detail?.code === "PLANNING_IMPORT_PARTIEL") setImportApercu(detail);
       else setImportApercu(null);
+      // Lot L9 : fichier de répartition FLS envoyé au mauvais import.
+      setImportEstRepartitionFls(detail?.code === "FICHIER_REPARTITION_FLS");
       setImportErrors(lignes);
     } finally {
       setImporting(false);
@@ -192,11 +243,45 @@ export default function PlanningPage() {
   }, []);
 
   const loadSegs = () =>
-    planningApi.list(sessId || undefined)
+    planningApi.list(sessId || undefined, undefined, typeEcole)
       .then(r => { setSegs(r.data.items ?? []); setPage(1); })
       .catch(() => { });
 
-  useEffect(() => { if (sessId) loadSegs(); }, [sessId]);
+  const loadFlsResume = () =>
+    planningApi.flsResume(sessId || undefined)
+      .then(r => setFlsResume(r.data))
+      .catch(() => setFlsResume(null));
+
+  useEffect(() => { if (sessId) loadSegs(); }, [sessId, typeEcole]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (sessId) loadFlsResume(); }, [sessId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── Import de la répartition FLS ── */
+  const resetFlsImport = (fichier: File | null = null) => {
+    setFlsFile(fichier); setFlsCompleterIef(true); setFlsApercu(null); setFlsResultat(null);
+    setFlsError(null); setFlsBusy(false);
+    if (flsFileRef.current) flsFileRef.current.value = "";
+  };
+  const openFlsImport = (fichier: File | null = null) => { resetFlsImport(fichier); setShowFlsImport(true); };
+
+  /** Étape 1 : aperçu (dry_run). Étape 2 : application avec le même fichier. */
+  const handleFlsImport = async () => {
+    if (!flsFile) return;
+    setFlsBusy(true); setFlsError(null);
+    try {
+      if (!flsApercu) {
+        const res = await planningApi.importFls(flsFile, { dryRun: true, completerIef: flsCompleterIef });
+        setFlsApercu(res.data);
+      } else {
+        const res = await planningApi.importFls(flsFile, { dryRun: false, completerIef: flsCompleterIef });
+        setFlsResultat(res.data);
+        setFlsApercu(null);
+        loadFlsResume();
+        if (typeEcole !== "tous") loadSegs();
+      }
+    } catch (e) {
+      setFlsError(errorDetail(e) ?? "Erreur lors de l'import de la répartition FLS.");
+    } finally { setFlsBusy(false); }
+  };
 
   // ── CRUD ────────────────────────────────────────────────────────────────────
   const save = async () => {
@@ -213,6 +298,7 @@ export default function PlanningPage() {
       if (modal === "create") await planningApi.create(payload);
       else await planningApi.update((modal as Seg).id, payload);
       loadSegs();
+      loadFlsResume();
       setModal(null);
     } catch (err: any) {
       const detail = err?.response?.data?.detail;
@@ -227,7 +313,7 @@ export default function PlanningPage() {
   const confirmDelete = async () => {
     if (!delTarget) return;
     setLoading(true);
-    try { await planningApi.delete(delTarget.id); loadSegs(); setDelTarget(null); }
+    try { await planningApi.delete(delTarget.id); loadSegs(); loadFlsResume(); setDelTarget(null); }
     finally { setLoading(false); }
   };
 
@@ -300,7 +386,15 @@ export default function PlanningPage() {
             Importer
           </button>
           <button
-            onClick={() => { setForm({ ...EMPTY, session_id: sessId }); setSaveError(null); setModal("create"); }}
+            onClick={() => openFlsImport()}
+            className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 9l9-5 9 5-9 5-9-5z" /><path d="M5 10v6c0 2 3 4 7 4s7-2 7-4v-6" />
+            </svg>
+            Importer la répartition FLS
+          </button>
+          <button
+            onClick={() => { setForm({ ...EMPTY, session_id: sessId }); setFlsTouched(false); setSaveError(null); setModal("create"); }}
             className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <path d="M12 5v14M5 12h14" />
@@ -314,6 +408,46 @@ export default function PlanningPage() {
       {!sessId && (
         <div className="mb-4 px-4 py-3 rounded-xl bg-warn-soft text-warn text-sm font-medium">
           Aucune session active. Activez une session pour gérer le planning.
+        </div>
+      )}
+
+      {/* ── Lot L9 : type d'école (avec / sans FLS) ────────────────────────── */}
+      {sessId && (
+        <div className="mb-5 space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm font-medium text-tx">Type d&apos;école</span>
+            <div role="radiogroup" aria-label="Type d'école" className="inline-flex rounded-xl border border-border bg-surface p-1">
+              {TYPES_ECOLE.map(t => (
+                <button
+                  key={t.value}
+                  role="radio"
+                  aria-checked={typeEcole === t.value}
+                  onClick={() => setTypeEcole(t.value)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${typeEcole === t.value ? "bg-brand text-white" : "text-tx-muted hover:bg-surface-alt"}`}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {typeEcole === "sans_fls" && (
+              <span className="text-xs text-tx-muted">Emploi du temps tel que le voient les écoles sans FLS (créneaux réservés FLS masqués).</span>
+            )}
+            {typeEcole === "fls" && (
+              <span className="text-xs text-tx-muted">Emploi du temps complet, tel que le voient les écoles avec FLS.</span>
+            )}
+          </div>
+          {flsResume && (
+            <div className="px-4 py-2.5 rounded-xl bg-surface border border-border text-sm text-tx flex flex-wrap gap-x-2 gap-y-1">
+              <span><b>{flsResume.avec_fls}</b> école{flsResume.avec_fls !== 1 ? "s" : ""} avec FLS</span>
+              <span className="text-tx-muted">·</span>
+              <span><b>{flsResume.sans_fls}</b> sans FLS</span>
+              <span className="text-tx-muted">·</span>
+              <span className={flsResume.non_renseignees > 0 ? "text-warn" : ""}>
+                <b>{flsResume.non_renseignees}</b> non renseignée{flsResume.non_renseignees !== 1 ? "s" : ""} (voient tout l&apos;emploi du temps)
+              </span>
+              <span className="text-tx-muted">·</span>
+              <span><b>{flsResume.creneaux_reserves_fls}</b> créneau{flsResume.creneaux_reserves_fls !== 1 ? "x" : ""} réservé{flsResume.creneaux_reserves_fls !== 1 ? "s" : ""} FLS</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -393,7 +527,7 @@ export default function PlanningPage() {
           <p className="text-tx-muted text-sm">Aucun créneau pour l'instant</p>
           {sessId && (
             <button
-              onClick={() => { setForm({ ...EMPTY, session_id: sessId }); setSaveError(null); setModal("create"); }}
+              onClick={() => { setForm({ ...EMPTY, session_id: sessId }); setFlsTouched(false); setSaveError(null); setModal("create"); }}
               className="mt-1 text-xs text-brand hover:underline font-medium">
               + Ajouter le premier créneau
             </button>
@@ -431,7 +565,7 @@ export default function PlanningPage() {
                         {rows.length} créneau{rows.length !== 1 ? "x" : ""}
                       </span>
                       <button
-                        onClick={() => { setForm({ ...EMPTY, session_id: sessId, jour }); setSaveError(null); setModal("create"); }}
+                        onClick={() => { setForm({ ...EMPTY, session_id: sessId, jour }); setFlsTouched(false); setSaveError(null); setModal("create"); }}
                         className="flex items-center gap-1 text-xs text-brand hover:text-brand-dark font-semibold transition-colors">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                           <path d="M12 5v14M5 12h14" />
@@ -476,6 +610,12 @@ export default function PlanningPage() {
                                   S{s.semaine}
                                 </span>
                               )}
+                              {s.reserve_fls && (
+                                <span title="Visible uniquement par les écoles avec FLS"
+                                  className="text-[10px] font-bold uppercase tracking-wide bg-primary-soft text-primary px-1.5 py-0.5 rounded-md whitespace-nowrap">
+                                  FLS uniquement
+                                </span>
+                              )}
                             </span>
                           </td>
                           <td className="px-5 py-3">
@@ -489,7 +629,10 @@ export default function PlanningPage() {
                                     heure_debut: s.heure_debut,
                                     heure_fin: s.heure_fin,
                                     matiere: s.matiere ?? "",
+                                    reserve_fls: s.reserve_fls ?? estMatiereFls(s.matiere),
                                   });
+                                  // Modification : on garde la valeur enregistrée.
+                                  setFlsTouched(true);
                                   setSaveError(null);
                                   setModal(s);
                                 }}
@@ -569,11 +712,30 @@ export default function PlanningPage() {
                   <input
                     type={key.startsWith("heure") ? "time" : "text"}
                     value={(form as any)[key] ?? ""}
-                    onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+                    onChange={e => {
+                      const v = e.target.value;
+                      setForm(f => ({
+                        ...f,
+                        [key]: v,
+                        ...(key === "matiere" && !flsTouched ? { reserve_fls: estMatiereFls(v) } : {}),
+                      }));
+                    }}
                     className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 transition"
                   />
                 </div>
               ))}
+              <label className="flex items-start gap-2.5 cursor-pointer select-none pt-1">
+                <input
+                  type="checkbox"
+                  checked={form.reserve_fls}
+                  onChange={e => { setFlsTouched(true); setForm(f => ({ ...f, reserve_fls: e.target.checked })); }}
+                  className="mt-0.5 w-4 h-4 accent-brand"
+                />
+                <span>
+                  <span className="block text-sm font-medium text-tx">Réservé aux écoles avec FLS</span>
+                  <span className="block text-xs text-tx-muted">Les tuteurs des écoles sans FLS ne verront pas ce créneau.</span>
+                </span>
+              </label>
             </div>
             <div className="flex gap-3 mt-5 justify-end">
               <button
@@ -661,6 +823,13 @@ export default function PlanningPage() {
                 {importErrors.length > 0 && (
                   <div className="mb-4 px-4 py-3 rounded-xl bg-danger-soft border border-danger/20 text-danger text-xs space-y-0.5">
                     {importErrors.map((e, i) => <p key={i}>⚠ {e}</p>)}
+                    {importEstRepartitionFls && (
+                      <button
+                        onClick={() => { const f = importFile; setShowImport(false); resetImport(); openFlsImport(f); }}
+                        className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand text-white text-xs font-semibold hover:bg-brand-dark transition-colors">
+                        Ouvrir l&apos;import de la répartition FLS avec ce fichier
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -787,6 +956,181 @@ export default function PlanningPage() {
           </div>
         </div>
       )}
+
+      {/* ── Modal Import répartition FLS (lot L9) ───────────────────────────── */}
+      {showFlsImport && (() => {
+        const r = flsResultat ?? flsApercu;
+        return (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+            <div className="bg-surface rounded-2xl shadow-2xl p-6 w-full max-w-3xl max-h-[90vh] flex flex-col">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-base font-bold text-tx">Importer la répartition FLS</h2>
+                  <p className="text-xs text-tx-muted mt-0.5">Fichier Excel (.xlsx) listant les écoles avec et sans français langue seconde.</p>
+                </div>
+                <button onClick={() => { setShowFlsImport(false); resetFlsImport(); }}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-alt text-tx-muted transition-colors">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-auto">
+                {!flsResultat && (
+                  <>
+                    <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-border rounded-xl py-5 cursor-pointer hover:border-brand hover:bg-brand/5 transition-colors mb-3">
+                      <span className="text-sm text-tx-muted text-center px-2">
+                        {flsFile
+                          ? <span className="text-brand font-semibold">{flsFile.name}</span>
+                          : <><span className="font-medium text-tx">Choisir le fichier de répartition</span><br /><span className="text-xs">Excel (.xlsx)</span></>}
+                      </span>
+                      <input ref={flsFileRef} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        className="hidden"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) { setFlsFile(f); setFlsApercu(null); setFlsError(null); } }} />
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-tx mb-3 cursor-pointer select-none">
+                      <input type="checkbox" checked={flsCompleterIef}
+                        onChange={e => { setFlsCompleterIef(e.target.checked); setFlsApercu(null); }}
+                        className="w-4 h-4 accent-brand" />
+                      Compléter l&apos;IEF des écoles qui n&apos;en ont pas
+                    </label>
+                  </>
+                )}
+
+                {flsError && (
+                  <div className="mb-3 px-4 py-3 rounded-xl bg-danger-soft border border-danger/20 text-danger text-sm">{flsError}</div>
+                )}
+
+                {r && (
+                  <div className="space-y-4">
+                    <div className={`px-4 py-3 rounded-xl text-sm ${flsResultat ? "bg-success-soft text-success" : "bg-surface-alt text-tx"}`}>
+                      <p className="font-bold">
+                        {flsResultat ? "Répartition appliquée" : "Aperçu — rien n'est encore modifié"}
+                      </p>
+                      <p className="mt-1">
+                        {r.lignes_fichier} ligne{r.lignes_fichier !== 1 ? "s" : ""} dans le fichier · {r.avec_fls} avec FLS · {r.sans_fls} sans FLS ·{" "}
+                        {r.a_modifier} école{r.a_modifier !== 1 ? "s" : ""} {flsResultat ? "modifiée" : "à modifier"}{r.a_modifier !== 1 ? "s" : ""} ·{" "}
+                        {r.ief_completees} IEF {flsResultat ? "complétée" : "à compléter"}{r.ief_completees !== 1 ? "s" : ""}
+                      </p>
+                      {flsResultat && r.ecoles_sans_type_restantes != null && (
+                        <p className="mt-1">{r.ecoles_sans_type_restantes} école{r.ecoles_sans_type_restantes !== 1 ? "s" : ""} restent sans type FLS renseigné (elles voient tout l&apos;emploi du temps).</p>
+                      )}
+                    </div>
+
+                    {r.erreurs.length > 0 && (
+                      <div>
+                        <p className="text-sm font-semibold text-danger mb-1">Erreurs du fichier ({r.erreurs.length})</p>
+                        <div className="px-3 py-2 rounded-lg bg-danger-soft text-danger text-xs space-y-0.5 max-h-32 overflow-auto">
+                          {r.erreurs.map((e, i) => <p key={i}>{e.feuille} · ligne {e.ligne} : {e.erreur}</p>)}
+                        </div>
+                      </div>
+                    )}
+
+                    {r.introuvables.length > 0 && (
+                      <div>
+                        <p className="text-sm font-semibold text-warn mb-1">Écoles introuvables ({r.introuvables.length})</p>
+                        <p className="text-xs text-tx-muted mb-1.5">
+                          Ces écoles ne seront pas mises à jour. Corrigez le nom de l&apos;école dans Gestion Écoles ou dans le fichier, puis réimportez.
+                        </p>
+                        <div className="rounded-lg border border-border text-xs max-h-40 overflow-auto divide-y divide-border">
+                          {r.introuvables.map((x, i) => (
+                            <div key={i} className="px-3 py-1.5">
+                              <span className="font-medium text-tx">{x.nom_fichier}</span>
+                              {x.ief_fichier && <span className="text-tx-muted"> · IEF {x.ief_fichier}</span>}
+                              <span className="text-tx-muted"> · {flsLabel(x.fls)}</span>
+                              {x.suggestion && <span className="block text-tx-muted italic">Vouliez-vous dire « {x.suggestion} » ?</span>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {r.ambigues.length > 0 && (
+                      <div>
+                        <p className="text-sm font-semibold text-warn mb-1">Écoles ambiguës ({r.ambigues.length})</p>
+                        <p className="text-xs text-tx-muted mb-1.5">Plusieurs écoles correspondent : elles ne seront pas mises à jour. Précisez le nom ou l&apos;IEF.</p>
+                        <div className="rounded-lg border border-border text-xs max-h-40 overflow-auto divide-y divide-border">
+                          {r.ambigues.map((x, i) => (
+                            <div key={i} className="px-3 py-1.5">
+                              <span className="font-medium text-tx">{x.nom_fichier}</span>
+                              {x.ief_fichier && <span className="text-tx-muted"> · IEF {x.ief_fichier}</span>}
+                              <span className="text-tx-muted"> · {flsLabel(x.fls)}</span>
+                              {x.raison && <span className="block text-tx-muted">{x.raison}</span>}
+                              <span className="block text-tx-muted">
+                                Correspondances : {x.ecoles.map(ec => `${ec.nom}${ec.ief ? ` (${ec.ief})` : ""}`).join(" ; ")}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {r.trouvees.length > 0 && (
+                      <div>
+                        <p className="text-sm font-semibold text-tx mb-1">Écoles trouvées ({r.trouvees.length})</p>
+                        <div className="rounded-lg border border-border max-h-64 overflow-auto">
+                          <table className="w-full text-xs">
+                            <thead className="bg-surface-alt sticky top-0">
+                              <tr className="text-tx-muted">
+                                {["Nom dans le fichier", "École en base", "FLS avant → après", "IEF"].map(h => (
+                                  <th key={h} className="text-left px-3 py-1.5 font-semibold">{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {r.trouvees.map((x, i) => (
+                                <tr key={i} className={`border-t border-border ${x.change ? "" : "text-tx-muted"}`}>
+                                  <td className="px-3 py-1.5">{x.nom_fichier}</td>
+                                  <td className="px-3 py-1.5">{x.nom}</td>
+                                  <td className="px-3 py-1.5 whitespace-nowrap">
+                                    {flsLabel(x.fls_actuel)} → <span className={x.change ? "font-semibold text-brand" : ""}>{flsLabel(x.fls)}</span>
+                                  </td>
+                                  <td className="px-3 py-1.5">
+                                    {x.ief ?? "—"}
+                                    {x.ief_differente && (
+                                      <span className="block text-warn">⚠ IEF du fichier différente : {x.ief_fichier ?? "—"}</span>
+                                    )}
+                                    {x.ief_manquante && x.ief_fichier && (
+                                      <span className="block text-tx-muted">{flsCompleterIef ? "IEF complétée" : "IEF manquante"} : {x.ief_fichier}</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 justify-end pt-3 border-t border-border mt-3">
+                <button
+                  onClick={() => { setShowFlsImport(false); resetFlsImport(); }}
+                  className="px-4 py-2 rounded-xl border border-border text-sm text-tx-muted hover:bg-surface-alt transition-colors">
+                  {flsResultat ? "Fermer" : "Annuler"}
+                </button>
+                {flsResultat ? (
+                  <button
+                    onClick={() => resetFlsImport()}
+                    className="px-4 py-2 rounded-xl border border-border text-sm text-tx hover:bg-surface-alt transition-colors">
+                    Importer un autre fichier
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleFlsImport}
+                    disabled={!flsFile || flsBusy}
+                    className="px-4 py-2 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                    {flsBusy ? "Traitement…" : flsApercu ? `Appliquer (${flsApercu.a_modifier} école${flsApercu.a_modifier !== 1 ? "s" : ""} à modifier)` : "Analyser le fichier"}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Modal Confirmation Suppression ──────────────────────────────────── */}
       {delTarget && (
