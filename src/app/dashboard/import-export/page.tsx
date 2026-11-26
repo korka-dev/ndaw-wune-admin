@@ -9,18 +9,26 @@ import { errorDetail } from "@/lib/notify";
 // toujours présenté avant confirmation.
 type ImportSummary = {
   dry_run: boolean;
+  nouvelle_annee: boolean;
   lignes_lues: number;
   lignes_validees: number;
   lignes_en_erreur: number;
   erreurs_tronquees: number;
   ecoles_creees: number;
+  ecoles_mises_a_jour: number;
   superviseurs_crees: number;
+  comptes_reaffectes: number;
   tuteurs_crees: number;
   classes_creees: number;
   classes_ajoutees_tuteurs: number;
   eleves_crees: number;
+  eleves_mis_a_jour: number;
   ignores: number;
+  homonymes: number;
+  eleves_archives: number;
+  comptes_archives: number;
   erreurs: string[];
+  avertissements: string[];
 };
 
 export default function ImportExportPage() {
@@ -30,6 +38,8 @@ export default function ImportExportPage() {
   const [importError, setImportError] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [pending, setPending] = useState<File | null>(null);   // fichier en attente de confirmation
+  // Lot L10 : nouvelle année scolaire — le fichier fait référence.
+  const [nouvelleAnnee, setNouvelleAnnee] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleExport = async () => {
@@ -58,7 +68,7 @@ export default function ImportExportPage() {
     setResult(null);
     setImportError(null);
     try {
-      const { data } = await importExportApi.import(file, dryRun);
+      const { data } = await importExportApi.import(file, dryRun, nouvelleAnnee);
       setResult(data);
       setPending(dryRun && data.lignes_validees > 0 ? file : null);
     } catch (err) {
@@ -75,8 +85,8 @@ export default function ImportExportPage() {
         <h1 className="text-xl font-bold text-tx">Import / Export</h1>
         <p className="text-tx-muted text-sm mt-0.5">
           Exportez l&apos;ensemble des données du programme (écoles, superviseurs, tuteurs, classes,
-          élèves) dans un fichier Excel, ou réimportez ce même fichier pour ajouter de nouvelles
-          données — les enregistrements déjà présents en base sont automatiquement ignorés, jamais modifiés.
+          élèves) dans un fichier Excel, ou importez ce même format (par exemple la base
+          2026-2027, onglet « Base_application ») pour ajouter et mettre à jour les données.
         </p>
       </div>
 
@@ -122,11 +132,29 @@ export default function ImportExportPage() {
             <h2 className="text-base font-bold text-tx">Importer des données</h2>
           </div>
           <p className="text-sm text-tx-muted mb-5">
-            Réimportez un fichier au même format (celui exporté ci-contre, ou une mise à jour de la
-            base de référence). Les écoles, superviseurs, tuteurs, classes et élèves déjà présents en
-            base sont <strong>ignorés sans être modifiés</strong> — seuls les nouveaux enregistrements
-            sont ajoutés.
+            Importez un fichier au même format (celui exporté ci-contre, ou la base de référence de
+            l&apos;année). Ce qui manque est créé, ce qui existe est <strong>mis à jour</strong> d&apos;après
+            le fichier (IEF, directeur, école avec / sans FLS, classe et type des élèves). Une cellule
+            vide ne remplace jamais une valeur connue. Les tuteurs et superviseurs sont retrouvés par
+            leur numéro de téléphone.
           </p>
+          <label className="flex items-start gap-2.5 mb-5 p-3 rounded-xl border border-border bg-bg cursor-pointer">
+            <input
+              type="checkbox"
+              checked={nouvelleAnnee}
+              onChange={(e) => { setNouvelleAnnee(e.target.checked); setPending(null); setResult(null); }}
+              disabled={importing}
+              className="mt-0.5"
+            />
+            <span className="text-sm text-tx">
+              <strong>Nouvelle année scolaire</strong>
+              <span className="block text-xs text-tx-muted mt-0.5">
+                Le fichier fait référence : les classes des tuteurs sont celles du fichier, et les élèves,
+                tuteurs et superviseurs absents du fichier sont <strong>archivés</strong> (ils ne se
+                connectent plus ; leur historique est conservé et ils restent restaurables).
+              </span>
+            </span>
+          </label>
           <input ref={fileRef} type="file" accept=".xlsx" className="hidden" onChange={handleImport} />
           <button
             onClick={() => fileRef.current?.click()}
@@ -163,20 +191,28 @@ export default function ImportExportPage() {
         <div className="mt-6 bg-surface border border-border rounded-2xl p-6">
           <h3 className="text-sm font-bold text-tx mb-1">
             {result.dry_run ? "Aperçu de l'import — rien n'a encore été enregistré" : "Import enregistré"}
+            {result.nouvelle_annee ? " · nouvelle année scolaire" : ""}
           </h3>
           <p className="text-xs text-tx-muted mb-4">
             {result.lignes_lues} ligne(s) lue(s) · {result.lignes_validees} {result.dry_run ? "importable(s)" : "enregistrée(s)"} ·{" "}
             {result.lignes_en_erreur} refusée(s){result.lignes_en_erreur > 0 ? " (non importées, détail ci-dessous)" : ""}
           </p>
-          <div className="grid grid-cols-3 sm:grid-cols-7 gap-3 mb-4">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-4">
             {[
               { label: "Écoles créées", value: result.ecoles_creees },
+              { label: "Écoles mises à jour", value: result.ecoles_mises_a_jour },
               { label: "Superviseurs créés", value: result.superviseurs_crees },
               { label: "Tuteurs créés", value: result.tuteurs_crees },
+              { label: "Comptes réaffectés", value: result.comptes_reaffectes },
               { label: "Classes créées", value: result.classes_creees },
               { label: "Classes ajoutées à un tuteur", value: result.classes_ajoutees_tuteurs },
               { label: "Élèves créés", value: result.eleves_crees },
-              { label: "Élèves déjà présents (ignorés)", value: result.ignores },
+              { label: "Élèves mis à jour", value: result.eleves_mis_a_jour },
+              { label: "Élèves inchangés", value: result.ignores },
+              ...(result.nouvelle_annee ? [
+                { label: "Élèves archivés (absents du fichier)", value: result.eleves_archives },
+                { label: "Comptes archivés (absents du fichier)", value: result.comptes_archives },
+              ] : []),
             ].map(s => (
               <div key={s.label} className="bg-bg rounded-xl p-3 text-center">
                 <p className="text-xl font-bold text-brand">{s.value}</p>
@@ -184,6 +220,27 @@ export default function ImportExportPage() {
               </div>
             ))}
           </div>
+          {result.homonymes > 0 && (
+            <p className="text-xs text-tx-muted mb-3">
+              {result.homonymes} élève(s) portent le même nom qu&apos;un autre élève de leur classe : leur code
+              élève est ajouté au prénom pour que le tuteur les distingue.
+            </p>
+          )}
+          {result.nouvelle_annee && (result.eleves_archives > 0 || result.comptes_archives > 0) && (
+            <div className="bg-warn-soft border border-warn/20 rounded-xl p-3 mb-3 text-xs text-tx">
+              {result.dry_run ? "À la confirmation, " : ""}{result.eleves_archives} élève(s) et {result.comptes_archives} compte(s)
+              tuteur / superviseur absents du fichier {result.dry_run ? "seront archivés" : "ont été archivés"}.
+              Ils restent visibles avec le filtre « archivés » et peuvent être restaurés.
+            </div>
+          )}
+          {result.avertissements?.length > 0 && (
+            <div className="bg-warn-soft border border-warn/20 rounded-xl p-3 mb-3 max-h-40 overflow-y-auto">
+              <p className="text-xs font-semibold text-tx mb-1.5">À vérifier</p>
+              {result.avertissements.map((a, i) => (
+                <p key={i} className="text-xs text-tx mb-0.5">{a}</p>
+              ))}
+            </div>
+          )}
           {result.erreurs.length > 0 && (
             <div className="bg-danger/10 rounded-xl p-3 max-h-48 overflow-y-auto">
               <p className="text-xs font-semibold text-danger mb-1.5">

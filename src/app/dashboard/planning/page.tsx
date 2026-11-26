@@ -272,6 +272,10 @@ export default function PlanningPage() {
       .then(r => setFlsResume(r.data))
       .catch(() => setFlsResume(null));
 
+  // Lot L10 : « Répartition FLS » depuis Gestion École ouvre directement l'import.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("import_fls") === "1") openFlsImport();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (sessId) loadSegs(); }, [sessId, typeEcole]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (sessId) loadFlsResume(); }, [sessId]); // eslint-disable-line react-hooks/exhaustive-deps
 

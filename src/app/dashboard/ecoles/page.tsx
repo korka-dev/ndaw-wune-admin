@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { schoolsApi, exportApi } from "@/lib/api";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
@@ -241,6 +242,15 @@ export default function EcolesPage() {
             )}
             Réimporter
           </button>
+          {/* Répartition FLS (lot L10) : import du fichier Extraction_IA_IEF_ecoles_FLS */}
+          <Link
+            href="/dashboard/planning?import_fls=1"
+            title="Importer le fichier « Extraction_IA_IEF_ecoles_FLS » pour classer les écoles avec / sans FLS"
+            className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+            Répartition FLS
+          </Link>
           {/* Exporter Excel */}
           <button
             onClick={() => setShowExportModal(true)}

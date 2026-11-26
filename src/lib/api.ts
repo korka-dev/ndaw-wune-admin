@@ -583,13 +583,15 @@ export const exportApi = {
 // ── Import / Export global (écoles, superviseurs, tuteurs, classes, élèves) ────
 export const importExportApi = {
   export: () => api.get("/admin/import-export/export", { responseType: "blob" }),
-  /** APP-25 : `dryRun` = aperçu exact (tout est vérifié puis annulé). */
-  import: (file: File, dryRun = false) => {
+  /** APP-25 : `dryRun` = aperçu exact (tout est vérifié puis annulé).
+   *  Lot L10 : `nouvelleAnnee` = le fichier fait référence (absents archivés). */
+  import: (file: File, dryRun = false, nouvelleAnnee = false) => {
     const form = new FormData();
     form.append("file", file);
     return api.post("/admin/import-export/import", form, {
-      params: dryRun ? { dry_run: true } : undefined,
+      params: { dry_run: dryRun || undefined, nouvelle_annee: nouvelleAnnee || undefined },
       headers: { "Content-Type": "multipart/form-data" },
+      timeout: 0, // une base complète (5 000 élèves) prend près d'une minute
     });
   },
 };
