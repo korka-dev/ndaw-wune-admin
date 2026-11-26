@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { inspecteursApi } from "@/lib/api";
 import Pagination from "@/components/Pagination";
+import ImportPointsFocaux from "@/components/ImportPointsFocaux";
 import { useArchive, ArchiveNotice, ShowArchivedToggle, ArchivedBadge, RestoreButton, ArchiveConsequences } from "@/components/ArchiveControls";
 
 /*
@@ -46,6 +47,7 @@ export default function InspecteursPage() {
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   const load = (isFirstLoad = false) => {
     if (isFirstLoad) { setDataLoading(true); setDataError(null); }
@@ -198,11 +200,18 @@ export default function InspecteursPage() {
           <h1 className="text-xl font-bold text-tx">Gestion Inspecteurs</h1>
           <p className="text-tx-muted text-sm mt-0.5">{items.length} inspecteur{items.length !== 1 ? "s" : ""} au total · consultation en lecture seule des écoles de leur IEF</p>
         </div>
+        <div className="flex items-center gap-2">
+        <button onClick={() => setShowImport(true)}
+          className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+          Importer
+        </button>
         <button onClick={openCreate}
           className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
           Ajouter
         </button>
+        </div>
       </div>
 
       <div className="flex items-center gap-4 mb-5">
@@ -298,6 +307,9 @@ export default function InspecteursPage() {
 
       <ArchiveNotice message={arch.notice} onClose={() => arch.setNotice("")} />
 
+      {showImport && (
+        <ImportPointsFocaux iefs={iefs} onClose={() => setShowImport(false)} onDone={() => load()} />
+      )}
       {modal === "create" && renderFormModal("Nouvel inspecteur")}
       {modal && typeof modal === "object" && modal.kind === "edit" && renderFormModal("Modifier l'inspecteur")}
       {modal && typeof modal === "object" && modal.kind === "delete" && (

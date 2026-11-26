@@ -283,6 +283,16 @@ export const inspecteursApi = {
   delete: (id: string) => api.delete(`/admin/inspecteurs/${id}`),
   restore: (id: string) => api.post(`/admin/inspecteurs/${id}/restaurer`),
   toggleStatus: (id: string) => api.post(`/admin/inspecteurs/${id}/toggle-status`),
+  /** Lot L10 : comptes depuis l'onglet « Points_focaux » de la base de l'année. */
+  importPointsFocaux: (file: File, dryRun: boolean, rattachements: Record<string, string>) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("rattachements", JSON.stringify(rattachements));
+    return api.post("/admin/inspecteurs/import-points-focaux", form, {
+      params: { dry_run: dryRun },
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
 };
 
 export const rapportJournalierAdminApi = {
