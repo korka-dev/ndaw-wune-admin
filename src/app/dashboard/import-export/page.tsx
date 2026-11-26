@@ -27,6 +27,8 @@ type ImportSummary = {
   homonymes: number;
   eleves_archives: number;
   comptes_archives: number;
+  ecoles_archivees: number;
+  classes_archivees: number;
   erreurs: string[];
   avertissements: string[];
 };
@@ -194,9 +196,9 @@ export default function ImportExportPage() {
             <span className="text-sm text-tx">
               <strong>Nouvelle année scolaire</strong>
               <span className="block text-xs text-tx-muted mt-0.5">
-                Le fichier fait référence : les classes des tuteurs sont celles du fichier, et les élèves,
-                tuteurs et superviseurs absents du fichier sont <strong>archivés</strong> (ils ne se
-                connectent plus ; leur historique est conservé et ils restent restaurables).
+                Le fichier fait référence, codes écoles compris : il ne reste que ses écoles, classes,
+                élèves, tuteurs et superviseurs. Tout le reste est <strong>archivé</strong> (masqué partout,
+                comptes déconnectés ; historique conservé et restauration possible).
               </span>
             </span>
           </label>
@@ -280,6 +282,8 @@ export default function ImportExportPage() {
               ...(result.nouvelle_annee ? [
                 { label: "Élèves archivés (absents du fichier)", value: result.eleves_archives },
                 { label: "Comptes archivés (absents du fichier)", value: result.comptes_archives },
+                { label: "Écoles archivées (absentes du fichier)", value: result.ecoles_archivees },
+                { label: "Classes archivées (absentes du fichier)", value: result.classes_archivees },
               ] : []),
             ].map(s => (
               <div key={s.label} className="bg-bg rounded-xl p-3 text-center">
@@ -294,10 +298,11 @@ export default function ImportExportPage() {
               élève est ajouté au prénom pour que le tuteur les distingue.
             </p>
           )}
-          {result.nouvelle_annee && (result.eleves_archives > 0 || result.comptes_archives > 0) && (
+          {result.nouvelle_annee && (result.eleves_archives > 0 || result.comptes_archives > 0 || result.ecoles_archivees > 0) && (
             <div className="bg-warn-soft border border-warn/20 rounded-xl p-3 mb-3 text-xs text-tx">
-              {result.dry_run ? "À la confirmation, " : ""}{result.eleves_archives} élève(s) et {result.comptes_archives} compte(s)
-              tuteur / superviseur absents du fichier {result.dry_run ? "seront archivés" : "ont été archivés"}.
+              {result.dry_run ? "À la confirmation, " : ""}{result.ecoles_archivees} école(s), {result.classes_archivees} classe(s),{" "}
+              {result.eleves_archives} élève(s) et {result.comptes_archives} compte(s) tuteur / superviseur absents du
+              fichier {result.dry_run ? "seront archivés" : "ont été archivés"}.
               Ils restent visibles avec le filtre « archivés » et peuvent être restaurés.
             </div>
           )}
