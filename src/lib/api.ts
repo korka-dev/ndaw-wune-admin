@@ -173,13 +173,16 @@ export const planningApi = {
   update: (id: string, d: unknown) => api.patch(`/admin/planning/${id}`, d),
   delete: (id: string) => api.delete(`/admin/planning/${id}`),
   /** APP-26 : `dryRun` = aperçu sans modification ; `accepterErreurs` confirme un import partiel. */
-  import: (session_id: string, file: File, semaine?: number, opts?: { dryRun?: boolean; accepterErreurs?: boolean }) => {
+  /** Lot L11 : `typeEcole` = emploi du temps des écoles avec FLS (fls), sans FLS (sans_fls) ou de toutes (tous). */
+  import: (session_id: string, file: File, semaine?: number,
+           opts?: { dryRun?: boolean; accepterErreurs?: boolean; typeEcole?: "tous" | "fls" | "sans_fls" }) => {
     const fd = new FormData();
     fd.append("file", file);
     return api.post("/admin/planning/import", fd, {
       params: {
         session_id,
         semaine: semaine ?? undefined,
+        type_ecole: opts?.typeEcole && opts.typeEcole !== "tous" ? opts.typeEcole : undefined,
         dry_run: opts?.dryRun || undefined,
         accepter_erreurs: opts?.accepterErreurs || undefined,
       },

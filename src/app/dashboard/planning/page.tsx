@@ -62,9 +62,12 @@ interface Seg {
   matiere?: string;
   /** Lot L9 : créneau visible uniquement par les écoles avec FLS. */
   reserve_fls?: boolean;
+  /** Lot L11 : emploi du temps auquel appartient le créneau. */
+  type_ecole?: TypeEcole;
 }
 
-const EMPTY = { session_id: "", semaine: "", jour: 0, heure_debut: "08:00", heure_fin: "10:00", matiere: "", reserve_fls: false };
+const EMPTY: { session_id: string; semaine: string; jour: number; heure_debut: string; heure_fin: string; matiere: string; type_ecole: TypeEcole } =
+  { session_id: "", semaine: "", jour: 0, heure_debut: "08:00", heure_fin: "10:00", matiere: "", type_ecole: "tous" };
 
 /* ── Lot L9 : écoles avec / sans FLS ── */
 type TypeEcole = "tous" | "fls" | "sans_fls";
@@ -78,7 +81,13 @@ const estMatiereFls = (m?: string | null) => {
   const t = (m ?? "").toLowerCase();
   return t.includes("langue seconde") || /\bfls\b/.test(t);
 };
-interface FlsResume { avec_fls: number; sans_fls: number; non_renseignees: number; creneaux_reserves_fls: number }
+interface FlsResume {
+  avec_fls: number; sans_fls: number; non_renseignees: number; creneaux_reserves_fls: number;
+  /** Lot L11 : créneaux de chaque emploi du temps. */
+  creneaux?: Record<TypeEcole, number>;
+}
+/** Lot L11 : libellé du type d'un créneau. */
+const TYPE_CRENEAU: Record<TypeEcole, string> = { tous: "Toutes les écoles", fls: "Écoles avec FLS", sans_fls: "Écoles sans FLS" };
 interface FlsImportResult {
   dry_run: boolean;
   lignes_fichier: number;
@@ -180,6 +189,8 @@ export default function PlanningPage() {
   } | null>(null);
   const [importing, setImporting] = useState(false);
   const [importEstRepartitionFls, setImportEstRepartitionFls] = useState(false);
+  // Lot L11 : emploi du temps importé (boutons « Importer planning FLS / sans FLS »).
+  const [importType, setImportType] = useState<TypeEcole>("tous");
 
   const resetImport = () => {
     setImportFile(null); setImportPreview([]); setImportErrors([]); setImportApercu(null);
@@ -194,7 +205,8 @@ export default function PlanningPage() {
     setImportEstRepartitionFls(false);
 
     const name = f.name.toLowerCase();
-    const isPdf = name.endsWith(".pdf") || f.type === "application/pdf";
+    const isPdf = name.endsWith(".pdf") || f.type === "application/pdf"
+      || name.endsWith(".docx") || f.type.includes("wordprocessingml");
     const isExcel = name.endsWith(".xlsx") || name.endsWith(".xls") || f.type.includes("excel") || f.type.includes("officedocument.spreadsheetml");
     
     if (isPdf || isExcel) return; // PDF/Excel → preview impossible côté client, le serveur s'en charge
@@ -219,11 +231,12 @@ export default function PlanningPage() {
     setImportErrors([]);
     try {
       if (!importApercu) {
-        const res = await planningApi.import(sessId, importFile, semaine, { dryRun: true });
+        const res = await planningApi.import(sessId, importFile, semaine, { dryRun: true, typeEcole: importType });
         setImportApercu(res.data);
       } else {
         const res = await planningApi.import(sessId, importFile, semaine, {
           accepterErreurs: importApercu.errors.length > 0,
+          typeEcole: importType,
         });
         setImportResult(res.data);
         setImportApercu(null);
@@ -404,17 +417,21 @@ export default function PlanningPage() {
             </svg>
             {exporting ? "Export…" : "Exporter CSV"}
           </button>
-          <button
-            onClick={() => { resetImport(); setShowImport(true); }}
-            disabled={!sessId}
-            className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="17 8 12 3 7 8" />
-              <line x1="12" y1="3" x2="12" y2="15" />
-            </svg>
-            Importer
-          </button>
+          {/* Lot L11 : un emploi du temps par type d'école. */}
+          {([["fls", "Importer planning FLS"], ["sans_fls", "Importer planning sans FLS"]] as [TypeEcole, string][]).map(([t, libelle]) => (
+            <button
+              key={t}
+              onClick={() => { resetImport(); setImportType(t); setShowImport(true); }}
+              disabled={!sessId}
+              className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              {libelle}
+            </button>
+          ))}
           <button
             onClick={() => openFlsImport()}
             className="flex items-center gap-2 bg-surface border border-border hover:bg-surface-alt text-tx px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors">
@@ -459,10 +476,10 @@ export default function PlanningPage() {
               ))}
             </div>
             {typeEcole === "sans_fls" && (
-              <span className="text-xs text-tx-muted">Emploi du temps tel que le voient les écoles sans FLS (créneaux réservés FLS masqués).</span>
+              <span className="text-xs text-tx-muted">Emploi du temps tel que le voient les écoles sans FLS et les écoles non renseignées.</span>
             )}
             {typeEcole === "fls" && (
-              <span className="text-xs text-tx-muted">Emploi du temps complet, tel que le voient les écoles avec FLS.</span>
+              <span className="text-xs text-tx-muted">Emploi du temps tel que le voient les écoles avec FLS.</span>
             )}
           </div>
           {flsResume && (
@@ -472,10 +489,13 @@ export default function PlanningPage() {
               <span><b>{flsResume.sans_fls}</b> sans FLS</span>
               <span className="text-tx-muted">·</span>
               <span className={flsResume.non_renseignees > 0 ? "text-warn" : ""}>
-                <b>{flsResume.non_renseignees}</b> non renseignée{flsResume.non_renseignees !== 1 ? "s" : ""} (voient tout l&apos;emploi du temps)
+                <b>{flsResume.non_renseignees}</b> non renseignée{flsResume.non_renseignees !== 1 ? "s" : ""} (suivent le planning sans FLS)
               </span>
               <span className="text-tx-muted">·</span>
-              <span><b>{flsResume.creneaux_reserves_fls}</b> créneau{flsResume.creneaux_reserves_fls !== 1 ? "x" : ""} réservé{flsResume.creneaux_reserves_fls !== 1 ? "s" : ""} FLS</span>
+              <span>Créneaux : <b>{flsResume.creneaux?.fls ?? flsResume.creneaux_reserves_fls}</b> planning FLS
+                {flsResume.creneaux && <> · <b>{flsResume.creneaux.sans_fls}</b> planning sans FLS
+                  {flsResume.creneaux.tous > 0 && <> · <b>{flsResume.creneaux.tous}</b> communs</>}</>}
+              </span>
             </div>
           )}
         </div>
@@ -640,10 +660,11 @@ export default function PlanningPage() {
                                   S{s.semaine}
                                 </span>
                               )}
-                              {s.reserve_fls && (
-                                <span title="Visible uniquement par les écoles avec FLS"
-                                  className="text-[10px] font-bold uppercase tracking-wide bg-primary-soft text-primary px-1.5 py-0.5 rounded-md whitespace-nowrap">
-                                  FLS uniquement
+                              {(s.type_ecole ?? (s.reserve_fls ? "fls" : "tous")) !== "tous" && (
+                                <span title={`Visible uniquement par les ${TYPE_CRENEAU[(s.type_ecole ?? "fls") as TypeEcole].toLowerCase()}`}
+                                  className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md whitespace-nowrap ${
+                                    (s.type_ecole ?? "fls") === "fls" ? "bg-primary-soft text-primary" : "bg-surface-alt text-tx-muted"}`}>
+                                  {(s.type_ecole ?? "fls") === "fls" ? "Planning FLS" : "Planning sans FLS"}
                                 </span>
                               )}
                             </span>
@@ -659,7 +680,7 @@ export default function PlanningPage() {
                                     heure_debut: s.heure_debut,
                                     heure_fin: s.heure_fin,
                                     matiere: s.matiere ?? "",
-                                    reserve_fls: s.reserve_fls ?? estMatiereFls(s.matiere),
+                                    type_ecole: s.type_ecole ?? (s.reserve_fls ? "fls" : "tous"),
                                   });
                                   // Modification : on garde la valeur enregistrée.
                                   setFlsTouched(true);
@@ -747,25 +768,25 @@ export default function PlanningPage() {
                       setForm(f => ({
                         ...f,
                         [key]: v,
-                        ...(key === "matiere" && !flsTouched ? { reserve_fls: estMatiereFls(v) } : {}),
+                        ...(key === "matiere" && !flsTouched && f.type_ecole !== "sans_fls"
+                          ? { type_ecole: estMatiereFls(v) ? "fls" as TypeEcole : "tous" as TypeEcole } : {}),
                       }));
                     }}
                     className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 transition"
                   />
                 </div>
               ))}
-              <label className="flex items-start gap-2.5 cursor-pointer select-none pt-1">
-                <input
-                  type="checkbox"
-                  checked={form.reserve_fls}
-                  onChange={e => { setFlsTouched(true); setForm(f => ({ ...f, reserve_fls: e.target.checked })); }}
-                  className="mt-0.5 w-4 h-4 accent-brand"
-                />
-                <span>
-                  <span className="block text-sm font-medium text-tx">Réservé aux écoles avec FLS</span>
-                  <span className="block text-xs text-tx-muted">Les tuteurs des écoles sans FLS ne verront pas ce créneau.</span>
-                </span>
-              </label>
+              <div>
+                <label className="block text-sm font-medium text-tx mb-1">Planning</label>
+                <select
+                  value={form.type_ecole}
+                  onChange={e => { setFlsTouched(true); setForm(f => ({ ...f, type_ecole: e.target.value as TypeEcole })); }}
+                  className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 transition">
+                  <option value="tous">Toutes les écoles</option>
+                  <option value="fls">Planning FLS (écoles avec FLS)</option>
+                  <option value="sans_fls">Planning sans FLS (écoles sans FLS ou non renseignées)</option>
+                </select>
+              </div>
             </div>
             <div className="flex gap-3 mt-5 justify-end">
               <button
@@ -792,8 +813,13 @@ export default function PlanningPage() {
             {/* Titre */}
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h2 className="text-base font-bold text-tx">Importer un planning</h2>
-                <p className="text-xs text-tx-muted mt-0.5">PDF Ndaw Wune · Excel · CSV (colonnes : jour, heure_debut, heure_fin, matiere)</p>
+                <h2 className="text-base font-bold text-tx">
+                  {importType === "fls" ? "Importer le planning FLS" : importType === "sans_fls" ? "Importer le planning sans FLS" : "Importer un planning"}
+                </h2>
+                <p className="text-xs text-tx-muted mt-0.5">
+                  {importType === "fls" ? "Visible par les tuteurs des écoles avec FLS. " : importType === "sans_fls" ? "Visible par les tuteurs des écoles sans FLS ou non renseignées. " : ""}
+                  Word (.docx) · PDF Ndaw Wune · Excel · CSV
+                </p>
               </div>
               <button onClick={() => { setShowImport(false); resetImport(); }}
                 className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-alt text-tx-muted transition-colors">
@@ -806,6 +832,18 @@ export default function PlanningPage() {
             {/* Zone upload + modèle */}
             {!importResult && (
               <>
+                {/* Lot L11 : emploi du temps concerné */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-tx mb-1">Planning concerné</label>
+                  <select
+                    value={importType}
+                    onChange={e => { setImportType(e.target.value as TypeEcole); setImportApercu(null); }}
+                    className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 transition">
+                    <option value="fls">Planning FLS (remplace le planning FLS, pas celui sans FLS)</option>
+                    <option value="sans_fls">Planning sans FLS (remplace le planning sans FLS, pas celui FLS)</option>
+                    <option value="tous">Toutes les écoles (remplace tout)</option>
+                  </select>
+                </div>
                 {/* Semaine cible de l'import */}
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-tx mb-1">Semaine concernée</label>
@@ -813,7 +851,7 @@ export default function PlanningPage() {
                     value={importSemaine}
                     onChange={e => { setImportSemaine(e.target.value); setImportApercu(null); }}
                     className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 transition">
-                    <option value="">Toutes les semaines (remplace tout le planning)</option>
+                    <option value="">Toutes les semaines{importType === "tous" ? " (remplace tout le planning)" : ""}</option>
                     {Array.from({ length: 12 }, (_, i) => i + 1).map(s => (
                       <option key={s} value={s}>Semaine {s} (remplace uniquement cette semaine)</option>
                     ))}
@@ -830,10 +868,10 @@ export default function PlanningPage() {
                     <span className="text-sm text-tx-muted text-center px-2">
                       {importFile
                         ? <span className="text-brand font-semibold">{importFile.name}</span>
-                        : <><span className="font-medium text-tx">Cliquez ou glissez un fichier ici</span><br /><span className="text-xs">PDF Ndaw Wune, Excel (.xlsx) ou CSV<br />L'emploi du temps sera importé automatiquement</span></>
+                        : <><span className="font-medium text-tx">Cliquez ou glissez un fichier ici</span><br /><span className="text-xs">Emploi du temps Word (.docx), PDF Ndaw Wune, Excel (.xlsx) ou CSV<br />L&apos;emploi du temps sera importé automatiquement</span></>
                       }
                     </span>
-                    <input ref={fileInputRef} type="file" accept=".pdf,.csv,.xlsx,.xls,text/csv,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                    <input ref={fileInputRef} type="file" accept=".docx,.pdf,.csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/csv,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                       className="hidden" onChange={handleFileChange} />
                   </label>
 
