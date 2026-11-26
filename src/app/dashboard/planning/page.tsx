@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { planningApi, sessionsApi, exportApi, schoolsApi } from "@/lib/api";
+import { planningApi, sessionsApi, exportApi, schoolsApi, progressionConfigsApi } from "@/lib/api";
 import { errorDetail } from "@/lib/notify";
 import { downloadBlob } from "@/lib/csv";
 import Pagination from "@/components/Pagination";
@@ -191,6 +191,8 @@ export default function PlanningPage() {
   const [importEstRepartitionFls, setImportEstRepartitionFls] = useState(false);
   // Lot L11 : emploi du temps importé (boutons « Importer planning FLS / sans FLS »).
   const [importType, setImportType] = useState<TypeEcole>("tous");
+  // Semaines proposées : la plus grande valeur de Paramètres → Progression (10 par défaut).
+  const [nbSemaines, setNbSemaines] = useState(10);
 
   const resetImport = () => {
     setImportFile(null); setImportPreview([]); setImportErrors([]); setImportApercu(null);
@@ -268,6 +270,14 @@ export default function PlanningPage() {
   };
 
   // ── Chargement session active ───────────────────────────────────────────────
+  useEffect(() => {
+    progressionConfigsApi.list().then(r => {
+      const items: { nb_semaines: number }[] = Array.isArray(r.data) ? r.data : (r.data.items ?? []);
+      const max = Math.max(0, ...items.map(c => Number(c.nb_semaines) || 0));
+      if (max > 0) setNbSemaines(max);
+    }).catch(() => { });
+  }, []);
+
   useEffect(() => {
     sessionsApi.list().then(r => {
       const active = (r.data.items ?? []).find((s: any) => s.status === "active");
@@ -734,7 +744,7 @@ export default function PlanningPage() {
                   onChange={e => setForm(f => ({ ...f, semaine: e.target.value }))}
                   className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 transition">
                   <option value="">Toutes les semaines</option>
-                  {Array.from({ length: 12 }, (_, i) => i + 1).map(s => (
+                  {Array.from({ length: nbSemaines }, (_, i) => i + 1).map(s => (
                     <option key={s} value={s}>Semaine {s}</option>
                   ))}
                 </select>
@@ -852,7 +862,7 @@ export default function PlanningPage() {
                     onChange={e => { setImportSemaine(e.target.value); setImportApercu(null); }}
                     className="w-full bg-surface-alt border border-border rounded-xl px-3.5 py-2.5 text-sm text-tx focus:outline-none focus:ring-2 focus:ring-brand/30 transition">
                     <option value="">Toutes les semaines{importType === "tous" ? " (remplace tout le planning)" : ""}</option>
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map(s => (
+                    {Array.from({ length: nbSemaines }, (_, i) => i + 1).map(s => (
                       <option key={s} value={s}>Semaine {s} (remplace uniquement cette semaine)</option>
                     ))}
                   </select>
