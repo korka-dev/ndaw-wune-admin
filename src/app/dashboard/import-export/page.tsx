@@ -31,6 +31,28 @@ type ImportSummary = {
   avertissements: string[];
 };
 
+// Lot L10 : l'import tourne en arrière-plan côté serveur ; la page suit son avancement.
+type TacheImport = {
+  id: string;
+  statut: "en_cours" | "termine" | "erreur" | "interrompu";
+  phase: string;
+  traitees: number;
+  total: number;
+  resultat: ImportSummary | null;
+  erreur: string | null;
+};
+
+const PHASES: Record<string, string> = {
+  lecture: "Lecture du fichier",
+  lignes: "Analyse des lignes",
+  archivage: "Recherche des absents du fichier",
+  controles: "Contrôles finaux",
+  enregistrement: "Enregistrement en base",
+  termine: "Terminé",
+};
+
+const attendre = (ms: number) => new Promise(r => setTimeout(r, ms));
+
 export default function ImportExportPage() {
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -40,6 +62,8 @@ export default function ImportExportPage() {
   const [pending, setPending] = useState<File | null>(null);   // fichier en attente de confirmation
   // Lot L10 : nouvelle année scolaire — le fichier fait référence.
   const [nouvelleAnnee, setNouvelleAnnee] = useState(false);
+  const [suivi, setSuivi] = useState<TacheImport | null>(null);       // avancement de l'import en cours
+  const [apercuEnCours, setApercuEnCours] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleExport = async () => {
@@ -67,15 +91,36 @@ export default function ImportExportPage() {
     setImporting(true);
     setResult(null);
     setImportError(null);
+    setSuivi(null);
+    setApercuEnCours(dryRun);
     try {
-      const { data } = await importExportApi.import(file, dryRun, nouvelleAnnee);
-      setResult(data);
-      setPending(dryRun && data.lignes_validees > 0 ? file : null);
+      let { data: tache } = await importExportApi.lancer(file, dryRun, nouvelleAnnee);
+      setSuivi(tache);
+      // Suivi toutes les secondes ; quelques échecs réseau passagers sont tolérés.
+      let echecs = 0;
+      while (tache.statut === "en_cours") {
+        await attendre(1000);
+        try {
+          tache = (await importExportApi.suivre(tache.id)).data;
+          echecs = 0;
+          setSuivi(tache);
+        } catch (err) {
+          if (++echecs >= 10) throw err;
+        }
+      }
+      if (tache.statut === "termine" && tache.resultat) {
+        setResult(tache.resultat);
+        setPending(dryRun && tache.resultat.lignes_validees > 0 ? file : null);
+      } else {
+        setPending(null);
+        setImportError(tache.erreur ?? "L'import n'a pas abouti. Aucune donnée n'a été modifiée.");
+      }
     } catch (err) {
       setPending(null);
       setImportError(errorDetail(err) ?? "Erreur lors de l'import. Aucune donnée n'a été modifiée.");
     } finally {
       setImporting(false);
+      setSuivi(null);
     }
   };
 
@@ -184,6 +229,29 @@ export default function ImportExportPage() {
         <div className="mt-6 flex items-center gap-3 px-4 py-3 bg-danger-soft border border-danger/20 rounded-xl text-sm text-danger">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
           <span>{importError}</span>
+        </div>
+      )}
+
+      {/* ── Progression de l'import (lot L10) ── */}
+      {importing && suivi && (
+        <div className="mt-6 bg-surface border border-border rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-bold text-tx">
+              {apercuEnCours ? "Analyse du fichier (aperçu, rien n'est enregistré)" : "Import en cours — enregistrement des données"}
+            </h3>
+            <span className="text-sm font-semibold text-primary tabular-nums">
+              {suivi.total ? Math.min(100, Math.round((suivi.traitees / suivi.total) * 100)) : 0} %
+            </span>
+          </div>
+          <div className="h-2.5 rounded-full bg-bg overflow-hidden" role="progressbar"
+            aria-valuemin={0} aria-valuemax={suivi.total} aria-valuenow={suivi.traitees}>
+            <div className="h-full bg-primary rounded-full transition-all duration-500"
+              style={{ width: `${suivi.total ? Math.min(100, (suivi.traitees / suivi.total) * 100) : 0}%` }} />
+          </div>
+          <p className="text-xs text-tx-muted mt-2">
+            {PHASES[suivi.phase] ?? suivi.phase} · {suivi.traitees.toLocaleString("fr-FR")} / {suivi.total.toLocaleString("fr-FR")} ligne(s).
+            {" "}Vous pouvez rester sur cette page ; ne la fermez pas avant la fin.
+          </p>
         </div>
       )}
 

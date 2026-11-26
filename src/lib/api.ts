@@ -594,6 +594,16 @@ export const importExportApi = {
       timeout: 0, // une base complète (5 000 élèves) prend près d'une minute
     });
   },
+  /** Lot L10 : import en tâche de fond (le proxy coupe les requêtes > 60 s). */
+  lancer: (file: File, dryRun: boolean, nouvelleAnnee: boolean) => {
+    const form = new FormData();
+    form.append("file", file);
+    return api.post("/admin/import-export/import/taches", form, {
+      params: { dry_run: dryRun, nouvelle_annee: nouvelleAnnee || undefined },
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+  suivre: (id: string) => api.get(`/admin/import-export/import/taches/${id}`),
 };
 
 
