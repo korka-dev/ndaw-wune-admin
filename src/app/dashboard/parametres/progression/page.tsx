@@ -46,20 +46,46 @@ export default function ProgressionConfigPage() {
   const schoolName = (id: string | null) => schools.find(s => s.id === id)?.name ?? (id ? "École supprimée" : "Toutes les écoles");
   const sessionName = (id: string | null) => sessions.find(s => s.id === id)?.name ?? (id ? "Session supprimée" : "Toutes les sessions");
 
+  // Configuration « générale » : toutes les écoles, toutes les sessions.
+  const generale = configs.find(c => !c.school_id && !c.session_id) ?? null;
+  // Configurations plus précises qui gardent une autre valeur : elles priment
+  // sur la générale pour leur école / session (tuteurs et superviseurs).
+  const divergentes = generale
+    ? configs.filter(c => c.id !== generale.id && (c.nb_semaines !== generale.nb_semaines || c.nb_jours !== generale.nb_jours))
+    : [];
+  const [aligning, setAligning] = useState(false);
+
   const save = async () => {
     setSaving(true); setError("");
     try {
-      await progressionConfigsApi.create({
+      const body = {
         school_id: form.school_id || null,
         session_id: form.session_id || null,
         nb_semaines: Number(form.nb_semaines),
         nb_jours: Number(form.nb_jours),
-      });
+      };
+      // Même portée déjà configurée : on met à jour au lieu d'échouer en doublon.
+      const existante = configs.find(c => (c.school_id ?? null) === body.school_id && (c.session_id ?? null) === body.session_id);
+      if (existante) await progressionConfigsApi.update(existante.id, { nb_semaines: body.nb_semaines, nb_jours: body.nb_jours });
+      else await progressionConfigsApi.create(body);
       setForm(EMPTY);
       await load();
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? "Une erreur est survenue.");
     } finally { setSaving(false); }
+  };
+
+  const alignerPartout = async () => {
+    if (!generale) return;
+    if (!confirm(`Appliquer ${generale.nb_semaines} semaines et ${generale.nb_jours} jours à toutes les configurations (${divergentes.length} à modifier) ?`)) return;
+    setAligning(true);
+    try {
+      for (const c of divergentes) {
+        await progressionConfigsApi.update(c.id, { nb_semaines: generale.nb_semaines, nb_jours: generale.nb_jours });
+      }
+      await load();
+    } catch (e) { notifyError("L'alignement a échoué. Réessayez dans un instant.", e); await load(); }
+    finally { setAligning(false); }
   };
 
   const remove = async (id: string) => {
@@ -76,7 +102,39 @@ export default function ProgressionConfigPage() {
           Configure le nombre de semaines et de jours affichés aux tuteurs pour choisir leur période de cours,
           par école et/ou par session. Sans configuration spécifique, la valeur par défaut (10 semaines, 3 jours) s&apos;applique.
         </p>
+        <p className="text-tx-muted text-sm mt-2">
+          Priorité, de la plus forte à la plus faible : école + session, école seule, session seule, puis « Toutes les écoles / Toutes les sessions ».
+          La même valeur s&apos;applique aux tuteurs et aux superviseurs ; l&apos;app la reçoit à sa prochaine synchronisation.
+        </p>
       </div>
+
+      {!loading && !generale && configs.length > 0 && (
+        <div className="bg-warn-soft text-warn rounded-2xl px-4 py-3 text-sm mb-6">
+          Aucune configuration « Toutes les écoles / Toutes les sessions » : les écoles et sessions non listées ci-dessous gardent 10 semaines.
+          Ajoutez-en une pour fixer la valeur de tous les comptes.
+        </div>
+      )}
+
+      {!loading && generale && divergentes.length > 0 && (
+        <div className="bg-warn-soft text-warn rounded-2xl px-4 py-3 text-sm mb-6">
+          <p className="mb-2">
+            La configuration générale est de <strong>{generale.nb_semaines} semaines</strong>, mais {divergentes.length} configuration{divergentes.length > 1 ? "s" : ""} plus
+            précise{divergentes.length > 1 ? "s gardent" : " garde"} une autre valeur et prime{divergentes.length > 1 ? "nt" : ""} pour {divergentes.length > 1 ? "leurs" : "son"} école / session :
+          </p>
+          <ul className="list-disc pl-5 mb-3">
+            {divergentes.map(c => (
+              <li key={c.id}>{schoolName(c.school_id)} · {sessionName(c.session_id)} : {c.nb_semaines} semaines, {c.nb_jours} jours</li>
+            ))}
+          </ul>
+          <button
+            onClick={alignerPartout}
+            disabled={aligning}
+            className="px-3 py-1.5 rounded-lg bg-brand hover:bg-brand-dark text-white text-xs font-semibold disabled:opacity-60 transition-colors"
+          >
+            {aligning ? "Application…" : `Appliquer ${generale.nb_semaines} semaines partout`}
+          </button>
+        </div>
+      )}
 
       <div className="bg-surface border border-border rounded-2xl p-5 mb-6">
         <h2 className="text-sm font-semibold text-tx mb-4">Nouvelle configuration</h2>
@@ -130,7 +188,7 @@ export default function ProgressionConfigPage() {
           disabled={saving}
           className="px-4 py-2.5 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold disabled:opacity-60 transition-colors"
         >
-          {saving ? "Enregistrement…" : "Ajouter la configuration"}
+          {saving ? "Enregistrement…" : "Enregistrer la configuration"}
         </button>
       </div>
 

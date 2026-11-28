@@ -8,11 +8,12 @@ import { useArchive, ArchiveNotice, ShowArchivedToggle, ArchivedBadge, RestoreBu
 const PAGE_SIZE = 20;
 
 /**
- * Rôles UI → rôle backend (le modèle ne connaît que 3 rôles).
- * "superviseur" est un alias UI pour "coordonnateur".
+ * Rôles UI → rôle backend. Cette page ne gère que les comptes du tableau de bord :
+ * un superviseur de terrain (app mobile) se crée depuis la page « Superviseurs ».
+ * L'ancien libellé « Superviseur » créait un coordonnateur, que l'app mobile
+ * rangeait à tort dans l'espace tuteur.
  */
 const UI_ROLES = [
-  { value: "superviseur",   label: "Superviseur",    apiRole: "coordonnateur" },
   { value: "coordonnateur", label: "Coordonnateur",  apiRole: "coordonnateur" },
   { value: "admin",         label: "Administrateur", apiRole: "admin"         },
 ] as const;
@@ -23,7 +24,7 @@ function toApiRole(uiRole: UIRole | string): string {
 }
 
 interface Compte { id: string; name: string; email?: string; phone?: string; title?: string; role: string; uiRole?: UIRole; status: string; archived_at?: string | null; }
-const EMPTY = { name: "", email: "", phone: "", password: "", title: "", role: "superviseur" as UIRole };
+const EMPTY = { name: "", email: "", phone: "", password: "", title: "", role: "coordonnateur" as UIRole };
 
 export default function ComptesPage() {
   const { user: me } = useAuth();
@@ -109,7 +110,7 @@ export default function ComptesPage() {
       <div className="sticky top-0 z-10 bg-bg flex items-center justify-between pt-7 pb-4 mb-6 border-b border-border">
         <div>
           <h1 className="text-xl font-bold text-tx">Comptes utilisateurs</h1>
-          <p className="text-tx-muted text-sm mt-0.5">Administrateurs, superviseurs & coordonnateurs</p>
+          <p className="text-tx-muted text-sm mt-0.5">Administrateurs & coordonnateurs (tableau de bord)</p>
         </div>
         <div className="flex items-center gap-4">
         <ShowArchivedToggle checked={showArchived} onChange={v => { setShowArchived(v); setPage(1); }} />
@@ -178,7 +179,7 @@ export default function ComptesPage() {
                     );
                     if (u.role === "coordonnateur") return (
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
-                        Superviseur
+                        Coordonnateur
                       </span>
                     );
                     return (
@@ -193,7 +194,7 @@ export default function ComptesPage() {
                   {isAdmin && !u.archived_at && (
                     <div className="flex gap-2">
                       <button
-                        onClick={() => { setForm({ ...EMPTY, ...u, password: "", role: (u.role as UIRole) ?? "superviseur" }); setError(""); setModal(u); }}
+                        onClick={() => { setForm({ ...EMPTY, ...u, password: "", role: (u.role as UIRole) ?? "coordonnateur" }); setError(""); setModal(u); }}
                         className="text-xs bg-primary-soft text-primary px-2.5 py-1 rounded-lg font-medium hover:bg-primary hover:text-white transition-colors"
                       >Modifier</button>
                       {u.id !== me?.id && (
@@ -300,11 +301,10 @@ export default function ComptesPage() {
                     <option key={r.value} value={r.value}>{r.label}</option>
                   ))}
                 </select>
-                {form.role === "superviseur" && (
-                  <p className="mt-1.5 text-xs text-tx-muted">
-                    Le superviseur peut se connecter au dashboard et suivre les enseignants.
-                  </p>
-                )}
+                <p className="mt-1.5 text-xs text-tx-muted">
+                  Compte du tableau de bord. Pour un superviseur de terrain qui utilise l&apos;app mobile,
+                  passez par la page « Superviseurs ».
+                </p>
               </div>
             </div>
             <div className="flex gap-3 mt-5 justify-end">
